@@ -1455,9 +1455,9 @@ function uiSkin(){const mkF=(pal,inner,sz)=>{const[c,g]=mk(sz*3,sz*3);const P=(x
  st.setProperty('--btnd',mkF(['#24140c','#6a645a','#8a8478','#a8a298'],'#8a8478',6));st.setProperty('--btng',mkF(['#24140c','#3e7a22','#5a9636','#86c858'],'#5a9636',6))}
 // ================= LAUNCH SCREEN: torchlit stone relief =================
 const LR={H:300,W:2400,hm:null,alb:null,nx:null,ny:null,t0:0,run:false,emb:[]};
-function lrBuild(){const W=LR.W,H=LR.H,c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');
+function lrBuild(){const W=LR.W,H=LR.H,c=document.createElement('canvas');c.width=W;c.height=H;let g=c.getContext('2d');
  g.fillStyle='#606060';g.fillRect(0,0,W,H);
- const fig=(f)=>{g.save();g.filter='blur(3.5px)';f();g.restore()},inc=(f)=>{g.save();g.filter='blur(.6px)';f();g.restore()};
+ const g0=g,mk2=()=>{const c2=document.createElement('canvas');c2.width=W;c2.height=H;return c2.getContext('2d')},gA=mk2(),gB=mk2();const fig=(f)=>{g=gA;f();g=g0},inc=(f)=>{g=gB;f();g=g0};
  const E=(x,y,rx,ry,c,r)=>{g.fillStyle=c;g.beginPath();g.ellipse(x,y,rx,ry,r||0,0,6.29);g.fill()},Rc=(x,y,w,h,c)=>{g.fillStyle=c;g.fillRect(x,y,w,h)},L=(x1,y1,x2,y2,c,w)=>{g.strokeStyle=c;g.lineWidth=w;g.lineCap='round';g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke()};
  // borders
  for(const y of[14,H-28]){fig(()=>Rc(0,y,W,14,'#9a9a9a'));for(let x=10;x<W;x+=28)inc(()=>{E(x,y+7,5,5,'#c0c0c0');E(x,y+7,2,2,'#7a7a7a')})}
@@ -1480,8 +1480,9 @@ function lrBuild(){const W=LR.W,H=LR.H,c=document.createElement('canvas');c.widt
  for(let k=0;k<Math.ceil((W-x)/40);k++)man(x+k*40,k%2?1:-1,{spear:k%2,shield:1});
  // cuneiform band
  inc(()=>{for(let i=0;i<W;i+=9){const y=34+(i*7%5);L(i,y,i+4,y+5,'#6a6a6a',1.6);if(i%27==0)L(i+2,y-2,i+2,y+6,'#6a6a6a',1.2)}});
+ g.save();g.filter='blur(3.5px)';g.drawImage(gA.canvas,0,0);g.filter='blur(.6px)';g.drawImage(gB.canvas,0,0);g.restore();
  const id=g.getImageData(0,0,W,H).data,hm=new Float32Array(W*H),alb=new Float32Array(W*H);
- for(let i=0;i<W*H;i++){const x=i%W,y=i/W|0;hm[i]=id[i*4]/255*80+vnoise(x,y,3,91)*1.2+vnoise(x,y,17,92)*2;alb[i]=.86+vnoise(x,y,9,93)*.18+(hsh(x,y,94)-.5)*.06}
+ for(let i=0;i<W*H;i++){const x=i%W,y=i/W|0;const h1=hsh(x>>1,y>>1,91),h2=Math.sin(x*.043+y*.021)+Math.cos(y*.067-x*.017);hm[i]=id[i*4]/255*80+h1*1.2+h2*1.1;alb[i]=.93+.06*Math.sin(x*.09+y*.05)+(h1-.5)*.07}
  LR.nx=new Float32Array(W*H);LR.ny=new Float32Array(W*H);for(let y=1;y<H-1;y++)for(let x=0;x<W;x++){const i=y*W+x,xl=(x-1+W)%W,xr=(x+1)%W;LR.nx[i]=(hm[y*W+xl]-hm[y*W+xr]);LR.ny[i]=(hm[i-W]-hm[i+W])}LR.hm=hm;LR.alb=alb}
 function lrFrame(now){if(!LR.run)return;requestAnimationFrame(lrFrame);const c=$('tc'),g=c.getContext('2d'),W=c.width,H=c.height;if(!LR.img||LR.img.width!==W){LR.img=g.createImageData(W,H)}const d=LR.img.data,t=now/1000;
  const sc=LR.H/H,off=(t*14)%LR.W,fl=k=>.78+.14*Math.sin(t*9.3+k*3)+.1*Math.sin(t*23.7+k)+.08*(vnoise(t*30,k*50,4,7)-.5)*2;
@@ -1498,7 +1499,7 @@ function lrFrame(now){if(!LR.run)return;requestAnimationFrame(lrFrame);const c=$
  const vg=g.createRadialGradient(W/2,H/2,H*.3,W/2,H/2,W*.75);vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.85)');g.fillStyle=vg;g.fillRect(0,0,W,H)}
 title=function(){const T=$('title'),c=$('tc');T.classList.add('launch');const fit=()=>{const k=Math.min(1,520/innerHeight);c.width=Math.round(innerWidth*k*.6);c.height=Math.round(innerHeight*k*.6)};fit();addEventListener('resize',fit);
  if(!$('lrname')){const h=document.createElement('div');h.id='lrname';h.innerHTML='<div class="lr1">BRONZE</div><div class="lr2">and</div><div class="lr1">BLOOD</div>';T.insertBefore(h,$('start'))}
- if(!LR.hm)lrBuild();LR.run=true;requestAnimationFrame(lrFrame);
+ LR.run=true;if(!LR.hm)setTimeout(()=>{lrBuild();requestAnimationFrame(lrFrame)},60);else requestAnimationFrame(lrFrame);
  new MutationObserver(()=>{const on=T.style.display!=='none';if(on&&!LR.run){LR.run=true;requestAnimationFrame(lrFrame)}if(!on)LR.run=false;AU.torch(on)}).observe(T,{attributes:true,attributeFilter:['style']})};
 (function(){const st=document.createElement('style');st.textContent=`#title.launch{background:#0a0705}
 #title.launch canvas{position:absolute;inset:0;width:100vw;height:100vh;border-radius:0;image-rendering:auto;box-shadow:none;z-index:-1}
@@ -1603,14 +1604,18 @@ function wmDefend(a,q){const N=S.wm.nat[a];const ar=[['spear',Math.ceil(6+N.str*
 // player-facing map
 let WMSEL=null;function renderMapIfOpen(){if(cur==='map'&&$('drawer').classList.contains('open')&&!$('wmc'))return;if(cur==='map'&&$('wmc'))wmDraw($('wmc'))}
 function wmPix(c){const P=S.wm.prov,W=c.width,H=c.height,sx=WMW/W,sy=WMH/H;if(wmPix.k===P.length+'|'+W)return wmPix.d;const near=new Int16Array(W*H*3),wt=new Float32Array(W*H*3),own=new Int16Array(W*H);
- for(let y=0;y<H;y++)for(let x=0;x<W;x++){const X=x*sx,Y=y*sy;let b=[[1e9,0],[1e9,0],[1e9,0]];for(let i=0;i<P.length;i++){const d=(P[i].x-X)**2+(P[i].y-Y)**2+(vnoise(X,Y,6,55)-.5)*90;if(d<b[2][0]){b[2]=[d,i];b.sort((a,c)=>a[0]-c[0])}}const k=(y*W+x)*3;own[y*W+x]=b[0][1];let s=0;for(let j=0;j<3;j++){near[k+j]=b[j][1];const w=1/Math.pow(Math.max(1,b[j][0]-b[0][0]+8),1.6);wt[k+j]=w;s+=w}for(let j=0;j<3;j++)wt[k+j]/=s}
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const X=x*sx,Y=y*sy;let b=[[1e9,0],[1e9,0],[1e9,0]];const nz=(vnoise(X,Y,6,55)-.5)*90;for(let i=0;i<P.length;i++){const d=(P[i].x-X)**2+(P[i].y-Y)**2+nz;if(d<b[2][0]){b[2]=[d,i];b.sort((a,c)=>a[0]-c[0])}}const k=(y*W+x)*3;own[y*W+x]=b[0][1];let s=0;for(let j=0;j<3;j++){near[k+j]=b[j][1];const w=1/Math.pow(Math.max(1,b[j][0]-b[0][0]+8),1.6);wt[k+j]=w;s+=w}for(let j=0;j<3;j++)wt[k+j]/=s}
  wmPix.k=P.length+'|'+W;return wmPix.d={near,wt,own}}
 function wmDraw(c){const g=c.getContext('2d'),W=c.width,H=c.height,P=S.wm.prov,sx=W/WMW,sy=H/WMH;const D=wmPix(c);const img=g.createImageData(W,H),d=img.data;const cols={};const cc=n=>cols[n]||(cols[n]=hex2(wmNat(n).col));const coreOf=new Int32Array(W*H).fill(-1);
  const keys=['P',...Object.keys(S.wm.nat)],ki=Object.fromEntries(keys.map((k,i)=>[k,i]));
- for(let y=0;y<H;y++)for(let x=0;x<W;x++){const X=x/sx,Y=y/sy,i=y*W+x,k=i*3,n=vnoise(X,Y,30,3)*.5+vnoise(X,Y,9,4)*.3+vnoise(X,Y,3,5)*.2;let R=n>.62?150:n>.42?104:132,G2=n>.62?146:n>.42?140:150,B=n>.62?120:n>.42?70:90;
-  const mix={};let tot=0;for(let j=0;j<3;j++){const p=P[D.near[k+j]],w=D.wt[k+j];for(const o in p.ctl){mix[o]=(mix[o]||0)+p.ctl[o]*w;tot+=p.ctl[o]*w}}
-  if(tot>4){const ent=Object.entries(mix).sort((a,b)=>b[1]-a[1]),top=ent[0],sh=top[1]/tot,A=Math.min(1,top[1]/40);let pick=top[0];
-   if(sh<.7){let r=Math.min(.999,Math.max(0,(vnoise(X,Y,2.2,17)-.5)*1.6+.5))*tot,acc=0;for(const[o,v]of ent){acc+=v;if(r<=acc){pick=o;break}}}const C=cc(pick),al=sh>=.7&&A>.6?.6:(.25+.3*A)*(.55+.45*sh);R+=(C[0]-R)*al;G2+=(C[1]-G2)*al;B+=(C[2]-B)*al;if(sh>=.7&&A>.6)coreOf[i]=ki[top[0]];else coreOf[i]=-2-ki[pick]}
+ if(!wmDraw.base||wmDraw.base.length!==W*H*3){const bs=new Uint8Array(W*H*3);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const X=x/sx,Y=y/sy,n=vnoise(X,Y,30,3)*.5+vnoise(X,Y,9,4)*.3+vnoise(X,Y,3,5)*.2,q=(y*W+x)*3;bs[q]=n>.62?150:n>.42?104:132;bs[q+1]=n>.62?146:n>.42?140:150;bs[q+2]=n>.62?120:n>.42?70:90}wmDraw.base=bs;
+  const dn=new Float32Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++)dn[y*W+x]=Math.min(.999,Math.max(0,(vnoise(x/sx,y/sy,2.2,17)-.5)*1.6+.5));wmDraw.dn=dn}
+ const BS=wmDraw.base,DN=wmDraw.dn,NK=keys.length,PV=P.map(p=>Object.entries(p.ctl).map(([o,v])=>[ki[o]??-1,v]).filter(e=>e[0]>=0)),acc=new Float32Array(NK),CL=keys.map(k=>hex2(wmNat(k).col));
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,k=i*3;let R=BS[k],G2=BS[k+1],B=BS[k+2];
+  let tot=0,touched=[];for(let j=0;j<3;j++){const pv=PV[D.near[k+j]],w=D.wt[k+j];for(const[o,v]of pv){if(!acc[o])touched.push(o);acc[o]+=v*w;tot+=v*w}}
+  if(tot>4){let top=-1,tv=0;for(const o of touched)if(acc[o]>tv){tv=acc[o];top=o}const sh=tv/tot,A=Math.min(1,tv/40);let pick=top;
+   if(sh<.7){let r=DN[i]*tot,a2=0;for(const o of touched){a2+=acc[o];if(r<=a2){pick=o;break}}}const C=CL[pick],core=sh>=.7&&A>.6,al=core?.6:(.25+.3*A)*(.55+.45*sh);R+=(C[0]-R)*al;G2+=(C[1]-G2)*al;B+=(C[2]-B)*al;coreOf[i]=core?top:-2-pick}
+  for(const o of touched)acc[o]=0;
   d[i*4]=R;d[i*4+1]=G2;d[i*4+2]=B;d[i*4+3]=255}
  for(let y=1;y<H;y++)for(let x=1;x<W;x++){const i=y*W+x;const a=coreOf[i];if(a<0)continue;for(const j of[i-1,i-W]){const b=coreOf[j];if(b>=0&&b!==a||(b===-1)){for(const q of[i]){d[q*4]=d[q*4]*.25;d[q*4+1]*=.25;d[q*4+2]*=.25}}}}
  g.putImageData(img,0,0);g.save();g.scale(sx,sy);
