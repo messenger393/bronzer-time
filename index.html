@@ -337,16 +337,16 @@ const can=c=>Object.keys(c).every(r=>S.res[r]>=c[r]);
 function pay(c){if(!can(c))return false;for(const r in c)S.res[r]-=c[r];return true}
 const cstr=c=>Object.keys(c).map(r=>c[r]+' '+r).join(', ');
 function tick(){if(S.autoWork&&S.t%3===0)autoAssign();
- const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0))*(1+0.03*(S.jobs.merchant||0))*EM.prod;
+ const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod;
  const p={food:0,wood:0,stone:0,copper:0,tin:0,bronze:0};
  for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult;if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}p[J[1]]+=v}
- for(const r in S.bonus)p[r]*=1+S.bonus[r];
+ for(const r in S.bonus)p[r]*=1+S.bonus[r];{const X=cX(),E=X.eco||{};for(const r in E)if(p[r]>0)p[r]*=1+E[r];if(X.purple)p.bronze+=(S.jobs.merchant||0)*X.purple}
  const sm=S.jobs.smith||0;if(sm){let n=Math.min(sm*0.3,S.res.copper/1,S.res.tin/0.5);S.res.copper-=n;S.res.tin-=n*.5;p.bronze+=n*mult*(1+(S.bonus.bronze||0))}
  let up=S.pop*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up;
  const C=cap();for(const r of RES)S.res[r]=Math.max(0,Math.min(C,S.res[r]+p[r]));
  S.rate=p;
  if(S.res.food<=0&&p.food<0){if(armyN()>0&&Math.random()<.1){const c=S.companies.find(c=>c.men>0);c.men--;S.companies=S.companies.filter(c=>c.men>0);log('Starving! A soldier of '+c.name+' deserted.')}else if(S.pop>1&&Math.random()<.05){S.pop--;fixJobs();log('Starving! A villager left.')}}
- else if(S.pop<housing()&&S.res.food>10&&EM.grow>0){S.growT+=EM.grow;if(S.growT>=Math.max(3,8-S.tier*2)){S.growT=0;S.pop++;log('A new villager arrived!')}}
+ else if(S.pop<housing()&&S.res.food>10&&EM.grow>0){S.growT+=EM.grow*(cX().grow||1);if(S.growT>=Math.max(3,8-S.tier*2)){S.growT=0;S.pop++;log('A new villager arrived!')}}
  evTick();evHUD();if(S.t%5===0)spawnPops(p);
  S.t++;if(S.t%10===0)save();renderTop();if(cur==='jobs'||cur==='army'){if(S.t%2===0)renderView()}
 }
@@ -381,12 +381,12 @@ function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderA
     btn('✕',()=>{if(confirm('Disband '+c.name+'?'))S.companies=S.companies.filter(x=>x!==c)}))});
   if(!S.companies.length)V.innerHTML+='<div class="small">No companies yet.</div>';
   V.appendChild(Object.assign(document.createElement('b'),{textContent:'Recruit'}));
-  for(const t in UNIT){const U=UNIT[t],lock=unitLock(t);row(V,U.n,lock||('A'+U.atk+' D'+U.def+' HP'+U.hp+' Spd'+U.spd+(U.rng?' ranged':'')+' Arm'+U.arm+(U.ap?' AP'+U.ap:'')+(U.shock?' shock':'')+' · '+cstr(U.cost)+' · upkeep '+U.up),btn('Recruit',()=>recruit(t),lock||!can(U.cost)||armyN()>=armyCap()))}}
+  for(const t in UNIT){const U=UNIT[t],lock=unitLock(t);if(U.civ&&U.civ!==(S.civ||'egypt'))continue;row(V,U.n,lock||('A'+U.atk+' D'+U.def+' HP'+U.hp+' Spd'+U.spd+(U.rng?' ranged':'')+' Arm'+U.arm+(U.ap?' AP'+U.ap:'')+(U.shock?' shock':'')+' · '+cstr(U.cost)+' · upkeep '+U.up),btn('Recruit',()=>recruit(t),lock||!can(U.cost)||armyN()>=armyCap()))}}
  if(cur==='tech'){V.innerHTML='<h3>Tech Tree</h3>';for(const k in TECH){const T=TECH[k];const lock=T.req&&!S.tech[T.req];
   row(V,(S.tech[k]?'✔ ':'')+T.n,T.d+(S.tech[k]?'':' · '+cstr(T.cost))+(lock?' · needs '+TECH[T.req].n:''),btn(S.tech[k]?'Done':'Learn',()=>{if(pay(T.cost)){S.tech[k]=1;log('Learned '+T.n+'!')}},S.tech[k]||lock||!can(T.cost)))}}
  if(cur==='map'){V.innerHTML='<h3>Region Map</h3><div class="small">Tap a flag to scout or attack. Our army: '+armyN()+' men</div>';const c=document.createElement('canvas');c.width=256;c.height=150;V.appendChild(c);drawMap(c);
   c.onclick=e=>{const r=c.getBoundingClientRect();const x=(e.clientX-r.left)*256/r.width,y=(e.clientY-r.top)*150/r.height;let best=-1,bd=400;REG.forEach((g,i)=>{const d=(g.x-x)**2+(g.y-y)**2;if(d<bd){bd=d;best=i}});if(best>=0)regionModal(best)};
-  REG.forEach((g,i)=>row(V,(S.won.includes(i)?'🚩 ':'')+g.n,TERR[g.terr].n+' · '+(S.scouted[i]?enemyMen(i)+' men, '+FORM[g.form].n:'~'+enemyMen(i)+' men?')+' · '+g.d,btn(S.won.includes(i)?'Ours':'Attack',()=>regionModal(i),S.won.includes(i))))}
+  REG.forEach((g,i)=>row(V,(S.won.includes(i)?'🚩 ':'')+g.n+(S.won.includes(i)?'':' · '+CIV[ownersFor(S.civ||'egypt')[i]].n),TERR[g.terr].n+' · '+(S.scouted[i]?enemyMen(i)+' men, '+FORM[g.form].n:'~'+enemyMen(i)+' men?')+' · '+g.d,btn(S.won.includes(i)?'Ours':'Attack',()=>regionModal(i),S.won.includes(i))))}
  if(cur==='help'){V.innerHTML=`<h3>How to Play</h3>
 1. Resources tick every second. Assign idle villagers in <b>Jobs</b>.<br>2. Build Farms/Lumber/Quarries for more jobs, Houses for more people (they need spare food to move in).<br>3. Tap a building in the village to upgrade it (+jobs/capacity).<br>4. Build a <b>Barracks</b>, train Spearmen, plus a couple of Slingers, then attack <b>Reedy Marsh</b> on the Map (6 tribesmen).<br>5. Conquered lands give jobs, tin, bonuses or free tech. Grow Village → Town → City to unlock mines and the smelter.<br>6. Bronze = copper + tin at a Smelter. Learn Chariots for the strongest unit.<br>7. Watch food: villagers and soldiers eat. Starvation causes desertion.<br><b>Events</b>: plague, drought, fire, raiders, immigrants, festivals, caravans and quakes happen at random; wells, a Temple, Irrigation, Sanitation and Granaries soften them. Drag to pan, pinch/wheel or +/- to zoom; tap a villager to see their job.<br><b>Battles</b>: tap a land, Scout it (reveals enemy units, formation), pick a Formation and put each company in Front/Back/Flank/Reserve. Battles run in rounds: missiles, approach, clash, flanking, morale. Armour cuts damage (missiles worst vs armour; axes/maces pierce). Terrain matters: no chariots in forest/marsh, hills favour defenders, walls need a Battering Ram. Survivors gain XP and rank. Take the Bronze Citadel to win!<br>Progress autosaves.`}
 }
@@ -432,10 +432,10 @@ function vnoise(x,y,sc,seed){const X=Math.floor(x/sc),Y=Math.floor(y/sc),fx=x/sc
 const ter=(x,y)=>x<0||y<0||x>=MW||y>=MH?T_WATER:TER[y*MW+x];
 function genWorld(seed){TER=new Uint8Array(MW*MH);const I=(x,y)=>y*MW+x,inb=(x,y)=>x>=0&&y>=0&&x<MW&&y<MH;
  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const h=vnoise(x,y,28,seed)*.45+vnoise(x,y,9,seed+11)*.35+vnoise(x,y,4,seed+1)*.2,f=vnoise(x,y,20,seed+2)*.45+vnoise(x,y,7,seed+12)*.35+vnoise(x,y,3,seed+3)*.2;let t=T_GRASS;
-  if(h>.64)t=T_HILL;else if(f>.6)t=T_FOREST;if(t===T_HILL&&(h>.74||hsh(x,y,seed+4)<.12))t=T_ROCK;if((t===T_HILL||t===T_ROCK)&&vnoise(x,y,5,seed+5)>.76)t=T_CU;if((t===T_HILL||t===T_ROCK)&&vnoise(x,y,5,seed+6)>.83)t=T_SN;TER[I(x,y)]=t}
+  const B=cX().biome;if(h>B.h)t=T_HILL;else if(f>B.f)t=T_FOREST;else if(B.arid&&f<B.arid&&vnoise(x,y,16,seed+9)<.55)t=T_SAND;if(t===T_HILL&&(h>.74||hsh(x,y,seed+4)<.12))t=T_ROCK;if((t===T_HILL||t===T_ROCK)&&vnoise(x,y,5,seed+5)>.76)t=T_CU;if((t===T_HILL||t===T_ROCK)&&vnoise(x,y,5,seed+6)>.83)t=T_SN;TER[I(x,y)]=t}
  const river=(horiz,base,lo,hi,w,sd)=>{let r=base;const N=horiz?MW:MH;for(let a=0;a<N;a++){r+=Math.round(Math.sin(a/9+sd)*.8+(hsh(a,sd,2)-.5)*1.3);r=Math.max(lo,Math.min(hi,r));const ww=w+(vnoise(a,0,14,sd)>.6?1:0);for(let k=-ww;k<=ww;k++){const x=horiz?a:r+k,y=horiz?r+k:a;if(inb(x,y))TER[I(x,y)]=T_WATER}for(const k of[-ww-1,ww+1]){const x=horiz?a:r+k,y=horiz?r+k:a;if(inb(x,y)&&TER[I(x,y)]!==T_WATER&&hsh(a,k,sd)<.8)TER[I(x,y)]=T_SAND}}};
  river(true,START.y+14,START.y+10,START.y+26,1,seed);river(false,START.x+46,START.x+38,START.x+70,1,seed+3);river(true,START.y+80,START.y+60,MH-10,2,seed+5);
- for(let n=0;n<10;n++){const cx=(hsh(n,seed,31)*(MW-20)|0)+10,cy=(hsh(n,seed,32)*(MH-20)|0)+10,r=3+hsh(n,seed,33)*7;if(Math.abs(cx-START.x)<22&&Math.abs(cy-START.y)<18)continue;for(let y=cy-r-2;y<=cy+r+2;y++)for(let x=cx-r-2;x<=cx+r+2;x++){if(!inb(x,y))continue;const d=Math.hypot(x-cx,(y-cy)*1.2)+(vnoise(x,y,3,n)-.5)*3;if(d<r)TER[I(x,y)]=T_WATER;else if(d<r+1.4&&TER[I(x,y)]!==T_WATER)TER[I(x,y)]=T_SAND}}
+ for(let n=0;n<(cX().biome.wet?24:10);n++){const cx=(hsh(n,seed,31)*(MW-20)|0)+10,cy=(hsh(n,seed,32)*(MH-20)|0)+10,r=3+hsh(n,seed,33)*7;if(Math.abs(cx-START.x)<22&&Math.abs(cy-START.y)<18)continue;for(let y=cy-r-2;y<=cy+r+2;y++)for(let x=cx-r-2;x<=cx+r+2;x++){if(!inb(x,y))continue;const d=Math.hypot(x-cx,(y-cy)*1.2)+(vnoise(x,y,3,n)-.5)*3;if(d<r)TER[I(x,y)]=T_WATER;else if(d<r+1.4&&TER[I(x,y)]!==T_WATER)TER[I(x,y)]=T_SAND}}
  for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const e=Math.min(x,y,MW-1-x,MH-1-y)+(vnoise(x,y,6,seed+40)-.5)*6;if(e<3)TER[I(x,y)]=T_WATER;else if(e<4.5&&TER[I(x,y)]!==T_WATER)TER[I(x,y)]=T_SAND}
  for(let y=START.y-7;y<=START.y+7;y++)for(let x=START.x-8;x<=START.x+8;x++){const t=TER[I(x,y)];if(t!==T_WATER&&t!==T_SAND)TER[I(x,y)]=T_GRASS}
  const blob=(cx,cy,r,t)=>{for(let y=cy-r;y<=cy+r;y++)for(let x=cx-r;x<=cx+r;x++)if(inb(x,y)&&(x-cx)**2+(y-cy)**2<=r*r+.5&&TER[I(x,y)]!==T_WATER&&TER[I(x,y)]!==T_SAND)TER[I(x,y)]=(t===T_FOREST||hsh(x,y,t)<.75)?t:T_HILL};
@@ -495,7 +495,7 @@ function syncRoster(){const pop=S.pop,sig=JSON.stringify([S.jobs,pop,bgSig,armyN
  const idle=Math.round(Math.max(0,pop-employed())*sc);for(let k=0;k<idle;k++)want.push('idle#'+k);for(let k=0;k<Math.min(12,armyN());k++)want.push('soldier#'+k);for(let k=0;k<Math.min(6,Math.floor(pop/6));k++)want.push('kid#'+k);
  const keep={};agents.forEach(a=>keep[a.key]=a);const h=hubT(),homes=blds('house').concat(blds('tent'));
  agents=want.map((key,n)=>{const a=keep[key];if(a&&a.sig===bgSig)return a;const role=key.split('#')[0],idx=+key.split('#')[1];const home=homes.length?doorOf(pick(homes).b):h;const wb=JOBB[role]?blds(JOBB[role]):[];
-  const o=Object.assign({},OUTFIT[role]||{t:TUN[n%TUN.length],t2:lighten(TUN[n%TUN.length],-.35),hat:'none'});o.hair=pick(['#3a2414','#24140c','#6a4226','#1a1010','#8a5a32']);if(role==='kid'){o.kid=1;o.t=TUN[(n+3)%TUN.length];o.t2=lighten(o.t,-.3)}
+  const o=Object.assign({},OUTFIT[role]||{t:TUN[n%TUN.length],t2:lighten(TUN[n%TUN.length],-.35),hat:'none'});o.hair=pick(['#3a2414','#24140c','#6a4226','#1a1010','#8a5a32']);if(role==='kid'){o.kid=1;o.t=TUN[(n+3)%TUN.length];o.t2=lighten(o.t,-.3)}civDress(o,role,n);
   return{key,role,idx,sig:bgSig,x:home.x,y:home.y,home,work:wb.length?pick(wb):null,route:[],state:'start',t:Math.random()*2,o,dir:0,ft:0,sick:false}});
  critters=[];const fs=blds('farm'),fc=Math.min(12,fs.length*3),gc=(S.extraJobs||{}).herder?Math.min(6,2+S.tier*2):0;
  for(let k=0;k<fc+gc;k++){const f=fs.length?fs[k%fs.length]:{gx:S.center.x,gy:S.center.y,s:1};const d=doorOf(f.b||{t:'tent',x:f.gx,y:f.gy});critters.push({k:k>=fc?'goat':'chicken',x:d.x+Math.random()-.5,y:d.y+Math.random()*.5,tx:0,ty:0,t:0,dir:1,hx:d.x,hy:d.y})}
@@ -693,8 +693,8 @@ function bspr(t,l,v){l=Math.min(l||1,5);const key='B'+t+l+(v||'')+(S&&S.tier>=3?
  if(v==='burn'){g.fillStyle='rgba(30,20,10,.35)';g.fillRect(0,0,W,W)}
  return SPR[key]={c,m}}
 // ---------- pawns ----------
-function pawnSpr(o,dir,sc){const k='P'+[o.t,o.t2,o.hat,o.hair,o.kid,o.sick,o.shield,o.apron,o.robe,o.hc,dir,sc].join();if(PSPR[k])return PSPR[k];const[c,g0]=mk(24*sc,32*sc);const g=g0;g.imageSmoothingEnabled=true;g.scale(sc,sc);g.lineJoin='round';
- if(o.kid){g.translate(12,30);g.scale(.76,.76);g.translate(-12,-30)}const sk=o.sick?'#a8b880':'#e8b890',hair=o.hair||'#3a2414',side=dir===0||dir===2,fl=dir===2?-1:1;
+function pawnSpr(o,dir,sc){const k='P'+[o.sk,o.hs,o.t,o.t2,o.hat,o.hair,o.kid,o.sick,o.shield,o.apron,o.robe,o.hc,dir,sc].join();if(PSPR[k])return PSPR[k];const[c,g0]=mk(24*sc,32*sc);const g=g0;g.imageSmoothingEnabled=true;g.scale(sc,sc);g.lineJoin='round';
+ if(o.kid){g.translate(12,30);g.scale(.76,.76);g.translate(-12,-30)}const sk=o.sick?'#a8b880':(o.sk||'#e8b890'),hair=o.hair||'#3a2414',side=dir===0||dir===2,fl=dir===2?-1:1;
  // body
  const bh=o.robe?16:13,by=15;rr(g,5,by,14,bh,6,o.t,OUTL,1.1);rr(g,6,by+bh*.55,12,bh*.42,5,o.t2);if(o.apron&&dir===1)rr(g,9,by+3,6,bh-4,2,'#d8c6a0');
  if(o.shield&&side){circ(g,12+fl*-5,by+7,4.4,o.hc||'#8a6038',OUTL,.9);circ(g,12+fl*-5,by+7,1.4,'#d8a040')}
@@ -704,7 +704,14 @@ function pawnSpr(o,dir,sc){const k='P'+[o.t,o.t2,o.hat,o.hair,o.kid,o.sick,o.shi
  g.save();g.beginPath();g.arc(hx,hy,6.6,0,6.29);g.clip();g.fillStyle=hair;
  if(o.hat!=='bald'){if(dir===3)g.fillRect(0,0,24,20);else if(dir===1){g.beginPath();g.ellipse(hx,hy-4.4,7.4,4.6,0,0,6.29);g.fill()}else{g.beginPath();g.ellipse(hx-fl*3.4,hy-2.6,6,6,0,0,6.29);g.fill()}}
  g.restore();if(o.hat!=='bald')circ(g,hx,hy,6.6,null,OUTL,1.1);
- const hat=o.hat||'none';
+ const hs=o.hs;if(hs==='long'||hs==='curls'){if(dir===3)rr(g,hx-6.5,hy,13,8,4,hair);else{ln(g,hx-6,hy-1,hx-6.5,hy+7,hair,2.6);if(dir!==0)ln(g,hx+6,hy-1,hx+6.5,hy+7,hair,2.6);}if(hs==='curls')for(let q=0;q<5;q++)circ(g,hx-6+q*3,hy-6+Math.abs(q-2),1.8,hair)}
+ if(hs==='braid'&&dir!==1)ln(g,hx-(side?fl*5:0),hy+2,hx-(side?fl*6:0),hy+11,hair,2.2);
+ if(hs==='beard'&&dir!==3){g.beginPath();g.moveTo(hx-4.5+(side?fl*1.5:0),hy+3);g.lineTo(hx+4.5+(side?fl*1.5:0),hy+3);g.lineTo(hx+(side?fl*2:0),hy+9);g.closePath();g.fillStyle=hair;g.fill();for(let q=0;q<3;q++)ln(g,hx-3+q*3,hy+4,hx-2+q*2,hy+8,'rgba(0,0,0,.25)',.5)}
+ const hat=o.hat==='helm'?'helmet':(o.hat||'none');
+ if(hat==='nemes'){g.beginPath();g.arc(hx,hy-.4,7.2,3.1,6.33);g.lineTo(hx+7.6,hy+7);g.lineTo(hx+4.6,hy+7);g.lineTo(hx+4.6,hy);g.lineTo(hx-4.6,hy);g.lineTo(hx-4.6,hy+7);g.lineTo(hx-7.6,hy+7);g.closePath();g.fillStyle='#f0e4b0';g.fill();g.strokeStyle=OUTL;g.lineWidth=.8;g.stroke();for(let q=-2;q<=2;q++)ln(g,hx+q*2.6,hy-6.5,hx+q*3.4,hy,o.hc||'#2e6db0',.9)}
+ else if(hat==='tall'){g.beginPath();g.moveTo(hx-6.5,hy-2.5);g.lineTo(hx-1,hy-15);g.lineTo(hx+1.5,hy-15);g.lineTo(hx+6.5,hy-2.5);g.closePath();g.fillStyle=o.hc||'#d8c08a';g.fill();g.strokeStyle=OUTL;g.lineWidth=.8;g.stroke();ln(g,hx-5.6,hy-5,hx+5.6,hy-5,'#8e2a1c',1)}
+ else if(hat==='boar'){g.beginPath();g.moveTo(hx-7,hy-1);g.quadraticCurveTo(hx,hy-17,hx+7,hy-1);g.closePath();g.fillStyle='#f0e8d0';g.fill();g.strokeStyle=OUTL;g.lineWidth=.8;g.stroke();for(let q=0;q<3;q++)ln(g,hx-6+q*1.2,hy-3-q*3,hx+6-q*1.2,hy-3-q*3,'#8a7a5a',.8);ln(g,hx,hy-12,hx,hy-15,'#8a5a32',1.4)}
+ else if(hat==='fez'){rr(g,hx-5.5,hy-11,11,7,1.5,o.hc||'#e0b030',OUTL,.8);ln(g,hx-5.5,hy-6,hx+5.5,hy-6,'rgba(0,0,0,.25)',.8)}
  if(hat==='straw'){ell(g,hx,hy-4,9.5,3.6,'#e2c464');ell(g,hx,hy-5.4,5,2.6,'#cfae4c');ln(g,hx-5,hy-4.2,hx+5,hy-4.2,'#a8822c',.7)}
  else if(hat==='cap'||hat==='helmet'){g.beginPath();g.arc(hx,hy-.6,6.9,3.3,6.12);g.closePath();g.fillStyle=hat==='helmet'?'#c8a040':(o.hc||'#8a6038');g.fill();g.strokeStyle=OUTL;g.lineWidth=.9;g.stroke();if(hat==='helmet')ln(g,hx,hy-7.5,hx,hy-10,'#c04a2c',1.6)}
  else if(hat==='hood'){g.beginPath();g.arc(hx,hy,7.6,3.0,6.4);g.lineWidth=2.6;g.strokeStyle=o.t2;g.stroke()}
@@ -1043,9 +1050,53 @@ function civBuilding(g,t,l,W,m){const A=civA(),id=(S&&S.civ)||'egypt',acc=A.acc;
  return false}
 const CLX={pithos:1,horns:1,stele:1,obelisk:1,palmpot:1,purple:1,horse:1};
 function civProp(g,k,vr){const x=24,y=24;if(k==='pithos'){pithos(g,x-4,y,4);pithos(g,x+5,y+2,3.4)}else if(k==='horns')horns(g,x,y);else if(k==='stele'){ell(g,x+3,y+3,4,2,SH);rr(g,x-3,y-6,6,10,2,'#9a948a',OUTL,.7);for(let i=0;i<3;i++)ln(g,x-2,y-4+i*2.4,x+2,y-4+i*2.4,'#6a645a',.5)}else if(k==='obelisk')obelisk(g,x,y);else if(k==='palmpot'){circ(g,x,y+2,3.6,'#b8643a',OUTL,.6);g.drawImage(propSpr('palm',vr).c,x-10,y-12,20,20)}else if(k==='purple'){for(let i=0;i<3;i++){circ(g,x-6+i*6,y,2.8,'#6a2a6a',OUTL,.6);circ(g,x-6+i*6,y,1.4,'#b04aa8')}}else if(k==='horse')horse(g,x,y,vr%2?1:-1,['#6a4226','#8a5a34','#3a2a1a'][vr%3])}
-function pickCiv(after){const M=$('modal'),B=$('mbody');B.innerHTML='<h3>Choose your civilization</h3><p class="muted">Each people builds in its own style. (Unique units and bonuses arrive in a later update.)</p>';const gr=document.createElement('div');gr.className='grid civg';
- for(const id in CIV){const C=CIV[id],el=document.createElement('div');el.className='card';const[c,g]=mk(112,112);g.imageSmoothingEnabled=true;const old=S.civ;S.civ=id;const sp=bspr('house',2);g.drawImage(sp.c,4,4,104,104);S.civ=old;c.className='th';el.appendChild(c);el.insertAdjacentHTML('beforeend','<div class="cm"><b>'+C.n+'</b><span class="badge">'+C.land+'</span><div class="sub">'+C.blurb+'</div></div>');
-  el.onclick=()=>{S.civ=id;for(const k in SPR)if(k[0]==='B')delete SPR[k];chunkSig++;save();M.style.display='none';log('You lead the '+C.n+'.');renderView();after&&after()};gr.appendChild(el)}B.appendChild(gr);M.style.display='flex'}
+function pickCiv(after){const M=$('modal'),B=$('mbody');B.innerHTML='<h3>Choose your civilization</h3><p class="muted">Each people builds in its own style. Each has unique units, economic/military bonuses, its own dress and homeland terrain. Rival peoples hold the regions around you.</p>';const gr=document.createElement('div');gr.className='grid civg';
+ for(const id in CIV){const C=CIV[id],el=document.createElement('div');el.className='card';const[c,g]=mk(112,112);g.imageSmoothingEnabled=true;const old=S.civ;S.civ=id;const sp=bspr('house',2);g.drawImage(sp.c,4,4,104,104);S.civ=old;c.className='th';el.appendChild(c);el.insertAdjacentHTML('beforeend','<div class="cm"><b>'+C.n+'</b><span class="badge">'+C.land+'</span><div class="sub">'+C.blurb+'</div><div class="sub"><b>'+CIVX[id].txt+'</b> Units: '+CIVX[id].units.map(u=>UNIT[u].n.replace(/ \(.*\)/,'')).join(', ')+'</div></div>');
+  el.onclick=()=>{S.civ=id;genWorld(S.seed);worldChanged();CH={};rosterSig='';for(const k in SPR)if(k[0]==='B')delete SPR[k];chunkSig++;save();M.style.display='none';log('You lead the '+C.n+'.');renderView();after&&after()};gr.appendChild(el)}B.appendChild(gr);M.style.display='flex'}
+
+// ================= CIV GAMEPLAY: units, bonuses, dress, biomes, AI regions =================
+Object.assign(UNIT,{
+ medjay:{n:'Composite Archers (Egypt)',civ:'egypt',atk:5.5,def:1.5,hp:9,spd:1.1,rng:1,arm:0,ap:1,up:.15,cost:{food:18,wood:24},c:'#e0c060'},
+ nubian:{n:'Nubian Bowmen (Egypt)',civ:'egypt',atk:4,def:1,hp:8,spd:1.3,rng:1,arm:0,ap:0,up:.1,cost:{food:12,wood:14},c:'#6a3a1e'},
+ hchar3:{n:'Three-man Heavy Chariots (Hittite)',civ:'hittite',atk:10,def:5.5,hp:30,spd:2.2,rng:0,arm:1,ap:1,chariot:1,shock:1,up:.45,cost:{food:60,wood:50,copper:20},tier:2,c:'#8e2a1c'},
+ meshwesh:{n:'Hittite Axe Guard (Hittite)',civ:'hittite',atk:6,def:4,hp:12,spd:1,rng:0,arm:1,ap:2,up:.2,cost:{food:22,copper:12},c:'#6a5a3a'},
+ maryannu:{n:'Maryannu Chariot Archers (Mitanni)',civ:'mitanni',atk:6,def:2.5,hp:20,spd:3.4,rng:1,arm:1,ap:1,chariot:1,up:.35,cost:{food:45,wood:40,copper:8},c:'#c06a2a'},
+ boar:{n:'Boar-tusk Spearmen (Mycenae)',civ:'myc',atk:4.5,def:7,hp:14,spd:.8,rng:0,arm:1,ap:0,up:.2,cost:{food:22,wood:10,copper:6},c:'#d8c8a0'},
+ msling:{n:'Minoan Slingers (Minoa)',civ:'minoan',atk:3.4,def:1.2,hp:8,spd:1.3,rng:1,arm:0,ap:1,up:.08,cost:{food:10,stone:8},c:'#2e8ab8'},
+ marine:{n:'Minoan Marines (Minoa)',civ:'minoan',atk:4.5,def:4,hp:11,spd:1.2,rng:0,arm:0,ap:1,amph:1,up:.15,cost:{food:18,wood:14},c:'#c84a2c'},
+ sapper:{n:'Assyrian Siege Engineers (Assyria)',civ:'assyria',atk:1.5,def:5,hp:26,spd:.8,rng:0,arm:2,ap:0,siege:1,up:.15,cost:{wood:40,stone:15,copper:5},c:'#8a7a54'},
+ lancer:{n:'Assyrian Lancers (Assyria)',civ:'assyria',atk:5,def:3,hp:12,spd:1,rng:0,arm:1,ap:1,up:.18,cost:{food:20,wood:8,copper:8},c:'#8e2a1c'},
+ gateguard:{n:'Ishtar Gate Guard (Babylon)',civ:'babylon',atk:4.5,def:6,hp:13,spd:.9,rng:0,arm:1,ap:0,morale:15,up:.2,cost:{food:24,stone:10,copper:6},c:'#2e58a6'},
+ habiru:{n:'Habiru Skirmishers (Canaan)',civ:'canaan',atk:3.4,def:2,hp:9,spd:1.4,rng:1,arm:0,ap:0,up:.08,cost:{food:12,wood:8},c:'#7a2a6a'}});
+const CIVX={
+ egypt:{units:['medjay','nubian'],eco:{food:.2},mil:{rng:.15},sw:{archer:'medjay',slinger:'nubian',compbow:'medjay'},txt:'Nile floods: food +20%. Archers +15% attack.',
+  dress:{sk:['#c8885a','#a86a40','#8a5030'],hair:['#140c08','#1a1010'],t:['#f4eedc','#ece2cc'],t2:'#d8ccb0',hat:'nemes',hc:'#2e6db0',hs:'short'},biome:{arid:.46,f:.7,h:.7}},
+ hittite:{units:['hchar3','meshwesh'],eco:{copper:.25,bronze:.15},mil:{chariot:.2},sw:{hchariot:'hchar3',axeman:'meshwesh',lchariot:'hchar3'},txt:'Metalworkers: copper +25%, bronze +15%. Chariots +20% attack.',
+  dress:{sk:['#e0a878','#d09468'],hair:['#24140c','#3a2414'],t:['#8e2a1c','#6a5a3a','#a07a3a'],t2:'#4a3a2a',hat:'tall',hc:'#d8c08a',hs:'braid'},biome:{h:.58,f:.62}},
+ canaan:{units:['habiru'],eco:{wood:.2},merch:3,purple:.06,txt:'Cedar & purple: wood +20%, merchants ×3 effect and produce bronze via purple-dye trade.',sw:{slinger:'habiru',archer:'habiru'},
+  dress:{sk:['#d89a6a','#c08458'],hair:['#1a1010','#3a2414'],t:['#7a2a6a','#b06a9a','#d8c69a'],t2:'#5a2a5a',hat:'turban',hc:'#e8dcc0',hs:'beard'},biome:{f:.52,h:.66}},
+ myc:{units:['boar'],eco:{stone:.25},mil:{def:.12},sw:{spear:'boar',hoplite:'boar'},txt:'Cyclopean builders: stone +25%. All troops +12% defence.',
+  dress:{sk:['#e8b890','#d8a070'],hair:['#3a2414','#6a4226','#24140c'],t:['#b8442e','#e0c070','#4a6a9a'],t2:'#6a3a1e',hat:'boar',hc:'#f0e8d0',hs:'long'},biome:{h:.57,f:.66}},
+ minoan:{units:['msling','marine'],eco:{food:.1},grow:1.3,sw:{slinger:'msling',spear:'marine'},txt:'Thalassocracy: food +10%, population grows 30% faster. Marines ignore river/marsh penalties.',
+  dress:{sk:['#d8946a','#c88058'],hair:['#140c08','#24140c'],t:['#2e8ab8','#c84a2c','#e8c060'],t2:'#f0e8d8',hat:'none',hs:'curls'},biome:{f:.64,h:.68,wet:1}},
+ babylon:{units:['gateguard'],scribe:3,eco:{food:.08},happy:8,sw:{hoplite:'gateguard',guard:'gateguard'},txt:'Code of Laws: scribes ×3 effect, +8 happiness (lawgiver). Food +8% from canals.',
+  dress:{sk:['#d09060','#b87a50'],hair:['#140c08','#1a1010'],t:['#2e58a6','#e0b030','#c04a2c'],t2:'#1a3670',hat:'fez',hc:'#e0b030',hs:'beard'},biome:{arid:.42,f:.74,h:.72}},
+ assyria:{units:['sapper','lancer'],eco:{stone:.15},mil:{atk:.12,siege:1.6},sw:{ram:'sapper',spear:'lancer',axeman:'lancer'},txt:'War machine: all troops +12% attack, siege ×1.6. Stone +15%.',
+  dress:{sk:['#d09468','#c08458'],hair:['#140c08','#24140c'],t:['#8e2a1c','#2a3a5a','#d8c08a'],t2:'#5a1a10',hat:'fez',hc:'#d8c08a',hs:'beard'},biome:{arid:.4,h:.62,f:.7}},
+ mitanni:{units:['maryannu'],eco:{food:.1},mil:{chariot:.25,spd:.25},sw:{lchariot:'maryannu',hchariot:'maryannu',archer:'maryannu'},txt:'Horse masters (Kikkuli): chariots +25% attack & speed. Herds: food +10%.',
+  dress:{sk:['#e0a878','#c89060'],hair:['#3a2414','#6a4226'],t:['#c06a2a','#6a8a3a','#d8c69a'],t2:'#6a3a1e',hat:'band',hc:'#c06a2a',hs:'long'},biome:{f:.74,h:.7}}};
+const cX=()=>CIVX[(S&&S.civ)||'egypt']||CIVX.egypt;
+const _unitLock=unitLock;unitLock=function(t){const U=UNIT[t];if(U.civ&&U.civ!==(S.civ||'egypt'))return'Only the '+CIV[U.civ].n;return _unitLock(t)};
+const _mkGroup=mkGroup;mkGroup=function(c,side){const g=_mkGroup(c,side);let civ=null;if(typeof c.id==='number')civ=cX();else if(c.civ)civ=CIVX[c.civ];
+ if(civ){const M=civ.mil||{},U=Object.assign({},g.U);let a=1+(M.atk||0);if(U.rng)a+=M.rng||0;if(U.chariot){a+=M.chariot||0;U.spd*=1+(M.spd||0)}if(U.siege)a*=M.siege||1;U.atk*=a;U.def*=1+(M.def||0);g.U=U}return g};
+function civDress(o,role,n){const D=cX().dress,h=(n*7+role.length*3)%97;o.sk=D.sk[h%D.sk.length];o.hair=D.hair[h%D.hair.length];o.hs=D.hs;
+ if(!OUTFIT[role]||role==='gatherer'||role==='scribe'||role==='merchant'||role==='kid'){o.t=D.t[h%D.t.length];o.t2=D.t2}
+ if(!o.hat||o.hat==='none'||role==='scribe'||role==='merchant'||role==='soldier'){if(role!=='kid')o.hat=role==='soldier'&&D.hat!=='boar'&&D.hat!=='tall'?'helm':D.hat;o.hc=D.hc}
+ if(role==='soldier'){o.t=CIV[S.civ||'egypt'].acc;o.t2=lighten(o.t,-.35)}o.civ=S.civ;return o}
+function ownersFor(me){const L=Object.keys(CIV).filter(k=>k!==me);return REG.map((r,i)=>L[i%L.length])}
+const _enemyOf=enemyOf;enemyOf=function(i){const ow=ownersFor(S.civ||'egypt')[i],X=CIVX[ow];return _enemyOf(i).map(e=>{const t=X.sw&&X.sw[e.type];if(t){e.type=t;e.slot=defSlot(t)}e.civ=ow;e.name=CIV[ow].n.replace(/s$/,'')+' '+UNIT[e.type].n.replace(/ \(.*\)/,'');return e})};
+const _drawMap=drawMap;drawMap=function(c){_drawMap(c);const x=c.getContext('2d'),ow=ownersFor(S.civ||'egypt');REG.forEach((g,i)=>{if(S.won.includes(i))return;const C=CIV[ow[i]];x.globalAlpha=.28;x.fillStyle=C.acc;x.beginPath();x.arc(g.x,g.y,17,0,6.29);x.fill();x.globalAlpha=1;x.strokeStyle=C.acc;x.setLineDash([2,2]);x.stroke();x.setLineDash([]);x.fillStyle='#fff3d4';x.font='bold 5px sans-serif';x.fillText(C.n,g.x-12,g.y-12)});
+ x.fillStyle=CIV[S.civ||'egypt'].acc;x.font='bold 6px sans-serif';x.fillText(CIV[S.civ||'egypt'].n+' (you)',HOME.x-18,HOME.y+14)};
 
 // ================= CITY EVENTS =================
 function evOn(id){return S&&S.ev&&S.ev.act.find(e=>e.id===id)}
