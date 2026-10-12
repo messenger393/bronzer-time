@@ -88,6 +88,7 @@ body.battle #tabs,body.battle #alerts,body.battle #insp,body.battle #drawer,body
 
 <script>
 "use strict";
+const GFX=Object.assign({master:.8,music:.6,sfx:.8,q:'med',parts:true,edge:false,pan:1},(()=>{try{return JSON.parse(localStorage.getItem('bnbSettings')||'{}')}catch(e){return{}}})());const gfxSave=()=>localStorage.setItem('bnbSettings',JSON.stringify(GFX));
 const KEY='bronzeAndBloodSave',OLDKEY='bronzerTimeSave';
 const RES=['food','wood','stone','copper','tin','bronze'];
 const PAL={'.':null,k:'#3a2414',w:'#fff3d4',y:'#f2c14e',o:'#d9772b',r:'#b8402f',g:'#5f9e3a',G:'#8fd16a',b:'#8a5a32',B:'#c58a4a',s:'#9aa0a8',S:'#d6dae0',c:'#c8734a',t:'#7ea8b8',p:'#f4c49a',u:'#4a78c8',n:'#2d5a1e'};
@@ -401,7 +402,7 @@ function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderA
 1. Resources tick every second. Assign idle villagers in <b>Jobs</b>.<br>2. Build Farms/Lumber/Quarries for more jobs, Houses for more people (they need spare food to move in).<br>3. Tap a building in the village to upgrade it (+jobs/capacity).<br>4. Build a <b>Barracks</b>, train Spearmen, plus a couple of Slingers, then attack <b>Reedy Marsh</b> on the Map (6 tribesmen).<br>5. Conquered lands give jobs, tin, bonuses or free tech. Grow Village → Town → City to unlock mines and the smelter.<br>6. Bronze = copper + tin at a Smelter. Learn Chariots for the strongest unit.<br>7. Watch food: villagers and soldiers eat. Starvation causes desertion.<br><b>Events</b>: plague, drought, fire, raiders, immigrants, festivals, caravans and quakes happen at random; wells, a Temple, Irrigation, Sanitation and Granaries soften them. Drag to pan, pinch/wheel or +/- to zoom; tap a villager to see their job.<br><b>Battles</b>: tap a land, Scout it (reveals enemy units, formation), pick a Formation and put each company in Front/Back/Flank/Reserve. Battles run in rounds: missiles, approach, clash, flanking, morale. Armour cuts damage (missiles worst vs armour; axes/maces pierce). Terrain matters: no chariots in forest/marsh, hills favour defenders, walls need a Battering Ram. Survivors gain XP and rank. Take the Bronze Citadel to win!<br>Progress autosaves.`}
 }
 // ================= WORLD (hi-res iso, 64x32 tiles) =================
-const vc=$('vc'),vx=vc.getContext('2d');let placing=null,ghost=null;
+const vc=$('vc');let vx=vc.getContext('2d');let placing=null,ghost=null;
 const MW=256,MH=256,TS=32,OX=0,OY=0,WW=MW*TS,WH=MH*TS;
 const isoP=(gx,gy)=>({x:gx*TS,y:gy*TS});
 const hsh=(a,b,c=0)=>{let h=(a*374761393+b*668265263+c*1442695041)|0;h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296};
@@ -977,6 +978,15 @@ function pbarSync(){if(placing&&FP[placing]&&(!CURFP||CURFP.t!==placing)){PV={v:
  o.onclick=()=>{if(placing==='__road'||placing==='__erase'){placing=null;ghost=null;renderView()}else if(placing==='__move'){if(ghost){moveCamp(ghost.gx,ghost.gy);placing=null;ghost=null}}else if(ghost)placeAt(ghost)};B.appendChild(c);B.appendChild(o);B.style.display='flex'}
 addEventListener('popstate',()=>{if(placing){pbarSync.h=0;pCancel()}});setInterval(pbarSync,120);
 // ---------- frame ----------
+// perf: chunk mip levels + low-zoom baked prop layers
+function chMip(ch,w){if(w>=180)return ch.c;const L=w>=90?128:64;ch.m=ch.m||{};if(!ch.m[L]){const src=L===64?chMip(ch,100):ch.c;const[c,g]=mk(L,L);g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(src,0,0,L,L);ch.m[L]=c}return ch.m[L]}
+const PBZ=.62,PBK={};let PBsrc=null;
+function propBake(vl,vr,vt,vb,now){if(PBsrc!==props){for(const k in PBK)delete PBK[k];PBsrc=props}visProps(-1e9,-1e9,-1e9,-1e9);const W=CS*TS,M=48,sc=.5;let bud=6;
+ for(let cy=Math.max(0,Math.floor(vt/W));cy<=Math.min(MH/CS-1,Math.floor(vb/W));cy++)for(let cx=Math.max(0,Math.floor(vl/W));cx<=Math.min(MW/CS-1,Math.floor(vr/W));cx++){const k=cx+','+cy,a=PCH[k];if(!a||!a.length)continue;let e=PBK[k];
+  if((!e||now-e.t>8000+((cx*7+cy*3)%10)*300)&&(bud>0||!e)){if(!e&&bud<=0&&Object.keys(PBK).length)continue;bud--;const cw=Math.ceil((W+M*2)*sc);if(!e){const[c,g]=mk(cw,cw);e=PBK[k]={c,g}}e.t=now;const g=e.g;g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,cw,cw);g.setTransform(sc,0,0,sc,(M-cx*W)*sc,(M-cy*W)*sc);
+   const ov=vx;vx=g;try{a.slice().sort((p,q)=>p.gy-q.gy).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS,vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';rnDrawProp(pr,X,Y,sp,0,big)})}finally{vx=ov}}
+  if(e){e.used=now;vx.drawImage(e.c,cx*W-M,cy*W-M,W+M*2,W+M*2)}}
+ const ks=Object.keys(PBK);if(ks.length>260){ks.sort((p,q)=>(PBK[p].used||0)-(PBK[q].used||0));ks.slice(0,ks.length-200).forEach(k=>delete PBK[k])}}
 let PCH={};function visProps(vl,vr,vt,vb){if(visProps.src!==props){PCH={};props.forEach(p=>{const k=((p.gx/CS)|0)+','+((p.gy/CS)|0);(PCH[k]=PCH[k]||[]).push(p)});visProps.src=props}const o=[],W=CS*TS;for(let cy=Math.max(0,Math.floor(vt/W));cy<=Math.min(MH/CS-1,Math.floor(vb/W));cy++)for(let cx=Math.max(0,Math.floor(vl/W));cx<=Math.min(MW/CS-1,Math.floor(vr/W));cx++){const a=PCH[cx+','+cy];if(a)for(const p of a)o.push(p)}return o}
 function drawAgent(a,p,moving,now){if(a.state==='home'&&a.inB&&!moving&&!(a.route&&a.route.length)&&night()){const t=a.inB.t;if(t==='tent'){if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.8)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+6,p.y-14-(now/90%10))}return}
   vx.save();vx.translate(p.x,p.y-6);vx.rotate(-Math.PI/2);rr(vx,-22,-11,40,22,3,'#e8dcc0','rgba(60,40,20,.6)',.8);rr(vx,-22,-11,9,22,3,'#f4eee0');const br=Math.sin(now/1300+(a.idx||0))*.4;vx.drawImage(pawnSpr(a.o,1,2),-16,-14,21,28);rr(vx,-16,-.5+br,20,13-br,3,TUN[(a.idx||0)%TUN.length],'rgba(40,20,10,.6)',.7);ln(vx,-15,3+br,3,3+br,'rgba(255,240,200,.35)',.8);vx.restore();
@@ -1035,14 +1045,14 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  const vl=cam.x-48,vr=cam.x+VW/z+48,vt=cam.y-48,vb=cam.y+VH/z+48,inV=(x,y)=>x>vl&&x<vr&&y>vt&&y<vb;
  if(!ov64)buildOverview();vx.drawImage(ov64,0,0,WW,WH);let bud=3;const W=CS*TS,zp=z*PXR,X0=(-cam.x+sx)*zp,Y0=(-cam.y+sy)*zp;
  if(z>=.3){vx.setTransform(1,0,0,1,0,0);const c0=Math.max(0,Math.floor(vl/W)),c1=Math.min(MW/CS-1,Math.floor(vr/W)),r0=Math.max(0,Math.floor(vt/W)),r1=Math.min(MH/CS-1,Math.floor(vb/W));
-  for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const k=cx+','+cy;let ch=CH[k];if((!ch||ch.sig!==chunkSig)&&bud>0){bud--;ch=getChunk(cx,cy)}if(!ch)continue;ch.used=now;const a=Math.round(X0+cx*W*zp),b=Math.round(Y0+cy*W*zp),w=Math.round(X0+(cx+1)*W*zp)-a,h=Math.round(Y0+(cy+1)*W*zp)-b;vx.imageSmoothingEnabled=z<1.5;vx.drawImage(ch.c,a,b,w,h);if(ch.f&&z>=.5){vx.globalAlpha=.45+.35*Math.sin(now/650+cx*1.7+cy);vx.drawImage(ch.f,a+Math.sin(now/1300)*zp*.8,b+((now/900|0)%2)*.6*zp,w,h);vx.globalAlpha=1}}
-  vx.imageSmoothingEnabled=true;const ks=Object.keys(CH);if(ks.length>150){ks.sort((p,q)=>(CH[p].used||0)-(CH[q].used||0));ks.slice(0,ks.length-120).forEach(k=>delete CH[k])}TF()}
+  for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const k=cx+','+cy;let ch=CH[k];if((!ch||ch.sig!==chunkSig)&&bud>0&&(bud===3||performance.now()-now<7)){bud--;ch=getChunk(cx,cy)}if(!ch)continue;ch.used=now;const a=Math.round(X0+cx*W*zp),b=Math.round(Y0+cy*W*zp),w=Math.round(X0+(cx+1)*W*zp)-a,h=Math.round(Y0+(cy+1)*W*zp)-b;vx.imageSmoothingEnabled=z<1.5;vx.drawImage(chMip(ch,w),a,b,w,h);if(ch.f&&z>=.5){vx.globalAlpha=.45+.35*Math.sin(now/650+cx*1.7+cy);vx.drawImage(ch.f,a+Math.sin(now/1300)*zp*.8,b+((now/900|0)%2)*.6*zp,w,h);vx.globalAlpha=1}}
+  vx.imageSmoothingEnabled=true;const ks=Object.keys(CH),nv=(c1-c0+1)*(r1-r0+1),lim=Math.max(220,nv*2+20);if(ks.length>lim){ks.sort((p,q)=>(CH[p].used||0)-(CH[q].used||0));ks.slice(0,ks.length-lim+30).forEach(k=>delete CH[k])}TF()}
  const wt=now/1000;if(z>=.5){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){if(hsh(gx,gy,9)>.18||!isWat(RT[gy*MW+gx]))continue;const X=(gx+hsh(gx,gy,4))*TS,Y=(gy+hsh(gx,gy,5))*TS,ph=(wt*.9+hsh(gx,gy,3)*6)%3;if(ph<1.6){vx.globalAlpha=Math.sin(ph/1.6*Math.PI)*.5;ln(vx,X+ph*5,Y,X+ph*5+7,Y,'#d8eef6',1);vx.globalAlpha=1}}}
  const D=[],blist=blds(),flats=[];FPB.on=1;FPB.n=FX.mob?1:2;
  blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):bspr(b.t,b.l,v);
   const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:()=>vx.drawImage(sp.c,X-8,Y-8,s*TS+16,s*TS+16),k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
  FPB.on=0;flats.forEach(e=>e.f());
- visProps(vl,vr,vt,vb).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS;if(!inV(X,Y))return;const vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';const sw=big?Math.sin(wt*1.3+pr.gx)*.6:0;D.push({k:Y+(big?10:2),f:()=>rnDrawProp(pr,X,Y,sp,sw,big)})});
+ if(z<PBZ&&GFX.q!=='high'){propBake(vl,vr,vt,vb,now)}else visProps(vl,vr,vt,vb).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS;if(!inV(X,Y))return;const vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';const sw=big?Math.sin(wt*1.3+pr.gx)*.6:0;D.push({k:Y+(big?10:2),f:()=>rnDrawProp(pr,X,Y,sp,sw,big)})});
  critters.forEach(c=>{c.t-=dt;if(c.t<=0){const rg=c.k==='deer'?2.5:1.4;c.tx=c.hx+(Math.random()-.5)*rg*2;c.ty=c.hy+(Math.random()-.5)*rg;if(!walkC(c.tx|0,c.ty|0)&&c.k!=='deer'){c.tx=c.x;c.ty=c.y}c.t=1+Math.random()*3}
   const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);if(d>.03){c.x+=dx/d*.4*dt;c.y+=dy/d*.4*dt;c.dir=dx>0?1:-1}if(z<.5||!inV(c.x*TS,c.y*TS))return;D.push({k:c.y*TS,f:()=>critDraw(c,now)})});
  if(!S.rn||!S.herds)rnInit();rnBuild();rnHerdStep(dt);if(z>=.5)rnHerdDraw(D,dt,now,inV);
