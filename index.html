@@ -609,9 +609,10 @@ function tcol(r,n1,n2,h,X,Y,o){let c=BC[r],a=c[0],b=c[1],d=c[2];const v=VG[r];
  if(v){const w=Math.max(0,Math.min(1,(n1*1.4-.2)))*VGW[r];a+=(v[0]-a)*w;b+=(v[1]-b)*w;d+=(v[2]-d)*w}
  let f=.9+.2*n2+(h-.5)*.06;
  if(isWat(r)){f=.93+.12*n1+(Math.sin((X+Y*.6)/9+n2*6)>.85?.06:0)}
- if(isRock(r)){f=.82+.3*n2;if(hsh(X>>1,Y>>1,13)<.03)f*=.7;if(r===R_CU&&hsh(X>>1,Y>>1,8)<.07){const q=hsh(X>>1,Y>>1,9)<.5;o[0]=q?70:196;o[1]=q?150:118;o[2]=q?112:60;return o}if(r===R_SN&&hsh(X>>1,Y>>1,8)<.07){o[0]=206;o[1]=222;o[2]=232;return o}}
+ if(isRock(r)){f=.82+.3*n2;if(hsh(X>>1,Y>>1,13)<.03)f*=.7;if(r===R_CU||r===R_SN){const vn=Math.abs(vnoise(X,Y,11,r*7)-.5)+Math.abs(vnoise(X,Y,5,r*7+1)-.5)*.35;if(vn<.05){const t=1-vn/.05;if(r===R_CU){const q=vnoise(X,Y,7,19)<.5;o[0]=(q?64:200)*(.8+.3*t);o[1]=(q?156:116)*(.8+.3*t);o[2]=(q?116:58)*(.8+.3*t)}else{o[0]=190+40*t;o[1]=204+36*t;o[2]=220+30*t}return o}}}
  if(r===R_SAND)f=.94+.1*n2+(h-.5)*.05;if(r===R_MARSH&&n2>.62){a=a*.8+70*.2;b=b*.8+100*.2;d=d*.8+110*.2}
  o[0]=a*f;o[1]=b*f;o[2]=d*f;return o}
+function rkAt(fx,fy,X,Y){const i0=Math.floor(fx),j0=Math.floor(fy),tx=fx-i0,ty=fy-j0,q=(x,y)=>isRock(rtAt(x,y))?1:0;const b=q(i0,j0)*(1-tx)*(1-ty)+q(i0+1,j0)*tx*(1-ty)+q(i0,j0+1)*(1-tx)*ty+q(i0+1,j0+1)*tx*ty;return Math.max(0,Math.min(1,(b-.5)*2.2+.5+(vnoise(X,Y,10,81)-.5)*.9))}
 const NBD=[[0,-1],[1,0],[0,1],[-1,0],[1,-1],[1,1],[-1,1],[-1,-1]];
 const FLATB={farm:1,garden:1,stockpile:1,quarry:1,copper:1,tin:1};
 function roadConn(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const i=y*MW+x;if(occ[i]){const b=S.bl[occ[i]-1];return b&&(b.t==='gate'||b.t==='bridge'||b.t==='sbridge')?1:0}return roadSet[i]?1:0}
@@ -620,21 +621,20 @@ function renderChunk(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);con
  for(let gy=cy*CS;gy<cy*CS+CS;gy++)for(let gx=cx*CS;gx<cx*CS+CS;gx++){const gi=gy*MW+gx,own=RT[gi],nbs=NBD.map(([dx,dy])=>rtAt(gx+dx,gy+dy)),diff=nbs.some(r=>r!==own);
   const ob=NBD.slice(0,4).map(([dx,dy])=>{const x=gx+dx,y=gy+dy;if(x<0||y<0||x>=MW||y>=MH)return 0;const o=occ[y*MW+x];if(!o)return 0;const b=S.bl[o-1];return b&&!FLATB[b.t]?1:0});
   const rl=occ[gi]?0:roadSet[gi],rc=rl?[roadConn(gx,gy-1),roadConn(gx+1,gy),roadConn(gx,gy+1),roadConn(gx-1,gy)]:null,rw=[0,.25,.31,.38][rl];
-  const rockSh=!isRock(own)&&(isRock(nbs[0])||isRock(nbs[3]));const apL=[];for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const x=gx+dx,y=gy+dy;if(x<0||y<0||x>=MW||y>=MH)continue;const o=occ[y*MW+x];if(!o)continue;const b=S.bl[o-1];if(b&&!FLATB[b.t]&&!APX[b.t])apL.push([x,y])}
+  const nearR=isRock(own)||nbs.some(isRock);const apL=[];for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const x=gx+dx,y=gy+dy;if(x<0||y<0||x>=MW||y>=MH)continue;const o=occ[y*MW+x];if(!o)continue;const b=S.bl[o-1];if(b&&!FLATB[b.t]&&!APX[b.t])apL.push([x,y])}
   for(let ly=0;ly<32;ly++)for(let lx=0;lx<32;lx++){const X=gx*32+lx,Y=gy*32+ly,u=(lx+.5)/32,v=(ly+.5)/32;const n1=vnoise(X,Y,26,5),n2=vnoise(X,Y,7,6),h=hsh(X,Y,7);
    let R,G,B,wat=0,wW=0;const fx=X/32-.5,fy=Y/32-.5,i0=Math.floor(fx),j0=Math.floor(fy),tx=fx-i0,ty=fy-j0;
    const dep=isWat(own)||diff?(wdAt(i0,j0)*(1-tx)*(1-ty)+wdAt(i0+1,j0)*tx*(1-ty)+wdAt(i0,j0+1)*(1-tx)*ty+wdAt(i0+1,j0+1)*tx*ty):0;
    if(!diff){tcol(own,n1,n2,h,X,Y,col);if(isWat(own)){waterCol(dep,n1,n2,X,Y,col);wat=1;wW=1}R=col[0];G=col[1];B=col[2]}
    else{const cs=[rtAt(i0,j0),rtAt(i0+1,j0),rtAt(i0,j0+1),rtAt(i0+1,j0+1)],cw=[(1-tx)*(1-ty),tx*(1-ty),(1-tx)*ty,tx*ty],TT=[],WT=[];
     for(let k=0;k<4;k++){const q=TT.indexOf(cs[k]);if(q<0){TT.push(cs[k]);WT.push(cw[k])}else WT[q]+=cw[k];if(isWat(cs[k]))wW+=cw[k]}
-    let hasW=false,hasL=false;for(const t of TT)if(isWat(t))hasW=true;else hasL=true;const shore=hasW&&hasL,ks=shore?26:8;
+    let hasW=false,hasL=false;for(const t of TT)if(isWat(t))hasW=true;else hasL=true;const shore=hasW&&hasL,rkI=TT.some(isRock),ks=shore?26:rkI?4.5:8;
     const nzA=vnoise(X,Y,10,81)-.5,nzB=vnoise(X,Y,4,82)-.5;let mx=-9;
-    for(let k=0;k<TT.length;k++){const t=TT[k];WT[k]+=(isWat(t)?1:-1)*(shore?(nzA*.34+nzB*.12):0)+(shore?0:(nzA*(t&1?1:-1)+nzB*(t&2?.6:-.6))*.5);if(WT[k]>mx)mx=WT[k]}
+    for(let k=0;k<TT.length;k++){const t=TT[k];WT[k]+=(isWat(t)?1:-1)*(shore?(nzA*.34+nzB*.12):0)+(shore?0:(nzA*(t&1?1:-1)+nzB*(t&2?.6:-.6))*(rkI?.9:.5));if(WT[k]>mx)mx=WT[k]}
     let ws=0;R=0;G=0;B=0;for(let k=0;k<TT.length;k++){const w=Math.exp((WT[k]-mx)*ks);if(w<.002)continue;tcol(TT[k],n1,n2,h,X,Y,tmp);if(isWat(TT[k])){waterCol(dep,n1,n2,X,Y,tmp);wat+=w}R+=tmp[0]*w;G+=tmp[1]*w;B+=tmp[2]*w;ws+=w}R/=ws;G/=ws;B/=ws;wat/=ws;
     if(shore&&wat<.5){const e=Math.max(0,Math.min(1,(wW+nzA*.34-.18)/.32));const wt=e*.55;R=R*(1-wt)+R*.62*wt;G=G*(1-wt)+G*.6*wt;B=B*(1-wt)+B*.55*wt}}
    let m=1;if(dry&&!isWat(own)&&!isRock(own)){R=R*.8+150*.2;G=G*.8+130*.2;B=B*.8+80*.2}
-   if(isRock(own)){const e=Math.min(1-u,1-v);if((!isRock(nbs[1])&&1-u<.12)||(!isRock(nbs[2])&&1-v<.12))m*=.68;else if((!isRock(nbs[0])&&v<.1)||(!isRock(nbs[3])&&u<.1))m*=1.18}
-   if(rockSh){if(isRock(nbs[0])&&v<.3)m*=.72+v*.9;if(isRock(nbs[3])&&u<.3)m*=.72+u*.9}
+   if(nearR){const r0=rkAt(fx,fy,X,Y),r1=rkAt(fx+.14,fy+.14,X+4,Y+4),sl=r0-r1;m*=sl>0?1-Math.min(.32,sl*.9):1+Math.min(.14,-sl*.45);if(r0>.5)m*=.9+.2*vnoise(X,Y,6,57)}
    if(apL.length){let dmin=9;for(const[ax,ay]of apL){const ex=Math.max(ax-X/32,0,X/32-ax-1),ey=Math.max(ay-Y/32,0,Y/32-ay-1),dd=Math.hypot(ex,ey);if(dd<dmin)dmin=dd}const nz=(vnoise(X,Y,9,91)-.5)*.7+(vnoise(X,Y,3,92)-.5)*.25,aa=Math.max(0,Math.min(1,1-(dmin+nz)/1.1));if(aa>0&&!isWat(own)){const a2=aa*aa*(3-2*aa)*.62,sand=own===R_SAND;const er=sand?178:142,eg=sand?156:118,eb=sand?118:84,t2=.9+.2*n2;R+=(er*t2-R)*a2;G+=(eg*t2-G)*a2;B+=(eb*t2-B)*a2}}
    if(rl){let best=9;const add=(x0,x1,y0,y1)=>{const ex=Math.max(x0-u,0,u-x1),ey=Math.max(y0-v,0,v-y1);const s=ex||ey?Math.hypot(ex,ey):-Math.min(u-x0,x1-u,v-y0,y1-v);if(s<best)best=s};
     add(.5-rw,.5+rw,.5-rw,.5+rw);if(rc[0])add(.5-rw,.5+rw,-1,.5);if(rc[1])add(.5,2,.5-rw,.5+rw);if(rc[2])add(.5-rw,.5+rw,.5,2);if(rc[3])add(-1,.5,.5-rw,.5+rw);if(rc[0]&&rc[1]&&roadConn(gx+1,gy-1))add(.5,2,-1,.5);if(rc[1]&&rc[2]&&roadConn(gx+1,gy+1))add(.5,2,.5,2);if(rc[2]&&rc[3]&&roadConn(gx-1,gy+1))add(-1,.5,.5,2);if(rc[3]&&rc[0]&&roadConn(gx-1,gy-1))add(-1,.5,-1,.5);
