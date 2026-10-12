@@ -341,13 +341,13 @@ function log(m){S.log.unshift(m);S.log.length=Math.min(S.log.length,30);renderLo
 const cnt=t=>S.bl.reduce((a,b,i)=>a+(b.t===t&&on(i)?b.l:0),0);
 const housing=()=>S.bl.reduce((a,b,i)=>a+(b.t==='house'?(on(i)?b.l*5+(b.l>=4?b.l*2:0)+Math.max(0,Math.min(b.l*3,Math.floor((DES[i]||0)/2))):Math.ceil(b.l*2.5)):b.t==='tent'?b.l*3:b.t==='palace'?12:0),0)+2*(S.tier+1);
 const cap=()=>250+cnt('granary')*250+cnt('stockpile')*100+S.tier*250;
-const BLD_JOB={};function jobCap(j){if(!jobCap.i){jobCap.i=1;for(const k in BLD)if(BLD[k].job)BLD_JOB[BLD[k].job]=1}for(const k in BLD)if(BLD[k].job===j)return cnt(k)*2;if(j==='scribe')return Math.max(0,S.tier-1)*2+cnt('temple');return S.extraJobs[j]?4+S.tier*2:0}
+const BLD_JOB={};function jobCap(j){if(!jobCap.i){jobCap.i=1;for(const k in BLD)if(BLD[k].job)BLD_JOB[BLD[k].job]=1}if(j==='woodcutter')return cnt('lumber')*2+Math.min(2,S.bl.filter(b=>b.t==='campfire').length*2);for(const k in BLD)if(BLD[k].job===j)return cnt(k)*2;if(j==='scribe')return Math.max(0,S.tier-1)*2+cnt('temple');return S.extraJobs[j]?4+S.tier*2:0}
 const employed=()=>Object.values(S.jobs).reduce((a,b)=>a+b,0);
 function bcost(k,l){const m=(S.tech.masonry?.75:1)*Math.pow(1.6,l);const o={};for(const r in BLD[k].cost)o[r]=Math.ceil(BLD[k].cost[r]*m);return o}
 const can=c=>Object.keys(c).every(r=>S.res[r]>=c[r]);
 function pay(c){if(!can(c))return false;for(const r in c)S.res[r]-=c[r];return true}
 const cstr=c=>Object.keys(c).map(r=>c[r]+' '+r).join(', ');
-function tick(){LTk=performance.now();if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0)autoAssign();
+function tick(){LTk=performance.now();if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0){if(S.rate&&S.rate.food<0&&S.res.food<S.pop*3&&S.t%15===0){const fj=Object.keys(JOBS).filter(j=>JOBS[j][1]==='food'&&(S.jobs[j]||0)<jobCap(j));const nf=Object.keys(S.jobs).find(j=>S.jobs[j]>0&&JOBS[j][1]!=='food'&&(S.prio[j]||3)>1);if(fj.length&&nf){S.jobs[nf]--}}autoAssign()}
  const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod*hapMul();
  const p={food:0,wood:0,stone:0,copper:0,tin:0,bronze:0};
  for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]&&!RNJ[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}v=rnJobOut(j,v);p[J[1]]+=v}
@@ -357,13 +357,13 @@ function tick(){LTk=performance.now();if(BV)return;rnInit();rnBuild();rnTick();i
  const C=cap();for(const r of RES)S.res[r]=Math.max(0,Math.min(C,S.res[r]+p[r]));
  S.rate=p;
  if(S.res.food<=0&&p.food<0){if(armyN()>0&&Math.random()<.1){const c=S.companies.find(c=>c.men>0);c.men--;S.companies=S.companies.filter(c=>c.men>0);log('Starving! A soldier of '+c.name+' deserted.')}else if(S.pop>1&&Math.random()<.05){S.pop--;fixJobs();log('Starving! A villager left.')}}
- else if(S.pop<housing()&&S.res.food>10&&EM.grow>0){S.growT+=EM.grow*(cX().grow||1)*hapGrow();if(S.growT>=Math.max(3,8-S.tier*2)){S.growT=0;S.pop++;log('A new villager arrived!')}}
+ else if(S.pop<housing()&&S.res.food>10&&EM.grow>0&&(p.food>0||S.res.food>S.pop*12)&&(S.pop-employed())<=Math.max(2,S.pop*.2)){S.growT+=EM.grow*(cX().grow||1)*hapGrow();if(S.growT>=Math.max(8,20-S.tier*3)){S.growT=0;S.pop++;log('A new villager arrived!')}}
  hapTick();evTick();evHUD();if(S.t%5===0)spawnPops(p);
  S.t++;if(S.t%10===0)save();renderTop();if(cur==='jobs'||cur==='army'){if(S.t%2===0)renderView()}
 }
 function spawnPops(p){const m={food:'farm',wood:'lumber',stone:'quarry',copper:'copper',tin:'tin',bronze:'smelter'},col={food:'#f8e070',wood:'#e0b070',stone:'#e0e4ea',copper:'#f0a050',tin:'#bfe0f0',bronze:'#f8d040'};
  for(const r in m){if(p[r]<=0.05)continue;const bs=blds(m[r]);if(!bs.length)continue;const o=pick(bs);popup(o.gx+.5,o.gy+.3,'+'+Math.round(p[r]*5)+' '+r,col[r])}}
-function fixJobs(){while(employed()>S.pop){const j=Object.keys(S.jobs).find(j=>S.jobs[j]>0);S.jobs[j]--}}
+function fixJobs(){const fd=j=>JOBS[j]&&JOBS[j][1]==='food';while(employed()>S.pop){const ks=Object.keys(S.jobs).filter(j=>S.jobs[j]>0).sort((a,b)=>(fd(a)?1:0)-(fd(b)?1:0)||(S.prio&&S.prio[b]||3)-(S.prio&&S.prio[a]||3));if(!ks.length)break;S.jobs[ks[0]]--}}
 // ---------- rendering ----------
 const $=id=>document.getElementById(id);
 let cur='build';
@@ -1200,7 +1200,7 @@ function renderArchitect(V){const nt=TIERS[S.tier+1];if(nt){const n=nt.need,ok=S
  const un=upgradeRoads(),rm=roadMax(),uc={stone:un*(rm===3?3:1)};if(un&&rm>1)b.appendChild(btn('Upgrade '+un+' tiles ('+uc.stone+' stone)',()=>{if(pay(uc)){for(let i=0;i<MW*MH;i++)if(roadSet[i])roadSet[i]=rm;chunkSig++;worldChanged();log('Roads upgraded!')}},!can(uc)));
  V.insertAdjacentHTML('beforeend','<p class="muted">Paint roads any width. Wider and better-surfaced roads carry more traffic: capacity = surface (dirt 2 · packed 4 · paved 7) × width. Overloaded tiles slow walkers, who reroute around jams.</p>')}
 // work table
-function autoAssign(){S.prio=S.prio||{};let idle=S.pop-employed(),guard=200;while(idle>0&&guard--){let best=null,bs=1e9;for(const j in JOBS){const c=jobCap(j),n=S.jobs[j]||0;if(n>=c)continue;const p=S.prio[j]||3;if(p>=5)continue;const sc=p*100+n/Math.max(1,c);if(sc<bs){bs=sc;best=j}}if(!best)break;S.jobs[best]=(S.jobs[best]||0)+1;idle--}}
+function autoAssign(){S.prio=S.prio||{};let idle=S.pop-employed(),guard=200;while(idle>0&&guard--){let best=null,bs=1e9;for(const j in JOBS){const c=jobCap(j),n=S.jobs[j]||0;if(n>=c)continue;const p=S.prio[j]||3;if(p>=5)continue;const hungry=(S.rate&&S.rate.food<0.3)||S.res.food<S.pop*3;const sc=p*100+n/Math.max(1,c)-(hungry&&JOBS[j][1]==='food'?250:0);if(sc<bs){bs=sc;best=j}}if(!best)break;S.jobs[best]=(S.jobs[best]||0)+1;idle--}}
 function renderWork(V){S.prio=S.prio||{};const idle=S.pop-employed();V.insertAdjacentHTML('beforeend','<div class="hdr2"><span>'+S.pop+' people · <b>'+idle+'</b> idle</span></div>');const b=document.createElement('div');b.className='seg';b.appendChild(btn('Auto-assign idle',autoAssign,!idle,'pri'));b.appendChild(btn((S.autoWork?'✓ ':'')+'Keep auto',()=>{S.autoWork=!S.autoWork},0,S.autoWork?'sel':''));V.appendChild(b);
  const t=document.createElement('table');t.className='wt';t.innerHTML='<tr><th></th><th>Work</th><th>Prio</th><th>Workers</th><th>Output</th></tr>';
  for(const j in JOBS){const c=jobCap(j),n=S.jobs[j]||0;if(!c&&!n)continue;const J=JOBS[j],tr=document.createElement('tr'),p=S.prio[j]||3;const td=h=>{const x=document.createElement('td');if(typeof h==='string')x.innerHTML=h;else x.appendChild(h);tr.appendChild(x);return x};
@@ -1467,10 +1467,10 @@ const TAX={low:{n:'Low',p:.9,h:6},normal:{n:'Normal',p:1,h:0},high:{n:'High',p:1
 function hapCalc(){const F=[],add=(n,v)=>{if(Math.abs(v)>=.5)F.push([n,Math.round(v)])};
  const fs=['farmer','fisher','herder','hunter','gatherer'].filter(j=>(S.jobs[j]||0)>0).length+(cnt('garden')?1:0);add('Food variety ('+fs+' sources)',fs*2-3);
  if(S.res.food<=0)add('Starving',-25);
- const hs=blds('house'),tents=cnt('tent');let q=0;S.bl.forEach((b,i)=>{if(b.t==='house')q+=b.l*2+Math.min(6,(DES[i]||0)/4)});add('Housing quality',hs.length?q/hs.length-3:-6);if(tents>hs.length)add('Living in tents',-4);
+ const hs=blds('house'),tents=cnt('tent');let q=0;S.bl.forEach((b,i)=>{if(b.t==='house')q+=b.l*2+Math.min(6,(DES[i]||0)/4)});add('Housing quality',hs.length?q/hs.length-3:S.tier>=1?-3:0);if(S.tier>=1&&tents>hs.length)add('Living in tents',-3);
  const cr=S.pop/Math.max(1,housing());if(cr>.95)add('Crowding',-(cr-.95)*60-4);
  let be=0,n=0;S.bl.forEach((b,i)=>{if(b.t==='house'){be+=beautyAt(b.x+1,b.y+1);n++}});add('Beauty near homes',n?Math.min(12,be/n/2.5)-2:0);
- const emp=employed()/Math.max(1,S.pop);add(emp>.97?'Overworked, no rest':'Rest',emp>.97?-6:3);
+ const emp=employed()/Math.max(1,S.pop);add(emp>.97?'Overworked, no rest':'Rest',emp>.97?(S.pop>=10?-5:-2):emp<.9?3:1);
  add('Recreation (temple, market, gardens)',Math.min(9,cnt('temple')*3+cnt('market')*2+cnt('garden')+cnt('statue')*1.5));
  if((S.ev.act||[]).some(e=>/plague|sick|fever/.test(e.id)))add('Sickness',-15);
  add('Mourning the dead',-Math.min(25,S.grief||0));add('Fallen soldiers',-Math.min(20,(S.wargrief||0)));
@@ -1479,13 +1479,13 @@ function hapCalc(){const F=[],add=(n,v)=>{if(Math.abs(v)>=.5)F.push([n,Math.roun
  if((S.ev.act||[]).some(e=>/fest|party|harvest/.test(e.id)))add('Festival',10);
  const H=Math.max(0,Math.min(100,40+F.reduce((a,f)=>a+f[1],0)));return{H,F}}
 const hapMul=()=>{const H=S.hap||50;return(H>=70?1+(H-70)/150:H<35?.85-(35-H)/200:1)*TAX[S.tax||'normal'].p*(1-(S.refuse||0)/Math.max(1,S.pop))};
-const hapGrow=()=>{const H=S.hap||50;return H>=70?1.5:H<35?0:1};
+const hapGrow=()=>{const H=S.hap||50;return H>=70?1.5:H<20?0:H<35?.5:1};
 function hapTick(){const r=hapCalc();S.hap=S.hap==null?r.H:S.hap+(r.H-S.hap)*.08;S.hapF=r.F;
  const a=armyN();if(S._army!=null&&a<S._army)S.wargrief=(S.wargrief||0)+(S._army-a)*1.5;S._army=a;if(S._pop!=null&&S.pop<S._pop)S.grief=(S.grief||0)+(S._pop-S.pop)*2;S._pop=S.pop;
  S.grief=Math.max(0,(S.grief||0)*.995);S.wargrief=Math.max(0,(S.wargrief||0)*.995);const H=S.hap;
  if(H>=75&&S.pop<housing()&&Math.random()<.02){S.pop++;log('Word of your happy city spreads — an immigrant family arrives.')}
- if(H<25&&S.pop>4&&Math.random()<.03){S.pop--;fixJobs();log('Unhappy, a family emigrates.')}
- S.refuse=H<30?Math.ceil(S.pop*(30-H)/100):0;
+ if(H<20&&S.pop>4&&Math.random()<.03){S.pop--;fixJobs();log('Unhappy, a family emigrates.')}
+ S.refuse=H<30&&S.res.food>0?Math.min(Math.floor(S.pop*.3),Math.ceil(S.pop*(30-H)/100)):0;
  if(H<15&&S.t>(S.riotT||0)+120&&Math.random()<.05){S.riotT=S.t;for(const r of RES)S.res[r]*=.85;const b=S.bl.filter(b=>b.t!=='campfire');log('RIOT! The stores were looted.')}}
 function pawnMood(a){let m=S.hap||50;if(a.sick)m-=20;if(a.home&&a.homeDes!=null)m+=a.homeDes/4;m+=((a.idx||0)*37%13)-6;return Math.max(0,Math.min(100,Math.round(m)))}
 const moodW=m=>m>=75?'Happy':m>=55?'Content':m>=35?'Neutral':m>=20?'Unhappy':'Miserable';
@@ -1686,7 +1686,7 @@ $('dclose').onclick=()=>{$('drawer').classList.remove('open');document.body.clas
 document.querySelectorAll('#speed button').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.s));$('heatb').appendChild(ICO('heat',18));$('heatb').onclick=()=>{S.heat=!S.heat;$('heatb').classList.toggle('sel',S.heat)};$('beautb').onclick=()=>{S.beau=!S.beau;$('beautb').classList.toggle('sel',S.beau);if(S.beau&&!BEAU)calcBeauty()};
 window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'){e.preventDefault();setSpeed(spd?0:1)}else if(e.key>='1'&&e.key<='3')setSpeed(+e.key);else if(placing&&FP[placing]&&/^[rRfFvV]$/.test(e.key)){fpCycle(e.key.toLowerCase()==='f'?'m':e.key.toLowerCase())}else if(e.key==='Escape'){placing=null;ghost=null;sel=null;showInsp()}});
 $('start').onclick=()=>{$('title').style.display='none';if(!S.civ)pickCiv()};
-$('reset').onclick=()=>{if(confirm('Start a new game?')){S=fresh();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv()}};
+$('reset').onclick=()=>{if(confirm('Start a new game?')){S=fresh();migrate();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv()}};
 function uiSkin(){const mkF=(pal,inner,sz)=>{const[c,g]=mk(sz*3,sz*3);const P=(x,y,w,h,col)=>{g.fillStyle=col;g.fillRect(x,y,w,h)};const W=sz*3;
   P(0,0,W,W,pal[0]);P(1,1,W-2,W-2,pal[3]);P(2,2,W-3,W-3,pal[1]);P(2,2,W-4,W-4,pal[2]);const b=sz>6?4:3;P(b,b,W-2*b,W-2*b,pal[0]);P(b+1,b+1,W-2*b-2,W-2*b-2,inner);
   if(sz>6){for(const[x,y]of[[1,1],[W-5,1],[1,W-5],[W-5,W-5]]){P(x,y,4,4,pal[0]);P(x+1,y+1,2,2,PB.gold[3])}}else{P(b+1,W-b-2,W-2*b-2,1,'rgba(0,0,0,.2)');P(b+1,b+1,W-2*b-2,1,'rgba(255,255,255,.35)')}return'url('+c.toDataURL()+')'};
@@ -2682,10 +2682,11 @@ requestAnimationFrame(fbLoop);
 let TOOL=null;const HVF=[['all','All'],['t','Trees'],['b','Berries'],['s','Stone'],['c','Copper'],['n','Tin'],['h','Game/Hunt'],['f','Fish']];
 function fbMigrate(){if(!S.hv||typeof S.hv!=='object')S.hv={};if(!S.dm||typeof S.dm!=='object')S.dm={};}
 fbMigrate();{const _mg=migrate;migrate=function(){_mg();fbMigrate()}}
+{const _fr=fresh;fresh=function(){const o=_fr();o.hv={};o.dm={};return o}}
 function toolOpen(k){const tb=$('toolbar');if(!k){TOOL=null;tb.style.display='none';FBB.hv.classList.remove('sel2');$('selr').style.display='none';return}
  if(placing)pCancel();sel=null;showInsp();const prevF=TOOL&&TOOL.f;TOOL={k,f:prevF||'all',cancel:false};FBB.hv.classList.toggle('sel2',k==='harv');toolBar()}
 function toolBar(){const tb=$('toolbar'),T=TOOL;tb.innerHTML='';tb.style.display='flex';const lab=t=>{const s=document.createElement('span');s.className='tl';s.textContent=t;tb.appendChild(s)};
- const b=(t,on,fn,tip)=>{const x=document.createElement('button');x.textContent=t;if(on)x.className='sel';if(tip)x.title=tip;x.onclick=e=>{e.stopPropagation();fn();toolBar()};tb.appendChild(x)};
+ const b=(t,on,fn,tip)=>{const x=document.createElement('button');x.textContent=t;if(on)x.className='sel';if(tip)x.title=tip;x.onclick=e=>{e.stopPropagation();fn();if(TOOL)toolBar()};tb.appendChild(x)};
  if(T.k==='harv'){lab('⛏ Harvest:');for(const[k,n]of HVF)b(n,T.f===k,()=>T.f=k,'Only designate '+n.toLowerCase());lab('|');b('Designate',!T.cancel,()=>T.cancel=false,'Drag to mark nodes for gathering');b('Cancel designation',T.cancel,()=>T.cancel=true,'Drag to remove harvest marks')}
  else{lab('⚒ Demolish:');b('Mark',!T.cancel,()=>T.cancel=false,'Tap or drag over buildings to mark them for deconstruction (50% refund)');b('Unmark',T.cancel,()=>T.cancel=true,'Tap or drag to cancel demolition')}
  b('✔ Done',false,()=>toolOpen(null));if(T.k==='harv'){const n=Object.keys(S.hv).length+(S.herds||[]).filter(h=>h.des).length+(S.fish&&S.fish.des?1:0);lab(n+' marked')}else lab(Object.keys(S.dm).length+' marked')}
@@ -2702,7 +2703,7 @@ function toolApply(a,b){const x0=Math.min(a.gx,b.gx),x1=Math.max(a.gx,b.gx),y0=M
 const dmId=b=>b.t+'@'+b.x+','+b.y;
 function dmErr(b){if(b.t==='campfire'&&S.bl.filter(q=>q.t==='campfire').length<=1)return'The last campfire is the heart of the camp — it cannot be demolished.';if(b.t==='palace')return'The palace cannot be demolished.';return''}
 function dmRefund(b){const o={};for(let l=0;l<(b.l||1);l++){const c=bcost(b.t,l);for(const r in c)o[r]=(o[r]||0)+c[r]}for(const r in o)o[r]=Math.floor(o[r]*.5);return o}
-function dmTick(){const ids=Object.keys(S.dm||{});if(!ids.length)return;const idle=Math.max(0,S.pop-employed()),crew=Math.min(4,1+Math.floor(idle/2));
+function dmTick(){if(!S.dm)fbMigrate();const ids=Object.keys(S.dm||{});if(!ids.length)return;const idle=Math.max(0,S.pop-employed()),crew=Math.min(4,1+Math.floor(idle/2));
  // work on the oldest marked structure first; idle colonists form the crew (min 1)
  const id=ids[0],b=S.bl.find(q=>dmId(q)===id);if(!b){delete S.dm[id];return}const s=bsz(b.t),need=4+s*s*1.5+(b.l||1)*2;S.dm[id].p+=crew;S.dm[id].crew=crew;
  if(Math.random()<.5)burst(b.x+s*Math.random(),b.y+s*Math.random(),'#c8b088',6);
@@ -2720,7 +2721,7 @@ function dmTick(){const ids=Object.keys(S.dm||{});if(!ids.length)return;const id
  vc.addEventListener('pointerup',end,true);vc.addEventListener('pointercancel',end,true)})();
 // world-space markers: harvest badges + demolition marks
 const BADGE={};function badge(q){if(BADGE[q])return BADGE[q];const[c,g]=mk(36,36);const col={t:'#5a8a3a',b:'#b8384a',s:'#8a8478',c:'#3a9a7a',n:'#7a8aa8',h:'#a8743a',f:'#3a78a8'}[q]||'#888';g.fillStyle='rgba(0,0,0,.35)';g.beginPath();g.arc(18,19.5,13,0,6.3);g.fill();g.fillStyle=col;g.strokeStyle='#fff3d4';g.lineWidth=2.5;g.beginPath();g.arc(18,17,13,0,6.3);g.fill();g.stroke();g.font='15px sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillStyle='#fff';g.fillText({t:'🪓',b:'🫐',s:'⛏',c:'⛏',n:'⛏',h:'🏹',f:'🐟'}[q]||'•',18,18);return BADGE[q]=c}
-function fbOver(vl,vr,vt,vb,now,z){if(!S.hv)return;const sz=Math.max(12,16/Math.max(.5,z)),bob=Math.sin(now/300)*1.2;
+function fbOver(vl,vr,vt,vb,now,z){if(!S.hv||!S.dm)fbMigrate();const sz=Math.max(12,16/Math.max(.5,z)),bob=Math.sin(now/300)*1.2;
  for(const k in S.hv){const i=+k.slice(1),x=(i%MW+.5)*TS,y=((i/MW)|0)*TS;if(x<vl||x>vr||y<vt||y>vb)continue;vx.drawImage(badge(k[0]),x-sz/2,y-sz-6+bob,sz,sz)}
  for(const H of S.herds||[])if(H.des){const x=H.x*TS,y=H.y*TS;if(x>vl&&x<vr&&y>vt&&y<vb)vx.drawImage(badge('h'),x-sz/2,y-sz-30+bob,sz,sz)}
  const ids=Object.keys(S.dm||{});if(ids.length){for(const b of S.bl){const d=S.dm[dmId(b)];if(!d)continue;const s=bsz(b.t),X=b.x*TS,Y=b.y*TS,W=s*TS;if(X>vr||X+W<vl||Y>vb||Y+W<vt)continue;
@@ -2832,7 +2833,7 @@ function tentCut(vl,vr,vt,vb,now,z){const selB=sel&&sel.i!=null?S.bl[sel.i]:null
 // ---------- demolition by real pawns ----------
 function dmSite(b,a){const s=bsz(b.t),ang=(a.idx||0)*2.39;let best=null;for(let k=0;k<8;k++){const t=ang+k*.785,x=b.x+s/2+Math.cos(t)*(s/2+.55),y=b.y+s/2+Math.sin(t)*(s/2+.55);if(walkC(x|0,y|0)&&!occ[(y|0)*MW+(x|0)]){best={x,y};break}}return best||{x:b.x+s/2,y:b.y+s+.4}}
 {const _th=think;think=function(a){if(a.dmT){const b=S.bl.find(q=>dmId(q)===a.dmT);if(!b||!S.dm[a.dmT]){a.dmT=null;a.dmAt=0}else{const sp=a.dmSp||(a.dmSp=dmSite(b,a));if(Math.hypot(a.x-sp.x,a.y-sp.y)>.5){go(a,sp,'demo');a.dmAt=0;a.t=.5;return}a.state='work';a.dmAt=1;a.carry=null;const s=bsz(b.t);a.dir=dirOf(b.x+s/2-a.x,b.y+s/2-a.y);a.t=1.2;return}}return _th(a)}}
-dmTick=function(){const ids=Object.keys(S.dm||{});agents.forEach(a=>{if(a.dmT&&!S.dm[a.dmT]){a.dmT=null;a.dmAt=0;a.dmSp=null;a.t=0}});if(!ids.length)return;
+dmTick=function(){if(!S.dm||!S.hv)fbMigrate();const ids=Object.keys(S.dm||{});agents.forEach(a=>{if(a.dmT&&!S.dm[a.dmT]){a.dmT=null;a.dmAt=0;a.dmSp=null;a.t=0}});if(!ids.length)return;
  const id=ids[0],b=S.bl.find(q=>dmId(q)===id);if(!b){delete S.dm[id];return}const s=bsz(b.t);
  let crew=agents.filter(a=>a.dmT===id);const want=Math.min(3,Math.max(1,Math.ceil(s*s/3)));if(crew.length<want){const c=b.x+s/2,cy=b.y+s/2;const pool=agents.filter(a=>!a.dmT&&a.role!=='soldier'&&a.role!=='kid'&&!a.dummy).sort((p,q)=>((p.role==='idle'?0:50)+Math.hypot(p.x-c,p.y-cy))-((q.role==='idle'?0:50)+Math.hypot(q.x-c,q.y-cy)));for(const a of pool.slice(0,want-crew.length)){a.dmT=id;a.dmSp=null;a.t=0;a.route=[];crew.push(a)}}
  const at=crew.filter(a=>a.dmAt&&!a.route.length).length;S.dm[id].crew=crew.length;S.dm[id].at=at;if(!at)return;S.dm[id].p+=at;if(Math.random()<.6)burst(b.x+s*Math.random(),b.y+s*Math.random(),'#c8b088',5);if(Math.random()<.3)AU.sfx&&AU.sfx('chop');
