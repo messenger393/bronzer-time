@@ -581,10 +581,14 @@ const R_SOIL=0,R_RICH=1,R_MARSH=2,R_FOREST=3,R_GRAVEL=4,R_SAND=5,R_STONE=6,R_CU=
 const BC=[[118,104,68],[80,66,44],[86,92,62],[90,84,54],[142,130,102],[214,194,146],[116,114,108],[112,110,102],[122,122,118],[84,128,140],[46,80,108]];
 const VG=[[100,126,58],[72,110,46],[92,112,70],[64,94,44],null,null,null,null,null,null,null],VGW=[.72,.62,.55,.6];
 const isWat=r=>r>=R_SHAL,isRock=r=>r>=R_STONE&&r<=R_SN;
-function calcRT(){RT=new Uint8Array(MW*MH);for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const t=ter(x,y);let r;
+function calcRT(){calcWD();RT=new Uint8Array(MW*MH);for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const t=ter(x,y);let r;
  if(t===T_WATER){let d=true;for(let dy=-2;dy<=2&&d;dy++)for(let dx=-2;dx<=2;dx++)if(ter(x+dx,y+dy)!==T_WATER){d=false;break}r=d?R_DEEP:R_SHAL}
  else if(t===T_SAND)r=R_SAND;else if(t===T_FOREST)r=R_FOREST;else if(t===T_HILL)r=R_GRAVEL;else if(t===T_ROCK)r=R_STONE;else if(t===T_CU)r=R_CU;else if(t===T_SN)r=R_SN;
  else{let wet=false;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const xx=x+dx,yy=y+dy;if(xx>=0&&yy>=0&&xx<MW&&yy<MH&&ter(xx,yy)===T_WATER)wet=true}r=wet&&vnoise(x,y,3,92)>.42?R_MARSH:vnoise(x,y,7,91)>.62?R_RICH:R_SOIL}RT[y*MW+x]=r}}
+let WDF=null;const wdAt=(x,y)=>x<0||y<0||x>=MW||y>=MH?4:WDF?WDF[y*MW+x]:0;
+function calcWD(){WDF=new Float32Array(MW*MH);for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const i=y*MW+x;if(TER[i]!==T_WATER)continue;let d=4.5;for(let dy=-4;dy<=4;dy++)for(let dx=-4;dx<=4;dx++){const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=MW||yy>=MH)continue;if(TER[yy*MW+xx]!==T_WATER){const q=Math.hypot(dx,dy);if(q<d)d=q}}WDF[i]=FORDS&&FORDS.has(i)?Math.min(d,.9):d}}
+let FORDS=new Set();const wlev=i=>TER[i]!==T_WATER?0:FORDS.has(i)?1:WDF&&WDF[i]>=2.6?3:WDF&&WDF[i]>=1.6?2:1;
+function waterCol(dep,n1,n2,X,Y,o){const t=Math.max(0,Math.min(1,(dep-.5)/2.6)),e=t*t*(3-2*t),f=.94+.1*n1+(Math.sin((X+Y*.6)/9+n2*6)>.86?.05:0);o[0]=(118+(26-118)*e)*f;o[1]=(178+(70-178)*e)*f;o[2]=(172+(122-172)*e)*f;return o}
 const rtAt=(x,y)=>x<0||y<0||x>=MW||y>=MH?R_DEEP:RT[y*MW+x];
 function tcol(r,n1,n2,h,X,Y,o){let c=BC[r],a=c[0],b=c[1],d=c[2];const v=VG[r];
  if(v){const w=Math.max(0,Math.min(1,(n1*1.4-.2)))*VGW[r];a+=(v[0]-a)*w;b+=(v[1]-b)*w;d+=(v[2]-d)*w}
@@ -602,8 +606,16 @@ function renderChunk(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);con
   const rl=occ[gi]?0:roadSet[gi],rc=rl?[roadConn(gx,gy-1),roadConn(gx+1,gy),roadConn(gx,gy+1),roadConn(gx-1,gy)]:null,rw=[0,.25,.31,.38][rl];
   const rockSh=!isRock(own)&&(isRock(nbs[0])||isRock(nbs[3]));
   for(let ly=0;ly<32;ly++)for(let lx=0;lx<32;lx++){const X=gx*32+lx,Y=gy*32+ly,u=(lx+.5)/32,v=(ly+.5)/32;const n1=vnoise(X,Y,26,5),n2=vnoise(X,Y,7,6),h=hsh(X,Y,7);
-   tcol(own,n1,n2,h,X,Y,col);let R=col[0],G=col[1],B=col[2],ws=1,wat=isWat(own)?1:0;
-   if(diff){const jn=vnoise(X,Y,5,77)-.5,sd=[v,1-u,1-v,u];for(let k=0;k<8;k++){const nr=nbs[k];if(nr===own)continue;let dd=k<4?sd[k]:Math.hypot(sd[[0,2,2,0][k-4]],sd[[1,1,3,3][k-4]]);dd+=jn*.42;let w=1-dd/.46;if(w<=0)continue;w*=w;tcol(nr,n1,n2,h,X,Y,tmp);R+=tmp[0]*w;G+=tmp[1]*w;B+=tmp[2]*w;ws+=w;if(isWat(nr))wat+=w}R/=ws;G/=ws;B/=ws;wat/=ws}
+   let R,G,B,wat=0,wW=0;const fx=X/32-.5,fy=Y/32-.5,i0=Math.floor(fx),j0=Math.floor(fy),tx=fx-i0,ty=fy-j0;
+   const dep=isWat(own)||diff?(wdAt(i0,j0)*(1-tx)*(1-ty)+wdAt(i0+1,j0)*tx*(1-ty)+wdAt(i0,j0+1)*(1-tx)*ty+wdAt(i0+1,j0+1)*tx*ty):0;
+   if(!diff){tcol(own,n1,n2,h,X,Y,col);if(isWat(own)){waterCol(dep,n1,n2,X,Y,col);wat=1;wW=1}R=col[0];G=col[1];B=col[2]}
+   else{const cs=[rtAt(i0,j0),rtAt(i0+1,j0),rtAt(i0,j0+1),rtAt(i0+1,j0+1)],cw=[(1-tx)*(1-ty),tx*(1-ty),(1-tx)*ty,tx*ty],TT=[],WT=[];
+    for(let k=0;k<4;k++){const q=TT.indexOf(cs[k]);if(q<0){TT.push(cs[k]);WT.push(cw[k])}else WT[q]+=cw[k];if(isWat(cs[k]))wW+=cw[k]}
+    let hasW=false,hasL=false;for(const t of TT)if(isWat(t))hasW=true;else hasL=true;const shore=hasW&&hasL,ks=shore?26:8;
+    const nzA=vnoise(X,Y,10,81)-.5,nzB=vnoise(X,Y,4,82)-.5;let mx=-9;
+    for(let k=0;k<TT.length;k++){const t=TT[k];WT[k]+=(isWat(t)?1:-1)*(shore?(nzA*.34+nzB*.12):0)+(shore?0:(nzA*(t&1?1:-1)+nzB*(t&2?.6:-.6))*.5);if(WT[k]>mx)mx=WT[k]}
+    let ws=0;R=0;G=0;B=0;for(let k=0;k<TT.length;k++){const w=Math.exp((WT[k]-mx)*ks);if(w<.002)continue;tcol(TT[k],n1,n2,h,X,Y,tmp);if(isWat(TT[k])){waterCol(dep,n1,n2,X,Y,tmp);wat+=w}R+=tmp[0]*w;G+=tmp[1]*w;B+=tmp[2]*w;ws+=w}R/=ws;G/=ws;B/=ws;wat/=ws;
+    if(shore&&wat<.5){const e=Math.max(0,Math.min(1,(wW+nzA*.34-.18)/.32));const wt=e*.55;R=R*(1-wt)+R*.62*wt;G=G*(1-wt)+G*.6*wt;B=B*(1-wt)+B*.55*wt}}
    let m=1;if(dry&&!isWat(own)&&!isRock(own)){R=R*.8+150*.2;G=G*.8+130*.2;B=B*.8+80*.2}
    if(isRock(own)){const e=Math.min(1-u,1-v);if((!isRock(nbs[1])&&1-u<.12)||(!isRock(nbs[2])&&1-v<.12))m*=.68;else if((!isRock(nbs[0])&&v<.1)||(!isRock(nbs[3])&&u<.1))m*=1.18}
    if(rockSh){if(isRock(nbs[0])&&v<.3)m*=.72+v*.9;if(isRock(nbs[3])&&u<.3)m*=.72+u*.9}
@@ -616,7 +628,7 @@ function renderChunk(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);con
      else{const t=.88+.18*n2;r2=150*t;g2=122*t;b2=84*t;if(h<.1){r2*=.86;g2*=.86;b2*=.86}if(h>.97){r2=120;g2=108;b2=80}}
      R+=(r2-R)*a;G+=(g2-G)*a;B+=(b2-B)*a}}
    const k=(ly+(gy-cy*CS)*32)*W*4+(lx+(gx-cx*CS)*32)*4;d[k]=R*m;d[k+1]=G*m;d[k+2]=B*m;d[k+3]=255;
-   if(wat>.3&&wat<.62&&h>.3){if(!fimg){fimg=g.createImageData(W,W);fd=fimg.data}fd[k]=232;fd[k+1]=242;fd[k+2]=240;fd[k+3]=(1-Math.abs(wat-.46)*6)*200}
+   if(wat>.08&&wat<.6&&h>.18){const fa=Math.max(0,1-Math.abs(wat-.3)*4.2)*(.55+.45*Math.sin((X+Y)*.35+n2*9));if(!fimg){fimg=g.createImageData(W,W);fd=fimg.data}fd[k]=236;fd[k+1]=244;fd[k+2]=240;fd[k+3]=Math.max(0,fa)*215}
    else if(wat>.99&&hsh(X>>1,Y>>1,71)<.006){if(!fimg){fimg=g.createImageData(W,W);fd=fimg.data}fd[k]=200;fd[k+1]=228;fd[k+2]=240;fd[k+3]=150}}}
  g.putImageData(img,0,0);
  // painterly grass tufts / pebbles / reeds
