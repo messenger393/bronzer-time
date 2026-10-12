@@ -337,17 +337,17 @@ const can=c=>Object.keys(c).every(r=>S.res[r]>=c[r]);
 function pay(c){if(!can(c))return false;for(const r in c)S.res[r]-=c[r];return true}
 const cstr=c=>Object.keys(c).map(r=>c[r]+' '+r).join(', ');
 function tick(){if(S.autoWork&&S.t%3===0)autoAssign();
- const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod;
+ const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod*hapMul();
  const p={food:0,wood:0,stone:0,copper:0,tin:0,bronze:0};
  for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult;if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}p[J[1]]+=v}
  for(const r in S.bonus)p[r]*=1+S.bonus[r];{const X=cX(),E=X.eco||{};for(const r in E)if(p[r]>0)p[r]*=1+E[r];if(X.purple)p.bronze+=(S.jobs.merchant||0)*X.purple}
  const sm=S.jobs.smith||0;if(sm){let n=Math.min(sm*0.3,S.res.copper/1,S.res.tin/0.5);S.res.copper-=n;S.res.tin-=n*.5;p.bronze+=n*mult*(1+(S.bonus.bronze||0))}
- let up=S.pop*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up;
+ let up=S.pop*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up*RATION[S.ration||'normal'].up;
  const C=cap();for(const r of RES)S.res[r]=Math.max(0,Math.min(C,S.res[r]+p[r]));
  S.rate=p;
  if(S.res.food<=0&&p.food<0){if(armyN()>0&&Math.random()<.1){const c=S.companies.find(c=>c.men>0);c.men--;S.companies=S.companies.filter(c=>c.men>0);log('Starving! A soldier of '+c.name+' deserted.')}else if(S.pop>1&&Math.random()<.05){S.pop--;fixJobs();log('Starving! A villager left.')}}
- else if(S.pop<housing()&&S.res.food>10&&EM.grow>0){S.growT+=EM.grow*(cX().grow||1);if(S.growT>=Math.max(3,8-S.tier*2)){S.growT=0;S.pop++;log('A new villager arrived!')}}
- evTick();evHUD();if(S.t%5===0)spawnPops(p);
+ else if(S.pop<housing()&&S.res.food>10&&EM.grow>0){S.growT+=EM.grow*(cX().grow||1)*hapGrow();if(S.growT>=Math.max(3,8-S.tier*2)){S.growT=0;S.pop++;log('A new villager arrived!')}}
+ hapTick();evTick();evHUD();if(S.t%5===0)spawnPops(p);
  S.t++;if(S.t%10===0)save();renderTop();if(cur==='jobs'||cur==='army'){if(S.t%2===0)renderView()}
 }
 function spawnPops(p){const m={food:'farm',wood:'lumber',stone:'quarry',copper:'copper',tin:'tin',bronze:'smelter'},col={food:'#f8e070',wood:'#e0b070',stone:'#e0e4ea',copper:'#f0a050',tin:'#bfe0f0',bronze:'#f8d040'};
@@ -359,7 +359,7 @@ let cur='build';
 function btn(txt,fn,dis,cls){const b=document.createElement('button');b.textContent=txt;b.disabled=!!dis;if(cls)b.className=cls;b.onclick=e=>{e.stopPropagation();fn();save();renderTop();renderView()};return b}
 function row(parent,label,sub,...btns){const r=document.createElement('div');r.className='row';const l=document.createElement('div');l.innerHTML=label+(sub?'<div class="small">'+sub+'</div>':'');r.appendChild(l);const b=document.createElement('div');btns.forEach(x=>b.appendChild(x));r.appendChild(b);parent.appendChild(r);return r}
 function bldAvail(k){const B=BLD[k];if(B.tier>S.tier)return'Needs '+TIERS[B.tier].n;if(B.tech&&!S.tech[B.tech])return'Needs '+TECH[B.tech].n;if(B.req&&!S.won.some(i=>REG[i]&&REG[i].v===B.req))return'Conquer Tin Hills';return''}
-function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderArchitect(V);return}if(cur==='jobs'){renderWork(V);return}if(cur==='log'){V.innerHTML='<div id="loglist"></div>';renderLog();return}
+function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderArchitect(V);return}if(cur==='jobs'){renderWork(V);renderPolicy(V);return}if(cur==='log'){V.innerHTML='<div id="loglist"></div>';renderLog();return}
  if(cur==='build'){V.innerHTML='<h3>Build</h3><div class="small">Tap Place, then tap a spot (tap again to confirm). Glowing tiles = building radius ('+RAD[S.tier]+'). Tap a building to upgrade.</div>';
   V.appendChild(btn('📍 Jump to settlement',()=>centerOn(S.center.x,S.center.y)));
   if(S.tier>=1){const rm=roadMax(),rv=document.createElement('div');rv.className='small';rv.innerHTML='<b>Roads</b> — buildings must touch a road to work. Drag on the map to draw; tap Done to pan again.';V.appendChild(rv);
@@ -752,7 +752,7 @@ function migrate4(){genWorld(S.seed||7);const old=S.bl||[];S.bl=[];rebuildOcc();
  for(const b of old){if(!placeErrBase(b.t,b.x,b.y,true)){S.bl.push(b);rebuildOcc()}else autoPlace(b.t,b.l,true)}delete S.roads;computeRoads.S=null;S.v=4}
 // ---------- inspect pane ----------
 function showInsp(){const P=$('insp');if(!sel){P.style.display='none';return}P.innerHTML='';const h=document.createElement('b');P.appendChild(h);const d=document.createElement('div');P.appendChild(d);
- if(sel.a){const a=sel.a,L=LINES[a.role]||['Villager','Hi!'];h.textContent=L[0];d.innerHTML=(a.sick?'Health: <span style="color:#d8e890">ill</span>':'Health: good')+'<br>Doing: '+(a.carry?'hauling '+a.carry:a.state==='work'?'working':a.state==='home'?'resting':a.state)+'<br><i>"'+L[1]+'"</i>'}
+ if(sel.a){const a=sel.a,L=LINES[a.role]||['Villager','Hi!'];h.textContent=L[0];d.innerHTML=(a.sick?'Health: <span style="color:#d8e890">ill</span>':'Health: good')+'<br>Doing: '+(a.carry?'hauling '+a.carry:a.state==='work'?'working':a.state==='home'?'resting':a.state)+'<br>Mood: '+pawnMood(a)+'% ('+moodW(pawnMood(a))+')<br><span class="small">'+(S.hapF||[]).slice().sort((x,y)=>Math.abs(y[1])-Math.abs(x[1])).slice(0,4).map(f=>(f[1]>0?'+':'')+f[1]+' '+f[0]).join('<br>')+'</span><br><i>"'+L[1]+'"</i>'}
  else{const i=sel.i,b=S.bl[i];if(!b){sel=null;P.style.display='none';return}const s=bsz(b.t),mx=3+S.tier,c=bcost(b.t,b.l);h.textContent=BLD[b.t].n+'  Lv'+b.l;
   let tx=BLD[b.t].d+'<br>Size '+s+'x'+s;if(S.tier>=1&&!NOROAD[b.t])tx+='<br>Road: '+(CONN[i]?'<span style="color:#9fe07a">connected</span>':'<span style="color:#ff9070">NOT connected — inactive</span>');
   if(b.t==='house')tx+='<br>Desirability: '+DES[i]+' (+'+Math.max(0,Math.min(b.l*3,Math.floor(DES[i]/2)))+' housing)';if(BLD[b.t].job)tx+='<br>Workers: '+(S.jobs[BLD[b.t].job]||0)+'/'+jobCap(BLD[b.t].job);d.innerHTML=tx;
@@ -780,6 +780,7 @@ function drawAgent(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({},a
  if(a.role==='hunter'||a.role==='soldier'){ln(vx,hx,hy+6,hx,hy-14,'#7a5232',1.4);ln(vx,hx,hy-14,hx,hy-18,a.role==='soldier'?'#d8a040':'#cfcfcf',1.8)}
  if(a.carry&&S.tier>=2&&moving){const bx=X-(d===0?14:d===2?-14:0),by=Y-(d===1?12:d===3?-8:0)+2;rr(vx,bx-7,by-5,14,9,1.5,'#8a6038',OUTL,.7);circ(vx,bx-6,by+4,2.4,'#3a2a1a');circ(vx,bx+6,by+4,2.4,'#3a2a1a')}
  if(a.carry){const cc={sack:'#e8d8a8',fish:'#9ac8e8',log:'#9a7048',stone:'#c8c2b4',cu:'#3aa676',sn:'#e6f2fa',ingot:'#e0b050',meat:'#c8584a'}[a.carry]||'#d8c69a';if(a.carry==='log')rr(vx,X-9,Y-14,18,4,2,cc,OUTL,.7);else rr(vx,X-4,Y-15,8,7,2,cc,OUTL,.7)}
+ if(a.role!=='soldier'){const md=pawnMood(a);if(md<30){circ(vx,X+8,Y-34,4,'#ff7a5a',OUTL,.8);ln(vx,X+8,Y-36.5,X+8,Y-34,'#fff',1.3);circ(vx,X+8,Y-32.2,.7,'#fff')}else if(md>=80&&Math.floor(now/1500+(a.idx||0))%6===0){circ(vx,X+8,Y-34,3.6,'#9fe07a',OUTL,.7)}}
  if(a.sick&&Math.floor(now/900+(a.idx||0))%5===0)circ(vx,X+7,Y-30,2.4,'#a8c870')}
 function critDraw(c,now){const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1;ell(vx,X+1,Y+2,c.k==='deer'?8:4,c.k==='deer'?4:2.5,'rgba(20,14,8,.25)');
  if(c.k==='chicken'){ell(vx,X,Y,4,3,'#f2ece0');circ(vx,X+f*3.4,Y-1.6,2,'#f2ece0');circ(vx,X+f*3.6,Y-3.4,.9,'#d83a2a');circ(vx,X+f*5,Y-1.4,.7,'#e8a030')}
@@ -912,9 +913,10 @@ const tipEl=()=>$('tip');function tipOn(el,fn){el.addEventListener('mouseenter',
 const RNAME={food:'Food',wood:'Wood',stone:'Stone',copper:'Copper',tin:'Tin',bronze:'Bronze'};
 function renderTop(){$('tier').textContent=TIERS[S.tier].n;$('day').textContent='Day '+Math.floor(S.t/60+1)+' · '+(night()?'Night':'Day');
  const R=$('res');if(!R.children.length){RES.forEach(r=>{const d=document.createElement('div');d.className='chip';d.appendChild(ICO(r,16));const s=document.createElement('span');s.id='r_'+r;d.appendChild(s);const q=document.createElement('em');q.id='rd_'+r;d.appendChild(q);R.appendChild(d);tipOn(d,()=>'<b>'+RNAME[r]+'</b><br>'+Math.floor(S.res[r])+' / '+cap()+' stored<br>Rate: '+(((S.rate&&S.rate[r])||0)>=0?'+':'')+(((S.rate&&S.rate[r])||0)).toFixed(2)+' per second')});
-  const d=document.createElement('div');d.className='chip';d.id='popc';d.appendChild(ICO('pop',16));const s=document.createElement('span');s.id='r_pop';d.appendChild(s);R.appendChild(d);tipOn(d,()=>'<b>Population</b><br>'+S.pop+' people, housing '+housing()+'<br>Idle: '+(S.pop-employed())+'<br>Soldiers: '+armyN())}
+  const d=document.createElement('div');d.className='chip';d.id='popc';d.appendChild(ICO('pop',16));const s=document.createElement('span');s.id='r_pop';d.appendChild(s);R.appendChild(d);tipOn(d,()=>'<b>Population</b><br>'+S.pop+' people, housing '+housing()+'<br>Idle: '+(S.pop-employed())+'<br>Soldiers: '+armyN())
+  {const d=document.createElement('div');d.className='chip';d.id='hapc';d.appendChild(ICO('pop',16));const s=document.createElement('span');s.id='r_hap';d.appendChild(s);R.appendChild(d);tipOn(d,()=>'<b>Happiness '+Math.round(S.hap||50)+'%</b> — '+moodW(S.hap||50)+'<br>'+(S.hapF||[]).map(f=>(f[1]>0?'+':'')+f[1]+' '+f[0]).join('<br>')+'<br><i>≥70: faster work, growth, immigrants. &lt;35: slowdown, emigration, work refusal; &lt;15 riots.</i>')}}
  RES.forEach(r=>{const v=(S.rate&&S.rate[r])||0;$('r_'+r).textContent=Math.floor(S.res[r]);const q=$('rd_'+r);q.textContent=Math.abs(v)<.05?'':(v>0?'+':'')+v.toFixed(1);q.className=v<-.05?'neg':'pos'});
- $('r_pop').textContent=S.pop+'/'+housing()+(S.pop-employed()?' · '+(S.pop-employed())+' idle':'');$('pop').textContent='';}
+ $('r_pop').textContent=S.pop+'/'+housing()+(S.pop-employed()?' · '+(S.pop-employed())+' idle':'');$('pop').textContent='';{const H=Math.round(S.hap||50),e=$('r_hap');if(e){e.textContent=(H>=70?'☺ ':H<35?'☹ ':'😐 ')+H+'%';e.style.color=H>=70?'#9fe07a':H<35?'#ff9070':''}}}
 function renderLog(){const L=$('loglist');if(L)L.innerHTML=S.log.map(l=>'<div>'+l+'</div>').join('');const t=$('toast');if(t&&S.log[0]&&renderLog.last!==S.log[0]){renderLog.last=S.log[0];t.textContent=S.log[0];t.classList.add('on');clearTimeout(renderLog.t);renderLog.t=setTimeout(()=>t.classList.remove('on'),2600)}}
 // speed
 let spd=1,TI=null;function setSpeed(s){spd=s;clearInterval(TI);if(s)TI=setInterval(tick,1000/s);document.querySelectorAll('#speed button').forEach(b=>b.classList.toggle('sel',+b.dataset.s===s))}
@@ -1097,6 +1099,38 @@ function ownersFor(me){const L=Object.keys(CIV).filter(k=>k!==me);return REG.map
 const _enemyOf=enemyOf;enemyOf=function(i){const ow=ownersFor(S.civ||'egypt')[i],X=CIVX[ow];return _enemyOf(i).map(e=>{const t=X.sw&&X.sw[e.type];if(t){e.type=t;e.slot=defSlot(t)}e.civ=ow;e.name=CIV[ow].n.replace(/s$/,'')+' '+UNIT[e.type].n.replace(/ \(.*\)/,'');return e})};
 const _drawMap=drawMap;drawMap=function(c){_drawMap(c);const x=c.getContext('2d'),ow=ownersFor(S.civ||'egypt');REG.forEach((g,i)=>{if(S.won.includes(i))return;const C=CIV[ow[i]];x.globalAlpha=.28;x.fillStyle=C.acc;x.beginPath();x.arc(g.x,g.y,17,0,6.29);x.fill();x.globalAlpha=1;x.strokeStyle=C.acc;x.setLineDash([2,2]);x.stroke();x.setLineDash([]);x.fillStyle='#fff3d4';x.font='bold 5px sans-serif';x.fillText(C.n,g.x-12,g.y-12)});
  x.fillStyle=CIV[S.civ||'egypt'].acc;x.font='bold 6px sans-serif';x.fillText(CIV[S.civ||'egypt'].n+' (you)',HOME.x-18,HOME.y+14)};
+
+let BEAU=null;function beautyAt(x,y){return BEAU&&x>=0&&y>=0&&x<MW&&y<MH?BEAU[y*MW+x]:0}
+// ================= HAPPINESS =================
+const RATION={meagre:{n:'Meagre',up:.75,h:-12},normal:{n:'Normal',up:1,h:0},generous:{n:'Generous',up:1.35,h:8}};
+const TAX={low:{n:'Low',p:.9,h:6},normal:{n:'Normal',p:1,h:0},high:{n:'High',p:1.15,h:-12}};
+function hapCalc(){const F=[],add=(n,v)=>{if(Math.abs(v)>=.5)F.push([n,Math.round(v)])};
+ const fs=['farmer','fisher','herder','hunter','gatherer'].filter(j=>(S.jobs[j]||0)>0).length+(cnt('garden')?1:0);add('Food variety ('+fs+' sources)',fs*3-4);
+ if(S.res.food<=0)add('Starving',-25);
+ const hs=blds('house'),tents=cnt('tent');let q=0;S.bl.forEach((b,i)=>{if(b.t==='house')q+=b.l*2+Math.min(6,(DES[i]||0)/4)});add('Housing quality',hs.length?q/hs.length-3:-6);if(tents>hs.length)add('Living in tents',-4);
+ const cr=S.pop/Math.max(1,housing());if(cr>.95)add('Crowding',-(cr-.95)*60-4);
+ let be=0,n=0;S.bl.forEach((b,i)=>{if(b.t==='house'){be+=beautyAt(b.x+1,b.y+1);n++}});add('Beauty near homes',n?Math.min(15,be/n/3):0);
+ const emp=employed()/Math.max(1,S.pop);add(emp>.97?'Overworked, no rest':'Rest',emp>.97?-6:3);
+ add('Recreation (temple, market, gardens)',Math.min(12,cnt('temple')*4+cnt('market')*3+cnt('garden')*1.5+cnt('statue')*2));
+ if((S.ev.act||[]).some(e=>/plague|sick|fever/.test(e.id)))add('Sickness',-15);
+ add('Mourning the dead',-Math.min(25,S.grief||0));add('Fallen soldiers',-Math.min(20,(S.wargrief||0)));
+ add('Rations: '+RATION[S.ration||'normal'].n,RATION[S.ration||'normal'].h);add('Taxes: '+TAX[S.tax||'normal'].n,TAX[S.tax||'normal'].h);
+ if(cX().happy)add('Law code ('+civA().n+')',cX().happy);
+ if((S.ev.act||[]).some(e=>/fest|party|harvest/.test(e.id)))add('Festival',10);
+ const H=Math.max(0,Math.min(100,50+F.reduce((a,f)=>a+f[1],0)));return{H,F}}
+const hapMul=()=>{const H=S.hap||50;return(H>=70?1+(H-70)/150:H<35?.85-(35-H)/200:1)*TAX[S.tax||'normal'].p*(1-(S.refuse||0)/Math.max(1,S.pop))};
+const hapGrow=()=>{const H=S.hap||50;return H>=70?1.5:H<35?0:1};
+function hapTick(){const r=hapCalc();S.hap=S.hap==null?r.H:S.hap+(r.H-S.hap)*.08;S.hapF=r.F;
+ const a=armyN();if(S._army!=null&&a<S._army)S.wargrief=(S.wargrief||0)+(S._army-a)*1.5;S._army=a;if(S._pop!=null&&S.pop<S._pop)S.grief=(S.grief||0)+(S._pop-S.pop)*2;S._pop=S.pop;
+ S.grief=Math.max(0,(S.grief||0)*.995);S.wargrief=Math.max(0,(S.wargrief||0)*.995);const H=S.hap;
+ if(H>=75&&S.pop<housing()&&Math.random()<.02){S.pop++;log('Word of your happy city spreads — an immigrant family arrives.')}
+ if(H<25&&S.pop>4&&Math.random()<.03){S.pop--;fixJobs();log('Unhappy, a family emigrates.')}
+ S.refuse=H<30?Math.ceil(S.pop*(30-H)/100):0;
+ if(H<15&&S.t>(S.riotT||0)+120&&Math.random()<.05){S.riotT=S.t;for(const r of RES)S.res[r]*=.85;const b=S.bl.filter(b=>b.t!=='campfire');log('RIOT! The stores were looted.')}}
+function pawnMood(a){let m=S.hap||50;if(a.sick)m-=20;if(a.home&&a.homeDes!=null)m+=a.homeDes/4;m+=((a.idx||0)*37%13)-6;return Math.max(0,Math.min(100,Math.round(m)))}
+const moodW=m=>m>=75?'Happy':m>=55?'Content':m>=35?'Neutral':m>=20?'Unhappy':'Miserable';
+function renderPolicy(V){const p=document.createElement('div');p.className='panel';p.innerHTML='<h3>Policies · Happiness '+Math.round(S.hap||50)+'%</h3>';const mk2=(lab,T,key)=>{const r=document.createElement('div');r.className='row';r.innerHTML='<b>'+lab+'</b> ';for(const k in T){const b=btn(T[k].n,()=>{S[key]=k;renderView()},(S[key]||'normal')===k);r.appendChild(b)}p.appendChild(r)};mk2('Rations',RATION,'ration');mk2('Taxes',TAX,'tax');
+ const l=document.createElement('div');l.className='small';l.innerHTML=(S.hapF||[]).map(f=>(f[1]>0?'<span class="pos">+':'<span class="neg">')+f[1]+'</span> '+f[0]).join('<br>')+(S.refuse?'<br><span class="neg">'+S.refuse+' villagers refuse to work</span>':'');p.appendChild(l);V.appendChild(p)}
 
 // ================= CITY EVENTS =================
 function evOn(id){return S&&S.ev&&S.ev.act.find(e=>e.id===id)}
