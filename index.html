@@ -1548,6 +1548,109 @@ const _bvStep1=bvStep;bvStep=function(){const fi=BV.fi,na=BV.arrows.length,rt=Ob
  b.onclick=e=>{e.stopPropagation();AU.init();P.style.display=P.style.display==='block'?'none':'block';P.querySelectorAll('input[type=range]').forEach(r=>r.value=AU.vol[r.dataset.k]);P.querySelector('#aumute').checked=AU.muted};
  P.addEventListener('input',e=>{const r=e.target;if(r.dataset.k){AU.vol[r.dataset.k]=+r.value}else AU.muted=r.checked;AU.apply();upd()});document.body.appendChild(b);document.body.appendChild(P);try{const sv=JSON.parse(localStorage.getItem('bnbAudio')||'null');if(sv)AU.muted=sv.muted}catch(e){}upd()})();
 
+// ================= DYNAMIC WORLD: provinces, zones of control, AI nations =================
+const WMW=256,WMH=150,TRIBEC=['#8a7a5a','#6a7a4a','#7a5a4a','#5a6a6a','#8a6a3a','#6a5a7a'];
+const wmR=(a,b)=>hsh(a,b,777);
+const SYL=['Ka','Ur','Mar','Ash','Ne','Tal','Hat','Ugar','Ebla','Kish','Lag','Sa','Mit','Ish','Bab','Nin','Gaz','Sid','Tyr','Am','Ru','Qad','Kar','Zim'];
+function wmName(i){return SYL[(i*7)%SYL.length]+SYL[(i*13+5)%SYL.length].toLowerCase()+(i%3?'':'a')}
+function wmNat(id){const W=S.wm;if(id==='P')return{n:CIV[S.civ||'egypt'].n+' (you)',col:CIV[S.civ||'egypt'].acc};if(W.nat[id])return W.nat[id];return{n:'Unclaimed',col:'#888'}}
+function wmEdgeOK(a,b){const A=[a.x,a.y],B=[b.x,b.y];let cost=1,ok=true;WRIV.forEach((rv,ri)=>{for(let k=0;k<rv.pts.length-1;k++){const P=segX(A,B,rv.pts[k],rv.pts[k+1]);if(!P)continue;const dep=rv.dep[k],key=ri+':'+k;cost*=1.6;
+  if(dep>=3&&!(S.wbr||[]).includes(key)&&!rv.fords.some(f=>Math.hypot(f[0]-P[0],f[1]-P[1])<30))ok=false}});return{ok,cost}}
+function wmGen(){const P=[];let id=0;for(let r=0;r<7;r++)for(let c=0;c<10;c++){const x=10+c*26+(wmR(r,c)-.5)*16+(r%2)*8,y=10+r*21+(wmR(c,r+9)-.5)*12;if(x>250||y>145)continue;P.push({id:id,x,y,n:wmName(id),own:null,gar:4+Math.floor(wmR(id,3)*8),res:['food','wood','stone','copper','tin'][Math.floor(wmR(id,4)*5)],terr:['plains','hills','forest','marsh','desert','plains'][Math.floor(wmR(id,5)*6)],fort:0,road:0,shrine:0,ctl:{},reg:-1});id++}
+ const used=new Set();REG.forEach((g,i)=>{let b=null,bd=1e9;for(const p of P){if(used.has(p.id))continue;const d=Math.hypot(p.x-g.x,p.y-g.y);if(d<bd){bd=d;b=p}}if(b){used.add(b.id);b.reg=i;b.x=g.x;b.y=g.y;b.n=g.n;b.terr=g.terr;b.gar=enemyMen(i)}});
+ let hp=null,hd=1e9;for(const p of P){if(p.reg>=0)continue;const d=Math.hypot(p.x-HOME.x,p.y-HOME.y);if(d<hd){hd=d;hp=p}}hp.x=HOME.x;hp.y=HOME.y;hp.home=1;hp.n='Our homeland';hp.own='P';hp.cap=1;hp.ctl={P:100};
+ const ai=Object.keys(CIV).filter(k=>k!==(S.civ||'egypt')),nat={};const caps=[];
+ for(const c of ai){let best=null,bs=-1;for(const p of P){if(p.home||p.reg>=0&&false)continue;if(p.own)continue;const d=Math.min(Math.hypot(p.x-HOME.x,p.y-HOME.y),...caps.map(q=>Math.hypot(p.x-q.x,p.y-q.y)));const sc=d+wmR(p.id,c.length)*10;if(sc>bs){bs=sc;best=p}}
+  best.own=c;best.cap=1;best.gar=22;best.ctl={[c]:100};caps.push(best);nat[c]={n:CIV[c].n,col:CIV[c].acc,str:40,alive:true,civ:c}}
+ let tn=0;for(const p of P)if(!p.own){const t='t'+(tn++);nat[t]={n:p.n+' tribes',col:TRIBEC[tn%TRIBEC.length],str:5,alive:true,tribe:1,civ:ai[tn%ai.length]};p.own=t;p.ctl={[t]:40+p.gar*2}}
+ S.wm={v:1,prov:P,nat,rel:Object.fromEntries(ai.map(c=>[c,'peace'])),wars:[],tn,acc:0,tk:0};
+ for(let k=0;k<6;k++){for(const c of ai){const mine=P.filter(p=>p.own===c);const cand=[];for(const m of mine)for(const q of wmAdj(m))if(nat[q.own]&&nat[q.own].tribe&&!q.reg>=0)cand.push(q);const q=cand[Math.floor(wmR(k,c.length+cand.length)*cand.length)];if(q&&k<3){q.own=c;q.ctl={[c]:70};q.gar=10}}}
+ for(const i of S.won||[]){const p=P.find(p=>p.reg===i);if(p){p.own='P';p.ctl={P:80}}}wmCalc(true)}
+let WADJ=null;function wmAdj(p){if(!WADJ||WADJ.n!==S.wm.prov.length){WADJ={n:S.wm.prov.length,a:{}};const P=S.wm.prov;for(const a of P){WADJ.a[a.id]=P.filter(b=>b!==a&&Math.hypot(a.x-b.x,a.y-b.y)<36).map(b=>({b,e:wmEdgeOK(a,b)}))}}return(WADJ.a[p.id]||[]).filter(o=>o.e.ok).map(o=>o.b)}
+function wmSrc(p){const W=S.wm;let s=10+p.gar*1.6+p.fort*25+p.shrine*12+(p.cap?45:0)+(p.home?30:0);if(p.own==='P'){s+=(S.hap||50)/5;if(p.home)s+=S.tier*10}return s}
+function wmCalc(init){const W=S.wm,P=W.prov;WADJ=null;wmAdj(P[0]);const field={};
+ for(const n of['P',...Object.keys(W.nat)]){const src=P.filter(p=>p.own===n);if(!src.length)continue;const best=new Map();const q=src.map(p=>[p,wmSrc(p)]);for(const[p,v]of q)best.set(p.id,Math.max(best.get(p.id)||0,v));
+  while(q.length){q.sort((a,b)=>b[1]-a[1]);const[p,v]=q.shift();for(const o of(WADJ.a[p.id]||[])){const t=TERR_DEC[o.b.terr]||1;let nv=v*(.55/(o.e.cost*t))*(o.b.road||p.road?1.35:1)-(o.e.ok?0:12);if(nv>(best.get(o.b.id)||0)&&nv>3){best.set(o.b.id,nv);q.push([o.b,nv])}}}field[n]=best}
+ for(const p of P){const tgt={};for(const n in field){const v=field[n].get(p.id);if(v)tgt[n]=v}
+  for(const n of new Set([...Object.keys(tgt),...Object.keys(p.ctl)])){const cur=p.ctl[n]||0,t=Math.min(100,tgt[n]||0);let v=init?t:cur+(t-cur)*.3+(Math.random()-.5)*3*(1-wmShare(p,n));if(v<1)delete p.ctl[n];else p.ctl[n]=v}
+  const s=Object.entries(p.ctl).sort((a,b)=>b[1]-a[1]);if(!s.length||s[0][1]<6){if(p.own&&!p.home){p.own=null}continue}
+  if(p.own!==s[0][0]&&(!p.own||!p.ctl[p.own]||s[0][1]>(p.ctl[p.own]||0)*1.25)&&!p.home){const old=p.own;p.own=s[0][0];p.gar=Math.max(2,Math.round(p.gar*.4));if(!init)wmOwnChange(p,old)}}}
+const TERR_DEC={hills:1.25,desert:1.35,marsh:1.2,forest:1.1,plains:1,river:1.15,walls:1};
+function wmShare(p,n){let t=0;for(const k in p.ctl)t+=p.ctl[k];return t?(p.ctl[n]||0)/t:0}
+function wmAuth(p){return p.own?wmShare(p,p.own)*Math.min(1,(p.ctl[p.own]||0)/60):0}
+function wmOwnChange(p,old){const W=S.wm,o=wmNat(p.own),ol=old?wmNat(old).n:'no one';if(p.own==='P'){log('🚩 '+p.n+' now looks to us for protection ('+ol+' lost control).');if(p.reg>=0&&!S.won.includes(p.reg))S.won.push(p.reg)}
+ else if(old==='P'){log('⚠ We lost control of '+p.n+' to '+o.n+'!');if(p.reg>=0)S.won=S.won.filter(i=>i!==p.reg)}else if(Math.random()<.5&&(W.nat[p.own]&&!W.nat[p.own].tribe))log('🗺 '+o.n+' take '+p.n+' from '+ol+'.');
+ if(old&&W.nat[old]&&!W.prov.some(q=>q.own===old)&&W.nat[old].alive){W.nat[old].alive=false;if(!W.nat[old].tribe)log('💀 The '+W.nat[old].n+' have collapsed!')}}
+const wmAt=(a,b)=>{const W=S.wm;if(a==='P'||b==='P'){const o=a==='P'?b:a;return W.nat[o]&&(W.nat[o].tribe||W.rel[o]==='war')}return W.wars.includes([a,b].sort().join('|'))||(W.nat[a]&&W.nat[a].tribe)||(W.nat[b]&&W.nat[b].tribe)};
+function wmBorders(a,b){return S.wm.prov.some(p=>p.own===a&&wmAdj(p).some(q=>q.own===b))}
+function wmTick(){const W=S.wm,P=W.prov;W.tk++;const ai=Object.keys(W.nat).filter(k=>!W.nat[k].tribe&&W.nat[k].alive);
+ for(const p of P){if(!p.own)continue;const a=wmAuth(p);p.gar=Math.min(40,p.gar+(a>.6?1:a>.3?.5:.2));if(p.own==='P'&&!p.home&&S.res[p.res]!=null)S.res[p.res]+=Math.round(6*a);
+  if(p.own!=='P'&&W.nat[p.own])W.nat[p.own].str=Math.min(400,(W.nat[p.own].str||0)+1+2*a);
+  if(!p.home&&!p.cap&&a<.35&&Math.random()<.012){const t='t'+(W.tn++);W.nat[t]={n:p.n+' rebels',col:TRIBEC[W.tn%TRIBEC.length],str:5,alive:true,tribe:1,civ:ai[0]||'canaan'};const old=p.own;p.ctl[t]=(p.ctl[old]||20)*1.4;p.gar=Math.max(p.gar,8);log('🔥 '+p.n+' rises in rebellion against '+wmNat(old).n+'!')}}
+ for(const a of ai)for(const b of ai){if(a>=b)continue;const k=a+'|'+b,w=W.wars.includes(k);if(!w&&Math.random()<.025&&wmBorders(a,b)){W.wars.push(k);log('⚔ The '+W.nat[a].n+' declare war on the '+W.nat[b].n+'!')}else if(w&&Math.random()<.05){W.wars=W.wars.filter(x=>x!==k);log('🕊 The '+W.nat[a].n+' and '+W.nat[b].n+' make peace.')}}
+ for(const a of ai){const N=W.nat[a];if(W.rel[a]==='peace'&&Math.random()<.012&&wmBorders(a,'P')&&N.str>60){W.rel[a]='war';log('⚔ The '+N.n+' declare war on us!')}else if(W.rel[a]==='war'&&Math.random()<.03&&N.str<armyN()*2){W.rel[a]='peace';log('🕊 The '+N.n+' sue for peace.')}
+  if(N.str<25)continue;const tg=[];for(const p of P)if(p.own===a)for(const q of wmAdj(p))if(q.own!==a&&(!q.own||wmAt(a,q.own)))tg.push([p,q]);if(!tg.length)continue;const[f,q]=tg[Math.floor(Math.random()*tg.length)];N.str-=20;
+  if(q.own==='P'){wmDefend(a,q);continue}const atk=15+N.str*.15+f.gar*.6,def=q.gar*1.3+q.fort*12+wmAuth(q)*20;if(atk*(0.6+Math.random()*.8)>def){q.ctl[a]=(q.ctl[a]||0)+40;if(q.own)q.ctl[q.own]=(q.ctl[q.own]||0)*.55;q.gar=Math.max(1,q.gar-6)}else{f.gar=Math.max(1,f.gar-5);N.str-=10}}
+ wmCalc();renderMapIfOpen()}
+function wmDefend(a,q){const N=S.wm.nat[a];const ar=[['spear',Math.ceil(6+N.str*.05)],['archer',Math.ceil(4+N.str*.03)],['axeman',Math.ceil(3+N.str*.02)]];
+ const go=S.companies.filter(c=>c.slot!=='reserve'&&c.men>0);log('⚔ The '+N.n+' invade '+q.n+'!');
+ if(!go.length||BV||$('title').style.display!=='none'){const w=q.gar*1.4+q.fort*15>10+N.str*.12;if(w){q.ctl.P=(q.ctl.P||0)+15;log('Our garrison at '+q.n+' holds.')}else{q.ctl[a]=(q.ctl[a]||0)+45;q.ctl.P=(q.ctl.P||0)*.5;q.gar=Math.max(1,q.gar-6);log('The garrison of '+q.n+' is overrun!');if(q.home)for(const r in S.res)S.res[r]=Math.floor(S.res[r]*.8)}return}
+ const X=CIVX[a]||{},E=ar.map(([t,m],k)=>{const tt=(X.sw&&X.sw[t])||t;return{id:'e'+k,name:N.n.replace(/s$/,'')+' '+UNIT[tt].n,type:tt,men:Math.min(10,m),armor:0,xp:20,slot:defSlot(tt),civ:a}});
+ const res=simBattle(go,E,{terrain:q.terr==='walls'?'plains':q.terr,fa:S.formation||'line',fd:'wedge',moraleA:20+(q.fort*10),moraleD:0,genA:S.general.lvl});
+ res.G.filter(g=>g.side===0).forEach(g=>{const c=S.companies.find(c=>c.id===g.id);if(c){c.men=g.men;c.xp+=res.win?10:4}});S.companies=S.companies.filter(c=>c.men>0);
+ if(res.win){q.ctl.P=(q.ctl.P||0)+35;q.ctl[a]=(q.ctl[a]||0)*.3;N.str*=.7;log('VICTORY: we throw the '+N.n+' back from '+q.n+'!')}else{q.ctl[a]=(q.ctl[a]||0)+50;q.ctl.P=(q.ctl.P||0)*.45;log('DEFEAT at '+q.n+'.')}
+ save();bvStart(res,q.reg>=0?q.reg:0,a)}
+// player-facing map
+let WMSEL=null;function renderMapIfOpen(){if(cur==='map'&&$('drawer').classList.contains('open')&&!$('wmc'))return;if(cur==='map'&&$('wmc'))wmDraw($('wmc'))}
+function wmPix(c){const P=S.wm.prov,W=c.width,H=c.height,sx=WMW/W,sy=WMH/H;if(wmPix.k===P.length+'|'+W)return wmPix.d;const near=new Int16Array(W*H*3),wt=new Float32Array(W*H*3),own=new Int16Array(W*H);
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const X=x*sx,Y=y*sy;let b=[[1e9,0],[1e9,0],[1e9,0]];for(let i=0;i<P.length;i++){const d=(P[i].x-X)**2+(P[i].y-Y)**2+(vnoise(X,Y,6,55)-.5)*90;if(d<b[2][0]){b[2]=[d,i];b.sort((a,c)=>a[0]-c[0])}}const k=(y*W+x)*3;own[y*W+x]=b[0][1];let s=0;for(let j=0;j<3;j++){near[k+j]=b[j][1];const w=1/Math.pow(Math.max(1,b[j][0]-b[0][0]+8),1.6);wt[k+j]=w;s+=w}for(let j=0;j<3;j++)wt[k+j]/=s}
+ wmPix.k=P.length+'|'+W;return wmPix.d={near,wt,own}}
+function wmDraw(c){const g=c.getContext('2d'),W=c.width,H=c.height,P=S.wm.prov,sx=W/WMW,sy=H/WMH;const D=wmPix(c);const img=g.createImageData(W,H),d=img.data;const cols={};const cc=n=>cols[n]||(cols[n]=hex2(wmNat(n).col));const coreOf=new Int32Array(W*H).fill(-1);
+ const keys=['P',...Object.keys(S.wm.nat)],ki=Object.fromEntries(keys.map((k,i)=>[k,i]));
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const X=x/sx,Y=y/sy,i=y*W+x,k=i*3,n=vnoise(X,Y,30,3)*.5+vnoise(X,Y,9,4)*.3+vnoise(X,Y,3,5)*.2;let R=n>.62?150:n>.42?104:132,G2=n>.62?146:n>.42?140:150,B=n>.62?120:n>.42?70:90;
+  const mix={};let tot=0;for(let j=0;j<3;j++){const p=P[D.near[k+j]],w=D.wt[k+j];for(const o in p.ctl){mix[o]=(mix[o]||0)+p.ctl[o]*w;tot+=p.ctl[o]*w}}
+  if(tot>4){const ent=Object.entries(mix).sort((a,b)=>b[1]-a[1]),top=ent[0],sh=top[1]/tot,A=Math.min(1,top[1]/40);let pick=top[0];
+   if(sh<.7){let r=Math.min(.999,Math.max(0,(vnoise(X,Y,2.2,17)-.5)*1.6+.5))*tot,acc=0;for(const[o,v]of ent){acc+=v;if(r<=acc){pick=o;break}}}const C=cc(pick),al=sh>=.7&&A>.6?.6:(.25+.3*A)*(.55+.45*sh);R+=(C[0]-R)*al;G2+=(C[1]-G2)*al;B+=(C[2]-B)*al;if(sh>=.7&&A>.6)coreOf[i]=ki[top[0]];else coreOf[i]=-2-ki[pick]}
+  d[i*4]=R;d[i*4+1]=G2;d[i*4+2]=B;d[i*4+3]=255}
+ for(let y=1;y<H;y++)for(let x=1;x<W;x++){const i=y*W+x;const a=coreOf[i];if(a<0)continue;for(const j of[i-1,i-W]){const b=coreOf[j];if(b>=0&&b!==a||(b===-1)){for(const q of[i]){d[q*4]=d[q*4]*.25;d[q*4+1]*=.25;d[q*4+2]*=.25}}}}
+ g.putImageData(img,0,0);g.save();g.scale(sx,sy);
+ for(const rv of WRIV){for(let k=0;k<rv.pts.length-1;k++){const a=rv.pts[k],b=rv.pts[k+1],dp=rv.dep[k];g.strokeStyle=dp>=3?'#2a5a8a':'#5a9ac0';g.lineWidth=dp*.9+.6;g.lineCap='round';g.beginPath();g.moveTo(a[0],a[1]);g.lineTo(b[0],b[1]);g.stroke()}for(const f of rv.fords){g.fillStyle='#e8d8a8';g.beginPath();g.ellipse(f[0],f[1],2.4,1.6,0,0,6.3);g.fill()}}
+ for(const p of P){const o=wmNat(p.own),A=wmAuth(p);if(p.cap||p.home){g.fillStyle=o.col;g.strokeStyle='#fff3d4';g.lineWidth=.5;g.beginPath();for(let k=0;k<10;k++){const r=k%2?1.6:3.6,a=k*Math.PI/5-Math.PI/2;g.lineTo(p.x+Math.cos(a)*r,p.y+Math.sin(a)*r)}g.closePath();g.fill();g.stroke()}
+  else if(p.gar>14||p.fort){g.fillStyle='#e8dcc0';g.fillRect(p.x-2,p.y-2,4,3);g.fillStyle=o.col;g.fillRect(p.x-2,p.y-3,4,1.2);if(p.fort){g.strokeStyle='#3a2414';g.lineWidth=.4;g.strokeRect(p.x-2.6,p.y-3.4,5.2,4.8)}}else{g.fillStyle='rgba(30,20,10,.7)';g.beginPath();g.arc(p.x,p.y,.9,0,6.3);g.fill()}
+  if(WMSEL===p.id){g.strokeStyle='#fff';g.lineWidth=.6;g.beginPath();g.arc(p.x,p.y,6,0,6.3);g.stroke()}
+  if(p.cap||p.home||p.reg>=0){g.font='bold 3.6px sans-serif';g.fillStyle='rgba(255,246,220,.95)';g.strokeStyle='rgba(20,12,6,.8)';g.lineWidth=.8;g.strokeText(p.n,p.x-p.n.length*.9,p.y-4.5);g.fillText(p.n,p.x-p.n.length*.9,p.y-4.5)}}
+ g.restore()}
+function wmPick(c,e){const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*WMW,y=(e.clientY-r.top)/r.height*WMH;const D=wmPix(c),px=Math.floor((e.clientX-r.left)/r.width*c.width),py=Math.floor((e.clientY-r.top)/r.height*c.height);return S.wm.prov[D.own[py*c.width+px]]}
+function wmCtlTxt(p){const t=Object.values(p.ctl).reduce((a,b)=>a+b,0)||1;return Object.entries(p.ctl).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([n,v])=>'<span style="color:'+wmNat(n).col+'">■</span> '+wmNat(n).n+' '+Math.round(v/t*100)+'%').join('<br>')}
+function wmRenderTab(V){V.innerHTML='<h3>World</h3><div class="small">Zones of control: solid = core authority, faded/dithered = contested frontier. Tap a province.</div>';const c=document.createElement('canvas');c.id='wmc';c.width=512;c.height=300;c.style.cssText='width:100%;border-radius:6px;cursor:crosshair';V.appendChild(c);wmDraw(c);
+ const tip=document.createElement('div');tip.className='small';tip.style.cssText='position:fixed;pointer-events:none;background:rgba(20,16,12,.92);border:1px solid #6a5434;padding:4px 6px;border-radius:4px;display:none;z-index:40';document.body.appendChild(tip);
+ c.onmousemove=e=>{const p=wmPick(c,e);tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px';tip.innerHTML='<b>'+p.n+'</b> · '+wmNat(p.own).n+'<br>'+wmCtlTxt(p)};c.onmouseleave=()=>tip.style.display='none';
+ c.onclick=e=>{WMSEL=wmPick(c,e).id;tip.style.display='none';renderView()};
+ const pane=document.createElement('div');pane.className='panel';V.appendChild(pane);
+ if(WMSEL!=null){const p=S.wm.prov[WMSEL],o=wmNat(p.own),A=wmAuth(p),mine=p.own==='P';pane.innerHTML='<b>'+p.n+'</b>'+(p.cap?' ★ capital':'')+'<div class="small">Owner: <span style="color:'+o.col+'">'+o.n+'</span> · Terrain: '+TERR[p.terr].n+' · Produces '+p.res+'<br>Garrison '+Math.round(p.gar)+(p.fort?' · Fort '+p.fort:'')+(p.road?' · Roads':'')+(p.shrine?' · Shrine':'')+'<br>Authority '+Math.round(A*100)+'% '+(A>.7?'(core: full taxes & levies)':A>.35?'(frontier: reduced income)':'(contested: unrest & rebellion risk)')+'</div><div class="small">'+wmCtlTxt(p)+'</div>';
+  const adj=S.wm.prov.some(q=>q.own==='P'&&wmAdj(q).includes(p));
+  if(mine){for(const[l,c2,f]of[['🏰 Fort',{stone:60,wood:30},()=>p.fort++],['🛡 Garrison +6',{food:40},()=>p.gar+=6],['🛤 Roads',{wood:40,stone:10},()=>p.road=1],['⛩ Shrine',{stone:40,wood:20},()=>p.shrine=1]])pane.appendChild(btn(l+' ('+cstr(c2)+')',()=>{if(pay(c2)){f();wmCalc();log('Improved '+p.n+'.');save()}renderView()},!can(c2)||(l.includes('Roads')&&p.road)||(l.includes('Shrine')&&p.shrine)))}
+  else{if(p.reg<0){p.reg=REG.length;REG.push({n:p.n,terr:p.terr,form:'line',m:0,army:[],x:p.x,y:p.y,rw:'res',v:p.res,d:'Province ('+p.res+')'})}
+   pane.appendChild(btn(adj?'⚔ Attack '+p.n:'Not adjacent to our land',()=>{const N=S.wm.nat[p.own];if(N&&!N.tribe&&S.wm.rel[p.own]!=='war'){S.wm.rel[p.own]='war';log('We declare war on the '+N.n+'.')}regionModal(p.reg)},!adj||S.wm.rel[p.own]==='ally'))}}
+ else pane.innerHTML='<div class="small">Tap a province for details.</div>';
+ const lg=document.createElement('div');lg.className='panel';lg.innerHTML='<b>Nations</b>';V.appendChild(lg);
+ for(const k of['P',...Object.keys(S.wm.nat).filter(k=>!S.wm.nat[k].tribe&&S.wm.nat[k].alive)]){const N=wmNat(k),np=S.wm.prov.filter(p=>p.own===k).length,core=S.wm.prov.filter(p=>p.own===k&&wmAuth(p)>.7).length,rel=k==='P'?'':S.wm.rel[k];
+  const r=document.createElement('div');r.className='row small';r.innerHTML='<span><span style="color:'+N.col+'">■</span> '+N.n+' · '+np+' prov ('+core+' core)'+(k!=='P'?' · str '+Math.round(N.str)+' · <b>'+rel+'</b>':'')+'</span>';
+  if(k!=='P'){const sp=document.createElement('span');if(rel==='war')sp.appendChild(btn('Offer peace',()=>{if(Math.random()<.35+armyN()/(N.str+1)*.4){S.wm.rel[k]='peace';log('The '+N.n+' accept peace.')}else log('The '+N.n+' refuse peace.');renderView()}));
+   else{sp.appendChild(btn('War',()=>{S.wm.rel[k]='war';log('We declare war on the '+N.n+'!');renderView()}));if(rel==='peace')sp.appendChild(btn('Ally',()=>{if((N.tr||0)>=2||Math.random()<.2){S.wm.rel[k]='ally';log('Alliance sealed with the '+N.n+'.')}else log('The '+N.n+' want more goodwill (tribute).');renderView()}))}
+   const tc={food:60,bronze:10};sp.appendChild(btn('Tribute',()=>{if(pay(tc)){N.tr=(N.tr||0)+1;if(rel==='war'){S.wm.rel[k]='peace';log('Tribute buys peace with the '+N.n+'.')}else log('The '+N.n+' accept our gifts.')}renderView()},!can(tc)));r.appendChild(sp)}lg.appendChild(r)}
+ const tl=document.createElement('div');tl.className='small';tl.textContent='Tribes: '+Object.keys(S.wm.nat).filter(k=>S.wm.nat[k].tribe&&S.wm.prov.some(p=>p.own===k)).length+' · Wars: '+(S.wm.wars.map(w=>w.split('|').map(x=>S.wm.nat[x].n).join(' vs ')).join(', ')||'none');lg.appendChild(tl)}
+function wmCheckCiv(){if(S.wm&&S.civ&&S.wm.nat[S.civ]&&!S.wm.nat[S.civ].tribe){const won=S.won;wmGen()}}
+const _rv2=renderView;renderView=function(){wmCheckCiv();_rv2();if(cur==='map'&&S.wm){const V=$('view');V.innerHTML='';wmRenderTab(V)}};
+const _own2=ownersFor;ownersFor=function(me){const base=_own2(me);if(!S||!S.wm)return base;return REG.map((r,i)=>{const p=S.wm.prov.find(p=>p.reg===i);if(!p||!p.own||p.own==='P')return base[i%base.length]||'canaan';const N=S.wm.nat[p.own];return N?N.civ||p.own:base[i%base.length]})};
+const _enemy2=enemyOf;enemyOf=function(i){const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(p&&REG[i]){const g=Math.max(4,Math.round(p.gar+p.fort*4));const base=REG[i].army.length?REG[i].army:[['spear',5],['archer',3],['axeman',2]];const tot=base.reduce((a,x)=>a+x[1],0);REG[i]._a=REG[i]._a||base.map(x=>x.slice());REG[i].army=REG[i]._a.map(x=>{const y=x.slice();y[1]=Math.max(1,Math.round(x[1]*g/tot));return y})}return _enemy2(i)};
+const _ri2=routeInfo;routeInfo=function(i){const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(!p)return _ri2(i);const from=S.wm.prov.filter(q=>q.own==='P'&&wmAdj(q).includes(p)).sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];const hx=HOME.x,hy=HOME.y;
+ if(from){HOME.x=from.x;HOME.y=from.y}let r;try{r=_ri2(i)}finally{HOME.x=hx;HOME.y=hy}if(!from&&p.own!=='P'){r.blocked=true;r.cr.push({rv:'Frontier',how:'blocked',key:'-',P:[p.x,p.y]})}return r};
+const _fight2=fight;fight=function(i){const before=S.won.includes(i);_fight2(i);const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(p&&!before&&S.won.includes(i)){for(const k in p.ctl)p.ctl[k]*=.3;p.ctl.P=(p.ctl.P||0)+70;p.gar=4;const old=p.own;p.own='P';wmOwnChange(p,old);for(const q of wmAdj(p))if(q.own==='P')q.ctl.P=(q.ctl.P||0)+10;wmCalc();save()}};
+HOWN.blocked='not reachable (no route from our land)';
+const _mig2=migrate;migrate=function(){_mig2();if(!S.wm||!S.wm.prov)wmGen();else{WADJ=null;for(const p of S.wm.prov)if(p.reg>=REG.length)REG[p.reg]={n:p.n,terr:p.terr,form:'line',m:0,army:[],x:p.x,y:p.y,rw:'res',v:p.res,d:'Province ('+p.res+')'}}};
+setInterval(()=>{if(!S||!S.wm||BV||!spd||$('title').style.display!=='none')return;wmCheckCiv();S.wm.acc=(S.wm.acc||0)+spd;if(S.wm.acc>=20){S.wm.acc=0;wmTick()}},1000);
+
 load();genWorld(S.seed||7);worldChanged();title();uiSkin();renderTop();renderView();renderLog();riCSS();fitCanvas();cam.z=cam.tz=1;centerOn(S.center.x+1,S.center.y+1);requestAnimationFrame(vframe);
 $('zin').onclick=()=>zoomAt('+',VW/2,VH/2);$('zout').onclick=()=>zoomAt('-',VW/2,VH/2);$('start').addEventListener('click',()=>setTimeout(fitCanvas,30));setSpeed(1);
 if(!S.log.length)log('Welcome, chief! Assign jobs, build a Barracks, and conquer Reedy Marsh.');
