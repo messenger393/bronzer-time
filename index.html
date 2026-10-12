@@ -346,10 +346,10 @@ function bcost(k,l){const m=(S.tech.masonry?.75:1)*Math.pow(1.6,l);const o={};fo
 const can=c=>Object.keys(c).every(r=>S.res[r]>=c[r]);
 function pay(c){if(!can(c))return false;for(const r in c)S.res[r]-=c[r];return true}
 const cstr=c=>Object.keys(c).map(r=>c[r]+' '+r).join(', ');
-function tick(){if(BV)return;if(S.autoWork&&S.t%3===0)autoAssign();
+function tick(){if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0)autoAssign();
  const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod*hapMul();
  const p={food:0,wood:0,stone:0,copper:0,tin:0,bronze:0};
- for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}p[J[1]]+=v}
+ for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]&&!RNJ[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}v=rnJobOut(j,v);p[J[1]]+=v}
  for(const r in S.bonus)p[r]*=1+S.bonus[r];{const X=cX(),E=X.eco||{};for(const r in E)if(p[r]>0)p[r]*=1+E[r];if(X.purple)p.bronze+=(S.jobs.merchant||0)*X.purple}
  const sm=S.jobs.smith||0;if(sm){let n=Math.min(sm*0.3,S.res.copper/1,S.res.tin/0.5);S.res.copper-=n;S.res.tin-=n*.5;p.bronze+=n*mult*(1+(S.bonus.bronze||0))}
  let up=S.pop*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up*RATION[S.ration||'normal'].up;
@@ -516,8 +516,7 @@ function syncRoster(){const pop=S.pop,sig=JSON.stringify([S.jobs,pop,bgSig,armyN
   const o=Object.assign({},OUTFIT[role]||{t:TUN[n%TUN.length],t2:lighten(TUN[n%TUN.length],-.35),hat:'none'});o.hair=pick(['#3a2414','#24140c','#6a4226','#1a1010','#8a5a32']);if(role==='kid'){o.kid=1;o.t=TUN[(n+3)%TUN.length];o.t2=lighten(o.t,-.3)}civDress(o,role,n);S.looks=S.looks||{};const lk=key+'|'+(S.civ||'egypt');if(!S.looks[lk])S.looks[lk]=mkLook(key,role,S.civ||'egypt',[agents[n-1]&&agents[n-1].o,agents[n+1]&&agents[n+1].o,keep[want[n-1]]&&keep[want[n-1]].o]);applyLook(o,S.looks[lk],role);
   return{key,role,idx,sig:bgSig,x:home.x,y:home.y,home,inB:hbo?hbo.b:null,work:wb.length?pick(wb):null,route:[],state:'start',t:Math.random()*2,o,dir:0,ft:0,sick:false}});
  critters=[];const fs=blds('farm'),fc=Math.min(12,fs.length*3),gc=(S.extraJobs||{}).herder?Math.min(6,2+S.tier*2):0;
- for(let k=0;k<fc+gc;k++){const f=fs.length?fs[k%fs.length]:{gx:S.center.x,gy:S.center.y,s:1};const d=doorOf(f.b||{t:'tent',x:f.gx,y:f.gy});critters.push({k:k>=fc?'goat':'chicken',x:d.x+Math.random()-.5,y:d.y+Math.random()*.5,tx:0,ty:0,t:0,dir:1,hx:d.x,hy:d.y})}
- (spotCache.forest||[]).slice(0,6).forEach((s,k)=>critters.push({k:'deer',x:s.x,y:s.y,tx:0,ty:0,t:0,dir:1,hx:s.x,hy:s.y}))}
+ for(let k=0;k<fc+gc;k++){const f=fs.length?fs[k%fs.length]:{gx:S.center.x,gy:S.center.y,s:1};const d=doorOf(f.b||{t:'tent',x:f.gx,y:f.gy});critters.push({k:k>=fc?'goat':'chicken',x:d.x+Math.random()-.5,y:d.y+Math.random()*.5,tx:0,ty:0,t:0,dir:1,hx:d.x,hy:d.y})}}
 function workSpot(a){if(a.role==='fisher'){const w=spotCache.water;return w.length?w[a.idx%w.length]:hubT()}if(a.role==='gatherer'||(a.role==='hunter'&&!a.work)){const f=spotCache.forest;return f.length?f[(a.idx*3)%f.length]:hubT()}
  if(a.role==='hunter'){const f=spotCache.forest;return f.length?f[(a.idx*5+7)%f.length]:hubT()}if(!a.work)return{x:a.home.x+Math.random()-.5,y:a.home.y+.3};const o=a.work,s=o.s;
  if(o.b.t==='farm')return{x:o.gx+.3+Math.random()*(s-.6),y:o.gy+.3+Math.random()*(s-.6),inside:1};if(!FLATB[o.b.t]&&o.s>=2)return inSpot(o,a.idx+((Math.random()*3)|0),0);const d=doorOf(o.b);return{x:d.x+(a.idx%2?.3:-.3),y:d.y}}
@@ -862,6 +861,7 @@ function migrate4(){genWorld(S.seed||7);const old=S.bl||[];S.bl=[];rebuildOcc();
 // ---------- inspect pane ----------
 function showInsp(){const P=$('insp');if(!sel){P.style.display='none';return}P.innerHTML='';const h=document.createElement('b');P.appendChild(h);const d=document.createElement('div');P.appendChild(d);
  if(sel.a){const a=sel.a,L=LINES[a.role]||['Villager','Hi!'];h.textContent=L[0];d.innerHTML=(a.sick?'Health: <span style="color:#d8e890">ill</span>':'Health: good')+'<br>Doing: '+(a.carry?'hauling '+a.carry:a.state==='work'?'working':a.state==='home'?'resting':a.state)+'<br>Mood: '+pawnMood(a)+'% ('+moodW(pawnMood(a))+')<br><span class="small">'+(S.hapF||[]).slice().sort((x,y)=>Math.abs(y[1])-Math.abs(x[1])).slice(0,4).map(f=>(f[1]>0?'+':'')+f[1]+' '+f[0]).join('<br>')+'</span><br><i>"'+L[1]+'"</i>'}
+ else if(sel.n){const r=rnInfoAt(sel.n[0],sel.n[1]);if(!r){sel=null;P.style.display='none';return}h.textContent=r.h;d.innerHTML=r.t}
  else{const i=sel.i,b=S.bl[i];if(!b){sel=null;P.style.display='none';return}const s=bsz(b.t),mx=3+S.tier,c=bcost(b.t,b.l);h.textContent=BLD[b.t].n+'  Lv'+b.l;
   let tx=BLD[b.t].d+'<br>Size '+s+'x'+s;if(S.tier>=1&&!NOROAD[b.t])tx+='<br>Road: '+(CONN[i]?'<span style="color:#9fe07a">connected</span>':'<span style="color:#ff9070">NOT connected — inactive</span>');
   if(b.t==='house')tx+='<br>Desirability: '+DES[i]+' (+'+Math.max(0,Math.min(b.l*3,Math.floor(DES[i]/2)))+' housing)';if(BLD[b.t].job)tx+='<br>Workers: '+(S.jobs[BLD[b.t].job]||0)+'/'+jobCap(BLD[b.t].job);{const L=logi(b.x,b.y,s);tx+='<br>Haul: '+L.d+' tiles · ~'+L.sec+'s round trip<br>Efficiency: <b style="color:'+effCol(L.eff)+'">'+Math.round(L.eff*100)+'%</b>'+(L.eff<1?' <span class="small">(build storage nearby)</span>':'')}d.innerHTML=tx;
@@ -874,7 +874,7 @@ function toTile(w){return{gx:Math.floor(w.x/TS),gy:Math.floor(w.y/TS)}}
 function tapWorld(w,ptype){if(BV){bvTap(w);return}if(roadMode())return;if(!placing&&cam.z>=.5&&tapAgent(w))return;const t=toTile(w);
  if(placing==='__move'){if(ptype!=='mouse'&&(!ghost||ghost.gx!==t.gx||ghost.gy!==t.gy)){ghost=t;return}moveCamp(t.gx,t.gy);placing=null;ghost=null;return}
  if(placing){const g=ghostAt(t);if(ptype!=='mouse'&&(!ghost||ghost.gx!==g.gx||ghost.gy!==g.gy)){ghost=g;return}placeAt(g);return}
- if(t.gx<0||t.gy<0||t.gx>=MW||t.gy>=MH)return;const o=occ[t.gy*MW+t.gx];sel=o?{i:o-1}:null;showInsp()}
+ if(t.gx<0||t.gy<0||t.gx>=MW||t.gy>=MH)return;const o=occ[t.gy*MW+t.gx];sel=o?{i:o-1}:(rnInfoAt(t.gx,t.gy)?{n:[t.gx,t.gy]}:null);showInsp()}
 function placeAt(g){{const err=placeErr(placing,g.gx,g.gy);if(err){log(err);ghost=g;return}
   if(pay(bcost(placing,0))){const nb={t:placing,l:1,x:g.gx,y:g.gy};if(FP[placing])nb.fv={v:PV.v,r:PV.r,m:PV.m};S.bl.push(nb);rebuildOcc();const n=autoRoadFor(nb);worldChanged();log('Built '+BLD[placing].n+(n?' + '+n+' path tiles':''));if(S.tier>=1&&!NOROAD[nb.t]&&!touchesRoad(nb))log('⚠ '+BLD[placing].n+' needs a road to work!');const s=bsz(placing);burst(g.gx+s/2,g.gy+s/2,'#e8d8a8',20)}else log('Not enough resources');placing=null;ghost=null;save();renderView();renderTop();return}}
 function fpCycle(k){if(!FP[placing])return;if(k==='v')PV.v=(PV.v+1)%FP[placing].length;else if(k==='r')PV.r=(PV.r+1)%4;else PV.m=PV.m?0:1;CURFP={t:placing,...PV};pbarSync.sig=null}
@@ -908,6 +908,7 @@ function _drawAgent0(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({}
 function critDraw(c,now){const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1;ell(vx,X+1,Y+2,c.k==='deer'?8:4,c.k==='deer'?4:2.5,'rgba(20,14,8,.25)');
  if(c.k==='chicken'){ell(vx,X,Y,4,3,'#f2ece0');circ(vx,X+f*3.4,Y-1.6,2,'#f2ece0');circ(vx,X+f*3.6,Y-3.4,.9,'#d83a2a');circ(vx,X+f*5,Y-1.4,.7,'#e8a030')}
  else if(c.k==='goat'){ell(vx,X,Y,7,4,'#d8d0c0');circ(vx,X+f*6,Y-2,2.8,'#c8c0b0');ln(vx,X+f*6,Y-4,X+f*4.5,Y-7,'#6a5a48',1)}
+ else if(c.k==='boar'){ell(vx,X,Y,8,4.6,'#4a3a2e');for(let i=-5;i<5;i+=2)ln(vx,X+i,Y-4,X+i+f,Y-5.6,'#2e241c',.8);circ(vx,X+f*7,Y-.5,3,'#3e3026');circ(vx,X+f*9.4,Y,1.4,'#8a6a5a');ln(vx,X+f*8,Y+1.4,X+f*9.4,Y-1,'#f0e8d8',.8)}
  else{ell(vx,X,Y,9,4.4,'#9a6a40');circ(vx,X+f*8,Y-2.4,3,'#8a5a34');ln(vx,X+f*8,Y-4.6,X+f*6,Y-10,'#5e4028',1);ln(vx,X+f*9,Y-4.6,X+f*11,Y-10,'#5e4028',1);circ(vx,X-f*8,Y-1,1.4,'#f0e8d8')}}
 let vign=null;
 function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;last=now;camStep(rdt);if(spd){vframe.tt=(vframe.tt||0)+dt;if(vframe.tt>.5){vframe.tt=0;trafficStep()}vframe.pc=(vframe.pc||0)+dt;if(vframe.pc>6){vframe.pc=0;PC.clear()}}
@@ -924,9 +925,10 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):bspr(b.t,b.l,v);
   const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:()=>vx.drawImage(sp.c,X-8,Y-8,s*TS+16,s*TS+16),k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
  FPB.on=0;flats.forEach(e=>e.f());
- visProps(vl,vr,vt,vb).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS;if(!inV(X,Y))return;const vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';const sw=big?Math.sin(wt*1.3+pr.gx)*.6:0;D.push({k:Y+(big?10:2),f:()=>vx.drawImage(sp.c,X-24+sw,Y-24,48,48)})});
+ visProps(vl,vr,vt,vb).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS;if(!inV(X,Y))return;const vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';const sw=big?Math.sin(wt*1.3+pr.gx)*.6:0;D.push({k:Y+(big?10:2),f:()=>rnDrawProp(pr,X,Y,sp,sw,big)})});
  critters.forEach(c=>{c.t-=dt;if(c.t<=0){const rg=c.k==='deer'?2.5:1.4;c.tx=c.hx+(Math.random()-.5)*rg*2;c.ty=c.hy+(Math.random()-.5)*rg;if(!walkC(c.tx|0,c.ty|0)&&c.k!=='deer'){c.tx=c.x;c.ty=c.y}c.t=1+Math.random()*3}
   const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);if(d>.03){c.x+=dx/d*.4*dt;c.y+=dy/d*.4*dt;c.dir=dx>0?1:-1}if(z<.5||!inV(c.x*TS,c.y*TS))return;D.push({k:c.y*TS,f:()=>critDraw(c,now)})});
+ if(!S.rn||!S.herds)rnInit();rnBuild();rnHerdStep(dt);if(z>=.5)rnHerdDraw(D,dt,now,inV);
  const sickP=evOn('plague');
  for(const a of agents){if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?RSPD[rl]*Math.max(.35,congF(ri)):1,sp=(a.role==='kid'?1.4:a.carry?.75:1)*(a.sick?.6:1)*rd*dt;
    if(rl)TR[ri]+=dt*(a.carry&&S.tier>=2?2:1);if(d>.01)a.dir=dirOf(dx,dy);a.ft+=dt*(a.role==='kid'?10:7);if(d<=sp){a.x=p.x;a.y=p.y;a.route.shift();if(!a.route.length){if(a.state==='towork'){a.state='work';a.t=3+Math.random()*4}else if(a.state==='home')a.t=3}}else{a.x+=dx/d*sp;a.y+=dy/d*sp}}
@@ -973,7 +975,7 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  vx.drawImage(vign,0,0);
  TF();vx.font='bold 12px sans-serif';vx.textAlign='center';pops=pops.filter(q=>(q.l-=dt)>0);for(const q of pops){q.y-=16*dt;if(!inV(q.x,q.y))continue;vx.globalAlpha=Math.min(1,q.l);vx.fillStyle='#1a140e';vx.fillText(q.txt,q.x+1,q.y+1);vx.fillStyle=q.col;vx.fillText(q.txt,q.x,q.y)}vx.globalAlpha=1;
  if(bubble&&(bubble.t-=dt)>0&&agents.includes(bubble.a)){const a=bubble.a,P=isoP(a.x,a.y);vx.font='11px sans-serif';const tw=Math.ceil(vx.measureText(bubble.s).width)+12,X=P.x-tw/2,Y=P.y-50;rr(vx,X,Y,tw,16,4,'rgba(250,244,228,.95)',OUTL,1);vx.fillStyle='#2b2118';vx.fillText(bubble.s,P.x,Y+11.5)}else bubble=null;
- vx.textAlign='left';vx.setTransform(PXR,0,0,PXR,0,0);if(Math.floor(now/250)!==vframe.mt){vframe.mt=Math.floor(now/250);drawMinimap();if(sel&&sel.a)showInsp();if(vframe.mt%4===0)renderAlerts()}
+ vx.textAlign='left';vx.setTransform(PXR,0,0,PXR,0,0);if(Math.floor(now/250)!==vframe.mt){vframe.mt=Math.floor(now/250);drawMinimap();if(sel&&(sel.a||sel.n))showInsp();if(vframe.mt%4===0)renderAlerts()}
  requestAnimationFrame(vframe)}
 let mmBase=null;const mm=$('mm'),mmx=mm.getContext('2d');
 function drawMinimap(){if(!mmBase){const[c,g]=mk(128,128);if(!ov64)buildOverview();g.imageSmoothingEnabled=true;g.drawImage(ov64,0,0,128,128);S.bl.forEach(b=>{const s=bsz(b.t);g.fillStyle=b.t==='wall'||b.t==='gate'?'#e8d0a0':FLATB[b.t]?'#c8b060':'#e8502a';g.fillRect(b.x*128/MW,b.y*128/MW,Math.max(1.5,s*128/MW),Math.max(1.5,s*128/MW))});mmBase=c}
@@ -2166,6 +2168,60 @@ function fxFrame(D,flats,rdt,dt,now,z,inV,vl,vr,vt,vb){if(rdt>0)FX.fps=FX.fps*.9
   else if(q.k===3){const s=q.s*Math.sin(a*Math.PI);vx.globalAlpha=Math.sin(a*Math.PI);vx.fillStyle='#ffffff';vx.fillRect(q.x-s,q.y-.35,s*2,.7);vx.fillRect(q.x-.35,q.y-s,.7,s*2)}
   else if(q.k===4){q.x+=q.vx*rd;q.y+=q.vy*rd;q.vy+=160*rd;vx.globalAlpha=Math.min(1,a*2);vx.fillStyle='#dff2ff';vx.fillRect(q.x-.7,q.y-.7,1.4,1.4);if(q.y>q.z0&&q.vy>0){q.l=0;if(P.length<FX.cap)P.push({k:2,x:q.x,y:q.z0,l:.8,L:.8,s:3})}}}
  P.length=j;if(P.length>FX.cap)P.splice(0,P.length-FX.cap);FX.n=P.length;vx.globalAlpha=1}
+
+// ================= RESOURCE NODES: trees, berry bushes, stone/copper/tin deposits, wildlife herds, fish =================
+const RND={t:{n:'Tree',r:'wood',max:30,job:'woodcutter'},b:{n:'Berry bush',r:'food',max:20,job:'gatherer'},s:{n:'Stone outcrop',r:'stone',max:140,job:'quarrier'},c:{n:'Copper deposit',r:'copper',max:90,job:'coppermin'},n:{n:'Tin deposit',r:'tin',max:60,job:'tinmin'}};
+const RNJ={woodcutter:'t',gatherer:'b',quarrier:'s',coppermin:'c',tinmin:'n',hunter:'h',fisher:'f'};
+const RN={src:null,list:{t:[],b:[],s:[],c:[],n:[]},has:new Set(),cand:{},cur:{},ct:-99,anim:new Map(),R:48};
+const rnSeason=()=>((S.t/180|0)>>1)%4,SEASONS=['Spring','Summer','Autumn','Winter'];
+function rnKind(x,y){const t=ter(x,y),r=hsh(x,y,3);if(t===T_FOREST)return r<.45?'tb':'t';if(t===T_GRASS)return r>=.03&&r<.065?'b':'';if(t===T_HILL)return r<.15?'s':'';if(t===T_ROCK)return r<.35?'s':'';if(t===T_CU)return r<.5?'c':'';if(t===T_SN)return r<.5?'n':'';return''}
+function rnInit(){if(!S.rn)S.rn={v:1,d:{},z:{}};if(!S.fish){let w=0;const c=S.center;for(let y=c.y-24;y<=c.y+24;y++)for(let x=c.x-24;x<=c.x+24;x++)if(ter(x,y)===T_WATER)w++;S.fish={n:Math.min(600,w*3),max:Math.min(600,w*3)}}
+ if(!S.herds){S.herds=[];const c=S.center,cs=[];for(let y=c.y-36;y<=c.y+36;y++)for(let x=c.x-36;x<=c.x+36;x++){const d=Math.hypot(x-c.x,y-c.y);if(d<10||d>36)continue;if(ter(x,y)===T_FOREST&&walkC(x,y+1)&&hsh(x,y,77)<.05)cs.push([x,y+1])}
+  cs.sort((a,b)=>hsh(a[0],a[1],78)-hsh(b[0],b[1],78));for(const[x,y]of cs){if(S.herds.length>=6)break;if(S.herds.some(h=>Math.hypot(h.hx-x,h.hy-y)<9))continue;const boar=S.herds.length%3===2;S.herds.push({k:boar?'boar':'deer',x:x+.5,y:y+.5,hx:x+.5,hy:y+.5,n:boar?4:6,max:boar?6:9})}}}
+function rnBuild(){if(RN.src===TER&&RN.sc===S.center.x+','+S.center.y)return;RN.src=TER;RN.sc=S.center.x+','+S.center.y;for(const k in RN.list)RN.list[k]=[];RN.has.clear();const c=S.center,R=RN.R;
+ for(let y=Math.max(0,c.y-R);y<Math.min(MH,c.y+R);y++)for(let x=Math.max(0,c.x-R);x<Math.min(MW,c.x+R);x++){const k=rnKind(x,y);if(!k)continue;const i=y*MW+x;for(const q of k==='tb'?['t','b']:[k]){RN.list[q].push({k:q+i,q,x,y});RN.has.add(q+i)}}RN.ct=-99}
+const rnAmt=k=>{const v=S.rn.d[k];return v===undefined?RND[k[0]].max:v};
+function rnSet(k,a){const M=RND[k[0]].max;a=Math.max(0,Math.min(M,a));if(a>=M){delete S.rn.d[k];delete S.rn.z[k]}else{S.rn.d[k]=Math.round(a*100)/100;if(a<=0&&S.rn.z[k]===undefined)S.rn.z[k]=S.t}}
+function rnAnchors(j){const bt={woodcutter:'lumber',quarrier:'quarry',coppermin:'copper',tinmin:'tin'}[j];const o=bt?blds(bt).map(q=>({x:q.gx+q.s/2,y:q.gy+q.s/2,r:14})):[];if(!o.length){const h=hubT();o.push({x:h.x,y:h.y,r:20})}return o}
+function rnCands(j){const q=RNJ[j];if(!RN.cand[j]||S.t-RN.cand[j].t>12){const A=rnAnchors(j),L=[];for(const n of RN.list[q]){if(occ[n.y*MW+n.x])continue;let ok=0;for(const a of A)if(Math.abs(n.x+.5-a.x)+Math.abs(n.y+.5-a.y)<=a.r*1.3){ok=1;break}if(!ok||rnAmt(n.k)<=0)continue;L.push(n)}
+  for(const n of L){n.e=n.e||logi(n.x,n.y,1).eff;n.sc=-n.e+hsh(n.x,n.y,5)*.05}L.sort((a,b)=>a.sc-b.sc);RN.cand[j]={t:S.t,L:L.slice(0,16)}}return RN.cand[j].L}
+// take up to v units for job j; returns delivered units after haul-distance efficiency
+function rnTake(j,v){if(!S.rn)return v;const q=RNJ[j];if(!q)return v;
+ if(q==='h'){const h=hubT();const hs=S.herds.filter(x=>x.n>=1).sort((a,b)=>Math.hypot(a.x-h.x,a.y-h.y)-Math.hypot(b.x-h.x,b.y-h.y));const H=hs[0];if(!H){RN.cur[j]=[];return 0}const t=Math.min(v,(H.n-.6)*30);H.n-=t/30;RN.cur[j]=hs.slice(0,2);return t*logi(H.x|0,H.y|0,1).eff}
+ if(q==='f'){const t=Math.min(v,S.fish.n*5*.02);S.fish.n-=t/5;return t}
+ const L=rnCands(j);let got=0;const cur=[];for(const n of L){const a=rnAmt(n.k);if(a<=0)continue;if(v>1e-6){const t=Math.min(a,v);rnSet(n.k,a-t);v-=t;got+=t*n.e}if(cur.length<6)cur.push(n)}RN.cur[j]=cur;if(!cur.length)RN.cand[j]=null;if(q==='b'&&v>0)got+=v*.5;return got}// gatherers forage roots & greens at half rate when bushes are bare
+// regrowth / breeding, once per tick
+function rnTick(){if(!S.rn)return;const se=rnSeason(),bm=[1,1.4,.7,.08][se];
+ for(const k in S.rn.d){const q=k[0],M=RND[q].max,a=S.rn.d[k];if(q==='t'){const z=S.rn.z[k];if(z!==undefined&&S.t-z<500)continue;rnSet(k,a+M/1200)}else if(q==='b')rnSet(k,a+M/220*bm)}
+ for(const H of S.herds){if(H.n>=1.5)H.n=Math.min(H.max,H.n+.02*H.n*(1-H.n/H.max));else if(Math.random()<.0004)H.n=2}
+ const F=S.fish;if(F.max)F.n=Math.min(F.max,F.n+.01*Math.max(F.n,4)*(1-F.n/F.max))}
+// where a worker goes: next to a live node
+function rnStand(x,y){for(const[a,b]of[[0,0],[0,1],[1,0],[-1,0],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]])if(walkC(x+a,y+b)===1||walkC(x+a,y+b)>0&&!occ[(y+b)*MW+x+a])return{x:x+a+.5,y:y+b+.5};return null}
+const _workSpot0=workSpot;workSpot=function(a){const q=RNJ[a.role];if(q&&q!=='f'&&S.rn){const L=RN.cur[a.role]||[];if(q==='h'){const H=L[a.idx%Math.max(1,L.length)];if(H){const s=rnStand((H.x+Math.cos(a.idx*2.4)*2)|0,(H.y+Math.sin(a.idx*2.4)*2)|0);if(s)return s}}
+  else if(L.length){const n=L[a.idx%L.length];const s=rnStand(n.x,n.y);if(s){s.node=n.k;return s}}}return _workSpot0(a)};
+// production hook: replaces the flat job output with node-limited, haul-weighted output
+function rnJobOut(j,v){return RNJ[j]?rnTake(j,v):v}
+// ---- herds: roaming, fleeing hunters (visual + persisted centre) ----
+function rnHerdStep(dt){if(!S.herds)return;for(const H of S.herds){H.tt=(H.tt||0)-dt;let fx=0,fy=0,th=0;for(const a of agents){if(a.role!=='hunter')continue;const d=Math.hypot(a.x-H.x,a.y-H.y);if(d<4){fx+=(H.x-a.x)/(d+.1);fy+=(H.y-a.y)/(d+.1);th=1}}
+ if(th){H.tx=H.x+fx*3;H.ty=H.y+fy*3;H.flee=2}else if(H.tt<=0||H.tx===undefined){H.tt=12+Math.random()*18;H.tx=H.hx+(Math.random()-.5)*12;H.ty=H.hy+(Math.random()-.5)*10}
+ if(Math.hypot(H.tx-H.hx,H.ty-H.hy)>9){H.tx=H.hx+(H.tx-H.hx)*.6;H.ty=H.hy+(H.ty-H.hy)*.6}if(!walkC(H.tx|0,H.ty|0)){H.tx=H.x;H.ty=H.y}
+ H.flee=Math.max(0,(H.flee||0)-dt);const sp=(H.flee>0?1.6:.25)*dt,dx=H.tx-H.x,dy=H.ty-H.y,d=Math.hypot(dx,dy);if(d>.05){const m=Math.min(d,sp);H.x+=dx/d*m;H.y+=dy/d*m;H.dir=dx>0?1:-1}}}
+function rnHerdDraw(D,dt,now,inV){if(!S.herds)return;S.herds.forEach((H,hi)=>{let A=RN.anim.get(H);if(!A){A=[];RN.anim.set(H,A)}const n=Math.round(H.n);while(A.length<n)A.push({ox:(Math.random()-.5)*2.4,oy:(Math.random()-.5)*1.6,x:H.x,y:H.y,t:0,dir:1});A.length=n;
+ for(const c of A){c.t-=dt;if(c.t<=0){c.t=1+Math.random()*3;c.ox=(Math.random()-.5)*2.6;c.oy=(Math.random()-.5)*1.8}const tx=H.x+c.ox,ty=H.y+c.oy,dx=tx-c.x,dy=ty-c.y,d=Math.hypot(dx,dy),sp=(H.flee>0?2:.5)*dt;if(d>.03){c.x+=dx/d*Math.min(d,sp);c.y+=dy/d*Math.min(d,sp);c.dir=dx>0?1:-1}
+  if(!inV(c.x*TS,c.y*TS))continue;const cc={k:H.k,x:c.x,y:c.y,dir:c.dir};D.push({k:c.y*TS,f:()=>critDraw(cc,now)})}})}
+// ---- node-aware prop drawing: stumps, saplings, berries, depleting rocks ----
+function rnPropKey(pr){if(pr.rk!==undefined)return pr.rk;const x=pr.gx|0,y=pr.gy|0,i=y*MW+x;let k='';if((pr.k==='oak'||pr.k==='cypress'||pr.k==='olive')&&ter(x,y)===T_FOREST)k='t'+i;else if(pr.k==='bush')k='b'+i;else if(pr.k==='rock')k='s'+i;else if(pr.k==='cuore')k='c'+i;else if(pr.k==='snore')k='n'+i;if(k&&!RN.has.has(k))k='';return pr.rk=k}
+function rnDrawProp(pr,X,Y,sp,sw,big){const k=S.rn?rnPropKey(pr):'';if(!k){vx.drawImage(sp.c,X-24+sw,Y-24,48,48);return}const M=RND[k[0]].max,a=rnAmt(k),f=a/M,q=k[0];
+ if(q==='t'){if(a<=0||(S.rn.z[k]!==undefined&&S.t-S.rn.z[k]<500)){ell(vx,X+1,Y+2,5,3,'rgba(20,14,8,.3)');circ(vx,X,Y,4.2,'#8a6038',OUTL,.7);circ(vx,X,Y,2.6,'#c8a070');circ(vx,X,Y,1.2,null,'#8a6038',.5);for(let i=0;i<3;i++)circ(vx,X+5+i*2.5,Y+3-i,1.1,'#d8b880');return}
+  if(f<.6){const s=48*(.3+.7*f/.6);vx.drawImage(sp.c,X-s/2+sw,Y-s/2,s,s);return}vx.drawImage(sp.c,X-24+sw,Y-24,48,48);return}
+ if(q==='b'){vx.drawImage(sp.c,X-24,Y-24,48,48);const nb=Math.round(7*f),se=rnSeason();for(let i=0;i<nb;i++){const a2=i*2.4+X,r=3+(i%3)*1.6;circ(vx,X+Math.cos(a2)*r,Y-1+Math.sin(a2)*r*.7,1.15,se===2?'#6a2a7a':'#c8283a',null)}return}
+ if(a<=0){for(let i=0;i<5;i++)circ(vx,X-5+i*2.5,Y+1+((i*7)%3),1.2,q==='s'?'#8e887c':q==='c'?'#5a8a6a':'#8a9aa8');return}const s=48*(.45+.55*f);vx.drawImage(sp.c,X-s/2,Y-s/2,s,s)}
+// ---- inspect text ----
+function rnInfoAt(gx,gy){if(!S.rn)return null;const i=gy*MW+gx;for(const q of['t','b','s','c','n']){const k=q+i;if(!RN.has.has(k))continue;const D=RND[q],a=rnAmt(k);let st='';
+  if(q==='t')st=a<=0||(S.rn.z[k]!==undefined&&S.t-S.rn.z[k]<500)?'Stump — a sapling will sprout in '+Math.max(0,500-(S.t-(S.rn.z[k]||S.t)))+'s':a<D.max?'Regrowing sapling':'Mature';else if(q==='b')st=SEASONS[rnSeason()]+(rnSeason()===3?' — dormant, no regrowth':' — berries regrow');else st=a<=0?'Exhausted (finite deposit)':'Finite deposit';
+  return{h:D.n,t:(D.r==='food'?'Berries':D.r[0].toUpperCase()+D.r.slice(1))+': <b>'+Math.floor(a)+' / '+D.max+'</b><br>'+st+'<br><span class="small">Worked by: '+JOBS[D.job][0]+'s · haul efficiency '+Math.round(logi(gx,gy,1).eff*100)+'%</span>'}}
+ for(const H of S.herds||[])if(Math.hypot(H.x-gx-.5,H.y-gy-.5)<2.2)return{h:(H.k==='deer'?'Deer':'Boar')+' herd',t:'Animals: <b>'+Math.floor(H.n)+' / '+H.max+'</b><br>'+(H.n<1.5?'Overhunted — no breeding':H.n<H.max?'Breeding back':'Healthy')+'<br><span class="small">Hunted by Hunters; flees when they come close</span>'};
+ if(ter(gx,gy)===T_WATER&&S.fish)return{h:'Fishing waters',t:'Fish stock: <b>'+Math.floor(S.fish.n)+' / '+S.fish.max+'</b><br>'+(S.fish.n<S.fish.max*.3?'Overfished — recovering slowly':'Fish breed back over time')};return null}
 
 // ---- re-layout saves for true-scale buildings ----
 function relayoutTown(){genWorld(S.seed||7);const old=(S.bl||[]).slice();S.bl=[];rebuildOcc();roadSet=new Uint8Array(MW*MH);const hubT0=['campfire','granary','palace'];old.sort((a,b)=>(hubT0.includes(b.t)?1:0)-(hubT0.includes(a.t)?1:0));let lost=0;
