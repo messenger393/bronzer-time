@@ -1584,7 +1584,7 @@ function wmName(i){return SYL[(i*7)%SYL.length]+SYL[(i*13+5)%SYL.length].toLower
 function wmNat(id){const W=S.wm;if(id==='P')return{n:CIV[S.civ||'egypt'].n+' (you)',col:CIV[S.civ||'egypt'].acc};if(W.nat[id])return W.nat[id];return{n:'Unclaimed',col:'#888'}}
 function wmEdgeOK(a,b){const A=[a.x,a.y],B=[b.x,b.y];let cost=1,ok=true;WRIV.forEach((rv,ri)=>{for(let k=0;k<rv.pts.length-1;k++){const P=segX(A,B,rv.pts[k],rv.pts[k+1]);if(!P)continue;const dep=rv.dep[k],key=ri+':'+k;cost*=1.6;
   if(dep>=3&&!(S.wbr||[]).includes(key)&&!rv.fords.some(f=>Math.hypot(f[0]-P[0],f[1]-P[1])<30))ok=false}});return{ok,cost}}
-function wmGen(){const P=[];let id=0;for(let r=0;r<7;r++)for(let c=0;c<10;c++){const x=10+c*26+(wmR(r,c)-.5)*16+(r%2)*8,y=10+r*21+(wmR(c,r+9)-.5)*12;if(x>250||y>145)continue;P.push({id:id,x,y,n:wmName(id),own:null,gar:4+Math.floor(wmR(id,3)*8),res:['food','wood','stone','copper','tin'][Math.floor(wmR(id,4)*5)],terr:['plains','hills','forest','marsh','desert','plains'][Math.floor(wmR(id,5)*6)],fort:0,road:0,shrine:0,ctl:{},reg:-1});id++}
+function wmGen(){if(S.gen>=2)wgBuild();const P=S.gen>=2?wgSeeds():[];let id=0;if(!(S.gen>=2))for(let r=0;r<7;r++)for(let c=0;c<10;c++){const x=10+c*26+(wmR(r,c)-.5)*16+(r%2)*8,y=10+r*21+(wmR(c,r+9)-.5)*12;if(x>250||y>145)continue;P.push({id:id,x,y,n:wmName(id),own:null,gar:4+Math.floor(wmR(id,3)*8),res:['food','wood','stone','copper','tin'][Math.floor(wmR(id,4)*5)],terr:['plains','hills','forest','marsh','desert','plains'][Math.floor(wmR(id,5)*6)],fort:0,road:0,shrine:0,ctl:{},reg:-1});id++}
  const used=new Set();REG.forEach((g,i)=>{let b=null,bd=1e9;for(const p of P){if(used.has(p.id))continue;const d=Math.hypot(p.x-g.x,p.y-g.y);if(d<bd){bd=d;b=p}}if(b){used.add(b.id);b.reg=i;b.x=g.x;b.y=g.y;b.n=g.n;b.terr=g.terr;b.gar=enemyMen(i)}});
  let hp=null,hd=1e9;for(const p of P){if(p.reg>=0)continue;const d=Math.hypot(p.x-HOME.x,p.y-HOME.y);if(d<hd){hd=d;hp=p}}hp.x=HOME.x;hp.y=HOME.y;hp.home=1;hp.n='Our homeland';hp.own='P';hp.cap=1;hp.ctl={P:100};
  const ai=Object.keys(CIV).filter(k=>k!==(S.civ||'egypt')),nat={};const caps=[];
@@ -1594,7 +1594,7 @@ function wmGen(){const P=[];let id=0;for(let r=0;r<7;r++)for(let c=0;c<10;c++){c
  S.wm={v:1,prov:P,nat,rel:Object.fromEntries(ai.map(c=>[c,'peace'])),wars:[],tn,acc:0,tk:0};
  for(let k=0;k<6;k++){for(const c of ai){const mine=P.filter(p=>p.own===c);const cand=[];for(const m of mine)for(const q of wmAdj(m))if(nat[q.own]&&nat[q.own].tribe&&!q.reg>=0)cand.push(q);const q=cand[Math.floor(wmR(k,c.length+cand.length)*cand.length)];if(q&&k<3){q.own=c;q.ctl={[c]:70};q.gar=10}}}
  for(const i of S.won||[]){const p=P.find(p=>p.reg===i);if(p){p.own='P';p.ctl={P:80}}}wmCalc(true)}
-let WADJ=null;function wmAdj(p){if(!WADJ||WADJ.n!==S.wm.prov.length){WADJ={n:S.wm.prov.length,a:{}};const P=S.wm.prov;for(const a of P){WADJ.a[a.id]=P.filter(b=>b!==a&&Math.hypot(a.x-b.x,a.y-b.y)<36).map(b=>({b,e:wmEdgeOK(a,b)}))}}return(WADJ.a[p.id]||[]).filter(o=>o.e.ok).map(o=>o.b)}
+let WADJ=null;function wmAdj(p){if(!WADJ||WADJ.n!==S.wm.prov.length){WADJ={n:S.wm.prov.length,a:{}};const P=S.wm.prov;const RA=S.gen>=2?wgRaster(P,512,300).adj:null;for(const a of P){WADJ.a[a.id]=(RA?P.filter(b=>RA[a.id]&&RA[a.id].has(b.id)):P.filter(b=>b!==a&&Math.hypot(a.x-b.x,a.y-b.y)<36)).map(b=>({b,e:wmEdgeOK(a,b)}))}}return(WADJ.a[p.id]||[]).filter(o=>o.e.ok).map(o=>o.b)}
 function wmSrc(p){const W=S.wm;let s=10+p.gar*1.6+p.fort*25+p.shrine*12+(p.cap?45:0)+(p.home?30:0);if(p.own==='P'){s+=(S.hap||50)/5;if(p.home)s+=S.tier*10}return s}
 function wmCalc(init){const W=S.wm,P=W.prov;WADJ=null;wmAdj(P[0]);const field={};
  for(const n of['P',...Object.keys(W.nat)]){const src=P.filter(p=>p.own===n);if(!src.length)continue;const best=new Map();const q=src.map(p=>[p,wmSrc(p)]);for(const[p,v]of q)best.set(p.id,Math.max(best.get(p.id)||0,v));
@@ -1630,16 +1630,16 @@ function wmDefend(a,q){const N=S.wm.nat[a];const ar=[['spear',Math.ceil(6+N.str*
  save();bvStart(res,q.reg>=0?q.reg:0,a)}
 // player-facing map
 let WMSEL=null;function renderMapIfOpen(){if(cur==='map'&&$('drawer').classList.contains('open')&&!$('wmc'))return;if(cur==='map'&&$('wmc'))wmDraw($('wmc'))}
-function wmPix(c){const P=S.wm.prov,W=c.width,H=c.height,sx=WMW/W,sy=WMH/H;if(wmPix.k===P.length+'|'+W)return wmPix.d;const near=new Int16Array(W*H*3),wt=new Float32Array(W*H*3),own=new Int16Array(W*H);
+function wmPix(c){const P=S.wm.prov,W=c.width,H=c.height,sx=WMW/W,sy=WMH/H;if(S.gen>=2)return wgRaster(P,W,H);if(wmPix.k===P.length+'|'+W)return wmPix.d;const near=new Int16Array(W*H*3),wt=new Float32Array(W*H*3),own=new Int16Array(W*H);
  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const X=x*sx,Y=y*sy;let b=[[1e9,0],[1e9,0],[1e9,0]];const nz=(vnoise(X,Y,6,55)-.5)*90;for(let i=0;i<P.length;i++){const d=(P[i].x-X)**2+(P[i].y-Y)**2+nz;if(d<b[2][0]){b[2]=[d,i];b.sort((a,c)=>a[0]-c[0])}}const k=(y*W+x)*3;own[y*W+x]=b[0][1];let s=0;for(let j=0;j<3;j++){near[k+j]=b[j][1];const w=1/Math.pow(Math.max(1,b[j][0]-b[0][0]+8),1.6);wt[k+j]=w;s+=w}for(let j=0;j<3;j++)wt[k+j]/=s}
  wmPix.k=P.length+'|'+W;return wmPix.d={near,wt,own}}
 function wmDraw(c){const g=c.getContext('2d'),W=c.width,H=c.height,P=S.wm.prov,sx=W/WMW,sy=H/WMH;const D=wmPix(c);const img=g.createImageData(W,H),d=img.data;const cols={};const cc=n=>cols[n]||(cols[n]=hex2(wmNat(n).col));const coreOf=new Int32Array(W*H).fill(-1);
  const keys=['P',...Object.keys(S.wm.nat)],ki=Object.fromEntries(keys.map((k,i)=>[k,i]));
  if(!wmDraw.base||wmDraw.base.length!==W*H*3){const bs=new Uint8Array(W*H*3);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const X=x/sx,Y=y/sy,n=vnoise(X,Y,30,3)*.5+vnoise(X,Y,9,4)*.3+vnoise(X,Y,3,5)*.2,q=(y*W+x)*3;bs[q]=n>.62?150:n>.42?104:132;bs[q+1]=n>.62?146:n>.42?140:150;bs[q+2]=n>.62?120:n>.42?70:90}wmDraw.base=bs;
   const dn=new Float32Array(W*H);for(let y=0;y<H;y++)for(let x=0;x<W;x++)dn[y*W+x]=Math.min(.999,Math.max(0,(vnoise(x/sx,y/sy,2.2,17)-.5)*1.6+.5));wmDraw.dn=dn}
- const BS=wmDraw.base,DN=wmDraw.dn,NK=keys.length,PV=P.map(p=>Object.entries(p.ctl).map(([o,v])=>[ki[o]??-1,v]).filter(e=>e[0]>=0)),acc=new Float32Array(NK),CL=keys.map(k=>hex2(wmNat(k).col));
+ const BS=S.gen>=2?D.base:wmDraw.base,DN=wmDraw.dn,NK=keys.length,PV=P.map(p=>Object.entries(p.ctl).map(([o,v])=>[ki[o]??-1,v]).filter(e=>e[0]>=0)),acc=new Float32Array(NK),CL=keys.map(k=>hex2(wmNat(k).col));
  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,k=i*3;let R=BS[k],G2=BS[k+1],B=BS[k+2];
-  let tot=0,touched=[];for(let j=0;j<3;j++){const pv=PV[D.near[k+j]],w=D.wt[k+j];for(const[o,v]of pv){if(!acc[o])touched.push(o);acc[o]+=v*w;tot+=v*w}}
+  let tot=0,touched=[];for(let j=0;j<3;j++){const pv=PV[D.near[k+j]],w=D.wt[k+j];if(!pv)continue;for(const[o,v]of pv){if(!acc[o])touched.push(o);acc[o]+=v*w;tot+=v*w}}
   if(tot>4){let top=-1,tv=0;for(const o of touched)if(acc[o]>tv){tv=acc[o];top=o}const sh=tv/tot,A=Math.min(1,tv/40);let pick=top;
    if(sh<.7){let r=DN[i]*tot,a2=0;for(const o of touched){a2+=acc[o];if(r<=a2){pick=o;break}}}const C=CL[pick],core=sh>=.7&&A>.6,al=core?.6:(.25+.3*A)*(.55+.45*sh);R+=(C[0]-R)*al;G2+=(C[1]-G2)*al;B+=(C[2]-B)*al;coreOf[i]=core?top:-2-pick}
   for(const o of touched)acc[o]=0;
@@ -1652,7 +1652,7 @@ function wmDraw(c){const g=c.getContext('2d'),W=c.width,H=c.height,P=S.wm.prov,s
   if(WMSEL===p.id){g.strokeStyle='#fff';g.lineWidth=.6;g.beginPath();g.arc(p.x,p.y,6,0,6.3);g.stroke()}
   if(p.cap||p.home||p.reg>=0){g.font='bold 3.6px sans-serif';g.fillStyle='rgba(255,246,220,.95)';g.strokeStyle='rgba(20,12,6,.8)';g.lineWidth=.8;g.strokeText(p.n,p.x-p.n.length*.9,p.y-4.5);g.fillText(p.n,p.x-p.n.length*.9,p.y-4.5)}}
  g.restore()}
-function wmPick(c,e){const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*WMW,y=(e.clientY-r.top)/r.height*WMH;const D=wmPix(c),px=Math.floor((e.clientX-r.left)/r.width*c.width),py=Math.floor((e.clientY-r.top)/r.height*c.height);return S.wm.prov[D.own[py*c.width+px]]}
+function wmPick(c,e){const r=c.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*WMW,y=(e.clientY-r.top)/r.height*WMH;const D=wmPix(c),px=Math.floor((e.clientX-r.left)/r.width*c.width),py=Math.floor((e.clientY-r.top)/r.height*c.height);const o=D.own[py*c.width+px];if(o>=0)return S.wm.prov[o];let b=null,bd=1e9;for(const p of S.wm.prov){const d=(p.x-x)**2+(p.y-y)**2;if(d<bd){bd=d;b=p}}return b}
 function wmCtlTxt(p){const t=Object.values(p.ctl).reduce((a,b)=>a+b,0)||1;return Object.entries(p.ctl).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([n,v])=>'<span style="color:'+wmNat(n).col+'">■</span> '+wmNat(n).n+' '+Math.round(v/t*100)+'%').join('<br>')}
 function wmRenderTab(V){V.innerHTML='<h3>World</h3><div class="small">Zones of control: solid = core authority, faded/dithered = contested frontier. Tap a province.</div>';const c=document.createElement('canvas');c.id='wmc';c.width=512;c.height=300;c.style.cssText='width:100%;border-radius:6px;cursor:crosshair';V.appendChild(c);wmDraw(c);
  const tip=document.createElement('div');tip.className='small';tip.style.cssText='position:fixed;pointer-events:none;background:rgba(20,16,12,.92);border:1px solid #6a5434;padding:4px 6px;border-radius:4px;display:none;z-index:40';document.body.appendChild(tip);
@@ -1682,6 +1682,112 @@ const _fight2=fight;fight=function(i){const before=S.won.includes(i);_fight2(i);
 HOWN.blocked='not reachable (no route from our land)';
 const _mig2=migrate;migrate=function(){_mig2();if(!S.wm||!S.wm.prov)wmGen();else{WADJ=null;for(const p of S.wm.prov)if(p.reg>=REG.length)REG[p.reg]={n:p.n,terr:p.terr,form:'line',m:0,army:[],x:p.x,y:p.y,rw:'res',v:p.res,d:'Province ('+p.res+')'}}};
 setInterval(()=>{if(!S||!S.wm||BV||!spd||$('title').style.display!=='none')return;wmCheckCiv();S.wm.acc=(S.wm.acc||0)+spd;if(S.wm.acc>=20){S.wm.acc=0;wmTick()}},1000);
+
+// ================= NATURAL GENERATION v2 (S.gen>=2): FBM + domain warp, hydrology, biomes; terrain-following provinces =================
+const GLUT=(()=>{const a=new Float32Array(512);for(let k=0;k<256;k++){a[k*2]=Math.cos(k/256*6.2831853);a[k*2+1]=Math.sin(k/256*6.2831853)}return a})();
+function GNZ(x,y,s){const X=Math.floor(x),Y=Math.floor(y),fx=x-X,fy=y-Y,u=fx*fx*fx*(fx*(fx*6-15)+10),v=fy*fy*fy*(fy*(fy*6-15)+10);
+ const g=(i,j,dx,dy)=>{const k=((hsh(i,j,s)*256)|0)<<1;return GLUT[k]*dx+GLUT[k+1]*dy};const a=g(X,Y,fx,fy),b=g(X+1,Y,fx-1,fy),c=g(X,Y+1,fx,fy-1),e=g(X+1,Y+1,fx-1,fy-1);return(a+(b-a)*u+(c-a)*v+(a-b-c+e)*u*v)*1.5}
+function fbm2(x,y,s,o=5){let a=1,f=1,t=0,n=0;for(let k=0;k<o;k++){t+=a*GNZ(x*f+k*13.1,y*f-k*7.7,s+k*17);n+=a;a*=.5;f*=2.03}return t/n}
+function ridge2(x,y,s,o=4){let a=1,f=1,t=0,n=0;for(let k=0;k<o;k++){const v=1-Math.abs(GNZ(x*f+k*5.3,y*f,s+k*31));t+=a*v*v;n+=a;a*=.5;f*=2.1}return t/n}
+const sstep=(a,b,x)=>{const t=Math.max(0,Math.min(1,(x-a)/(b-a)));return t*t*(3-2*t)};
+function quant(arr,q){const a=Float32Array.from(arr).sort();return a[Math.max(0,Math.min(a.length-1,Math.floor(q*a.length)))]}
+// priority-flood depression filling + D8 steepest descent + flow accumulation
+function hydro(E,W,H,seedM,rain){const N=W*H,F=Float32Array.from(E),done=new Uint8Array(N),ord=new Int32Array(N);let on=0;
+ const hk=new Float32Array(N+1),hv=new Int32Array(N+1);let hn=0;
+ const push=(i,k)=>{let p=++hn;while(p>1&&hk[p>>1]>k){hk[p]=hk[p>>1];hv[p]=hv[p>>1];p>>=1}hk[p]=k;hv[p]=i};
+ const pop=()=>{const r=hv[1],lk=hk[hn],lv=hv[hn--];let p=1;for(;;){let c=p<<1;if(c>hn)break;if(c<hn&&hk[c+1]<hk[c])c++;if(hk[c]>=lk)break;hk[p]=hk[c];hv[p]=hv[c];p=c}hk[p]=lk;hv[p]=lv;return r};
+ for(let i=0;i<N;i++)if(seedM[i]){done[i]=1;push(i,F[i])}
+ const DX=[1,-1,0,0,1,1,-1,-1],DY=[0,0,1,-1,1,-1,1,-1];
+ while(hn){const i=pop();ord[on++]=i;const x=i%W,y=(i/W)|0;for(let d=0;d<8;d++){const xx=x+DX[d],yy=y+DY[d];if(xx<0||yy<0||xx>=W||yy>=H)continue;const j=yy*W+xx;if(done[j])continue;done[j]=1;if(F[j]<=F[i])F[j]=F[i]+1e-5;push(j,F[j])}}
+ const to=new Int32Array(N).fill(-1);for(let i=0;i<N;i++){if(seedM[i])continue;const x=i%W,y=(i/W)|0;let b=-1,bs=0;for(let d=0;d<8;d++){const xx=x+DX[d],yy=y+DY[d];if(xx<0||yy<0||xx>=W||yy>=H)continue;const j=yy*W+xx,sl=(F[i]-F[j])/(d<4?1:1.4142);if(sl>bs){bs=sl;b=j}}to[i]=b}
+ const acc=Float32Array.from(rain);for(let k=on-1;k>=0;k--){const i=ord[k];if(to[i]>=0)acc[to[i]]+=acc[i]}return{F,to,acc}}
+// river network -> smoothed meandering polylines [{pts:[[x,y,acc]..]}]
+function riverPaths(H2,W,H,isR,stopM,sd,minLen){const{to,acc}=H2,N=W*H,up=new Uint8Array(N);for(let i=0;i<N;i++)if(isR[i]&&to[i]>=0&&isR[to[i]])up[to[i]]=1;
+ const heads=[];for(let i=0;i<N;i++)if(isR[i]&&!up[i])heads.push(i);heads.sort((a,b)=>acc[b]-acc[a]);const vis=new Uint8Array(N),out=[];
+ for(const h of heads){let i=h;const p=[];while(i>=0){p.push([i%W+.5,((i/W)|0)+.5,acc[i]]);if(vis[i]||stopM[i])break;vis[i]=1;i=to[i]}if(p.length<minLen)continue;
+  let q=p;for(let it=0;it<2;it++){const r=[q[0]];for(let k=0;k<q.length-1;k++){const a=q[k],b=q[k+1];r.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25,a[2]],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75,b[2]])}r.push(q[q.length-1]);q=r}
+  let sl=0;const n=q.length,o=q.map(a=>a.slice());for(let k=1;k<n-1;k++){sl+=Math.hypot(q[k][0]-q[k-1][0],q[k][1]-q[k-1][1]);const tx=q[k+1][0]-q[k-1][0],ty=q[k+1][1]-q[k-1][1],L=Math.hypot(tx,ty)||1;const tap=Math.min(1,k/8,(n-1-k)/8),amp=(1.2+Math.min(2.5,Math.sqrt(q[k][2]/50)))*tap;const m=GNZ(sl*.09,out.length*3.7,sd+77)*amp;o[k][0]+=-ty/L*m;o[k][1]+=tx/L*m}
+  out.push({pts:o})}return out}
+
+function genWorld2(seed){const W=MW,H=MH,N=W*H,B=Object.assign({h:.65,f:.66},cX().biome||{});TER=new Uint8Array(N);const sd=(seed*7919+13)%100003;
+ const E=new Float32Array(N),M=new Float32Array(N),RG=new Float32Array(N);const va=hsh(seed,1,9)*6.283,th=hsh(seed,3,9)*6.283,vs=hsh(seed,2,9)<.5?1:-1,ct=Math.cos(th),st=Math.sin(th);
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,nx=x/W,ny=y/H;const wx=nx*2.6+.85*fbm2(nx*2+3.1,ny*2+1.7,sd+101,3),wy=ny*2.6+.85*fbm2(nx*2+8.3,ny*2+2.9,sd+202,3);
+  let e=.5+.6*fbm2(wx,wy,sd,5);const r=ridge2(wx*1.4+4,wy*1.4+9,sd+7,4);RG[i]=r;e+=(r-.55)*.5*sstep(.48,.7,e);
+  const ed=Math.min(x,y,W-1-x,H-1-y)/W,cn=.035*fbm2(nx*8,ny*8,sd+9,3);e-=Math.max(0,.06+cn-ed)*4;
+  const dx=x-START.x,dy=y-START.y,u=dx*ct+dy*st;let v=-dx*st+dy*ct-vs*16;v+=8*Math.sin(u/23+va)+6*fbm2(u/40,va,sd+55,2);const g=Math.exp(-v*v/70);e-=(.16+.07*u/W)*g;
+  const ds=Math.hypot(dx,dy),t=Math.max(0,1-ds/15);e=e*(1-t*t)+.56*t*t;E[i]=e;
+  M[i]=.5+.5*fbm2(nx*3.2+11,ny*3.2+5,sd+303,4)+(B.wet?.07:0)+.12*g}
+ const SL=.3,sea=new Uint8Array(N),rain=new Float32Array(N);for(let i=0;i<N;i++){const x=i%W,y=(i/W)|0;if(E[i]<SL||x===0||y===0||x===W-1||y===H-1)sea[i]=1;rain[i]=.3+Math.max(0,M[i])}
+ const HY=hydro(E,W,H,sea,rain);const land=[],landA=[];for(let i=0;i<N;i++)if(!sea[i]){land.push(E[i]);landA.push(HY.acc[i])}
+ const eH=quant(land,Math.max(.6,Math.min(.9,.8+(B.h-.65)*1.5))),eR=quant(land,.95),T=quant(landA,1-(B.wet?.03:.02));
+ for(let i=0;i<N;i++){if(sea[i]){TER[i]=T_WATER;continue}const x=i%W,y=(i/W)|0;if(HY.F[i]-E[i]>.014&&Math.hypot(x-START.x,y-START.y)>12)TER[i]=T_WATER}
+ const isR=new Uint8Array(N),stop=new Uint8Array(N);for(let i=0;i<N;i++){isR[i]=!sea[i]&&HY.acc[i]>=T?1:0;stop[i]=TER[i]===T_WATER?1:0}
+ const RP=riverPaths(HY,W,H,isR,stop,sd,10);
+ for(const rp of RP){const p=rp.pts;for(let k=0;k<p.length-1;k++){const a=p[k],b=p[k+1],L=Math.hypot(b[0]-a[0],b[1]-a[1]),n=Math.max(1,Math.ceil(L/.35));for(let s=0;s<=n;s++){const f=s/n,X=a[0]+(b[0]-a[0])*f,Y=a[1]+(b[1]-a[1])*f,w=Math.min(3.2,.5+.5*Math.sqrt(a[2]/T));const R=Math.ceil(w);
+   for(let yy=Math.floor(Y-R);yy<=Y+R;yy++)for(let xx=Math.floor(X-R);xx<=X+R;xx++){if(xx<0||yy<0||xx>=W||yy>=H)continue;if(Math.hypot(xx+.5-X,yy+.5-Y)>w)continue;if(Math.hypot(xx-START.x,yy-START.y)<8)continue;TER[yy*W+xx]=T_WATER}}}}
+ const fQ=quant(M.filter((_,i)=>!sea[i]),1-Math.max(.12,Math.min(.38,.25-(B.f-.66)*2))),aQ=B.arid?quant(M.filter((_,i)=>!sea[i]),.14):-9;
+ for(let i=0;i<N;i++){if(TER[i]===T_WATER)continue;const x=i%W,y=(i/W)|0,e=E[i];let t=T_GRASS;
+  if(e>eH){t=(e>eR&&RG[i]>.62)||GNZ(x/4.3,y/4.3,sd+21)>.5?T_ROCK:T_HILL;if(RG[i]>.6){if(GNZ(x/5,y/5,sd+5)>.42)t=T_CU;else if(GNZ(x/5,y/5,sd+6)>.5)t=T_SN}}
+  else{const fm=M[i]+.2*fbm2(x/9,y/9,sd+404,3);if(fm>fQ||(fm>fQ-.06&&hsh(x,y,sd)<.16))t=T_FOREST;else if(B.arid&&M[i]+.08*GNZ(x/12,y/12,sd+8)<aQ)t=T_SAND}
+  TER[i]=t}
+ const D=new Uint8Array(N).fill(9),q=[];for(let i=0;i<N;i++)if(TER[i]===T_WATER){D[i]=0;q.push(i)}for(let h=0;h<q.length;h++){const i=q[h];if(D[i]>=3)continue;const x=i%W,y=(i/W)|0;for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1]]){const xx=x+a,yy=y+b;if(xx<0||yy<0||xx>=W||yy>=H)continue;const j=yy*W+xx;if(D[j]>D[i]+1){D[j]=D[i]+1;q.push(j)}}}
+ for(let i=0;i<N;i++){const t=TER[i];if(t===T_WATER||t===T_ROCK||t===T_CU||t===T_SN)continue;const x=i%W,y=(i/W)|0,c=E[i]<SL+.05,nz=hsh(x,y,sd+3)+.25*GNZ(x/3,y/3,sd+31);if(D[i]===1&&nz<(c?.85:.4)||D[i]===2&&c&&nz<.3)TER[i]=T_SAND}
+ for(let y=START.y-10;y<=START.y+10;y++)for(let x=START.x-10;x<=START.x+10;x++){const d=Math.hypot(x-START.x,(y-START.y)*1.1)+2.5*GNZ(x/3,y/3,sd+61);const t=TER[y*W+x];if(d<8&&t!==T_WATER&&t!==T_SAND)TER[y*W+x]=T_GRASS}
+ const blob=(cx,cy,r,t)=>{for(let y=cy-r-2;y<=cy+r+2;y++)for(let x=cx-r-2;x<=cx+r+2;x++){if(x<0||y<0||x>=W||y>=H)continue;const i=y*W+x;if(TER[i]===T_WATER||TER[i]===T_SAND)continue;const d=Math.hypot(x-cx,y-cy)+1.4*GNZ(x/2.2,y/2.2,sd+t*13);if(d<=r+.3)TER[i]=(t===T_FOREST||hsh(x,y,t)<.75)?t:T_HILL;else if(t===T_FOREST&&d<r+1.6&&hsh(x,y,sd+t)<.25)TER[i]=T_FOREST}};
+ blob(START.x-7,START.y-2,3,T_FOREST);blob(START.x+5,START.y-9,3,T_FOREST);blob(START.x+10,START.y+1,2,T_ROCK);blob(START.x-6,START.y-11,2,T_CU);blob(START.x+17,START.y-12,2,T_SN);blob(START.x-15,START.y+5,4,T_FOREST)}
+const _genWorld1=genWorld;genWorld=function(seed){if(!(S&&S.gen>=2))return _genWorld1(seed);const k='g2:'+seed+':'+(S.civ||'')+':1';
+ try{const c=JSON.parse(localStorage.getItem('bronzeAndBloodTer')||'null');if(c&&c.k===k){const bin=atob(c.d),T=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)T[i]=bin.charCodeAt(i);if(T.length===MW*MH){TER=T;return}}}catch(e){}
+ genWorld2(seed);try{let s='';for(let i=0;i<TER.length;i+=8192)s+=String.fromCharCode.apply(null,TER.subarray(i,i+8192));localStorage.setItem('bronzeAndBloodTer',JSON.stringify({k,d:btoa(s)}))}catch(e){}};
+const _fresh1=fresh;fresh=function(){const s=_fresh1();s.gen=2;s.seed=1+Math.floor(Math.random()*999983);return s};
+
+// ---- world map v2 ----
+const WRIV0=WRIV.map(r=>r);let WG=null;
+function wgBuild(){const seed=(S.seed||7)+911,sd=(seed*104729+7)%100019,W=WMW,H=WMH,N=W*H;if(WG&&WG.seed===seed)return WG;
+ const E=new Float32Array(N),M=new Float32Array(N),RG=new Float32Array(N);const ph=hsh(seed,4,4)*6.283,dx0=Math.cos(ph),dy0=Math.sin(ph);const anch=[HOME,...REG.slice(0,5)];
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){const i=y*W+x,nx=x/W,ny=y/W;const wx=nx*3+.9*fbm2(nx*2.5+1,ny*2.5+7,sd+11,3),wy=ny*3+.9*fbm2(nx*2.5+5,ny*2.5+2,sd+12,3);
+  let e=.5+.6*fbm2(wx,wy,sd,6);const r=ridge2(wx*1.5+3,wy*1.5+1,sd+5,5);RG[i]=r;e+=(r-.5)*.55*sstep(.46,.72,e);
+  const pr=(nx-.5)*dx0+(y/H-.5)*dy0;e-=.32*sstep(.18,.5,pr+.12*fbm2(nx*4,ny*4,sd+3,3));const ed=Math.min(x,y,W-1-x,H-1-y)/W;e-=Math.max(0,.035-ed)*5;
+  for(const a of anch){const d=Math.hypot(x-a.x,y-a.y);if(d<12){const t=1-d/12;e=Math.max(e,e*(1-t)+(.5)*t)}}
+  E[i]=e;M[i]=.52+.5*fbm2(nx*3.5+9,ny*3.5+4,sd+303,4)-.28*sstep(.62,1,y/H+.15*fbm2(nx*3,ny*3,sd+404,2))}
+ const SL=.3,sea=new Uint8Array(N),rain=new Float32Array(N);for(let i=0;i<N;i++){const x=i%W,y=(i/W)|0;if(E[i]<SL||x===0||y===0||x===W-1||y===H-1&&E[i]<SL+.05)sea[i]=1;rain[i]=Math.max(.05,M[i])}
+ const HY=hydro(E,W,H,sea,rain),la=[],le=[];for(let i=0;i<N;i++)if(!sea[i]){la.push(HY.acc[i]);le.push(E[i])}const T=quant(la,.985),eM=quant(le,.88),eH=quant(le,.72);
+ const lake=new Uint8Array(N);for(let i=0;i<N;i++)if(!sea[i]&&HY.F[i]-E[i]>.012)lake[i]=1;
+ const isR=new Uint8Array(N),stop=new Uint8Array(N);for(let i=0;i<N;i++){isR[i]=!sea[i]&&HY.acc[i]>=T?1:0;stop[i]=sea[i]||lake[i]}
+ const RP=riverPaths(HY,W,H,isR,stop,sd,14).slice(0,12),riv=[];let ni=0;
+ RP.forEach((rp,ri)=>{const p=rp.pts.filter((_,k)=>k%3===0||k===rp.pts.length-1);const dep=[],fords=[];let al=0;for(let k=0;k<p.length-1;k++){const a=p[k][2];dep.push(a>=T*5?3:a>=T*2?2:1);const L=Math.hypot(p[k+1][0]-p[k][0],p[k+1][1]-p[k][1]);al+=L;if(dep[k]>=3&&al>55){al=0;fords.push([(p[k][0]+p[k+1][0])/2,(p[k][1]+p[k+1][1])/2])}}
+  if(!dep.some(d=>d>=2)&&ri>3)return;riv.push({n:ri===0?'Great River':wmName(40+ni++)+' River',pts:p.map(a=>[a[0],a[1]]),dep,fords})});
+ WG={seed,E,M,RG,sea,lake,SL,eM,eH,riv,acc:HY.acc,T};WRIV.length=0;riv.forEach(r=>WRIV.push(r));return WG}
+function wgBiome(i){const G=WG;if(G.sea[i])return'sea';if(G.lake[i])return'lake';const e=G.E[i],m=G.M[i];if(e>G.eM)return'mount';if(e>G.eH)return'hills';if(m<.34)return'desert';if(G.acc[i]>G.T*.4&&e<G.SL+.1&&m>.55)return'marsh';if(m>.62)return'forest';return'plains'}
+function wgSeeds(){const G=wgBuild(),W=WMW,H=WMH,anch=[HOME,...REG],P=anch.map(a=>({x:a.x,y:a.y,fix:1}));const landOK=(x,y)=>{const i=(y|0)*W+(x|0);return x>=3&&y>=3&&x<W-3&&y<H-3&&!G.sea[i]&&!G.lake[i]};
+ let k=0;while(P.length<70&&k<5000){let best=null,bd=-1;for(let c=0;c<24;c++){k++;const x=3+hsh(k,c,G.seed)*(W-6),y=3+hsh(c,k,G.seed+1)*(H-6);if(!landOK(x,y))continue;let d=1e9;for(const p of P)d=Math.min(d,(p.x-x)**2+(p.y-y)**2);if(d>bd){bd=d;best={x,y}}}if(best)P.push(best)}
+ for(let it=0;it<2;it++){const sx=new Float32Array(P.length),sy=new Float32Array(P.length),sn=new Float32Array(P.length);for(let y=0;y<H;y+=2)for(let x=0;x<W;x+=2){if(!landOK(x,y))continue;let b=0,bd=1e9;for(let j=0;j<P.length;j++){const d=(P[j].x-x)**2+(P[j].y-y)**2;if(d<bd){bd=d;b=j}}sx[b]+=x;sy[b]+=y;sn[b]++}
+  P.forEach((p,j)=>{if(p.fix||!sn[j])return;const nx=sx[j]/sn[j],ny=sy[j]/sn[j];if(landOK(nx,ny)){p.x=nx;p.y=ny}})}
+ return P.map((p,id)=>{const i=(p.y|0)*W+(p.x|0),b=wgBiome(i),terr=b==='mount'||b==='hills'?'hills':b==='desert'?'desert':b==='forest'?'forest':b==='marsh'?'marsh':'plains';
+  const res=terr==='hills'?(hsh(id,2,G.seed)<.4?'copper':hsh(id,3,G.seed)<.5?'tin':'stone'):terr==='forest'?'wood':terr==='desert'?'stone':'food';
+  return{id,x:p.x,y:p.y,n:wmName(id),own:null,gar:4+Math.floor(wmR(id,3)*8),res,terr,fort:0,road:0,shrine:0,ctl:{},reg:-1}})}
+// terrain-aware ownership raster: multi-label Dijkstra (3 nearest by travel cost; rivers & ridges are costly to cross, sea impassable)
+function wgRaster(P,FW,FH){const G=wgBuild(),key=P.map(p=>(p.x|0)+','+(p.y|0)).join(';')+'|'+FW;if(G.rk===key)return G.rd;const CW=Math.ceil(FW/2),CH=Math.ceil(FH/2),N=CW*CH,sx=WMW/CW,sy=WMH/CH;
+ const cost=new Float32Array(N),rv=new Uint8Array(N);const c2=document.createElement('canvas');c2.width=CW;c2.height=CH;const g=c2.getContext('2d');g.scale(1/sx,1/sy);g.strokeStyle='#fff';g.lineCap='round';g.lineJoin='round';for(const r of G.riv)for(let k=0;k<r.pts.length-1;k++){g.lineWidth=r.dep[k]*.7+.6;g.beginPath();g.moveTo(r.pts[k][0],r.pts[k][1]);g.lineTo(r.pts[k+1][0],r.pts[k+1][1]);g.stroke()}
+ const rd=g.getImageData(0,0,CW,CH).data;for(let y=0;y<CH;y++)for(let x=0;x<CW;x++){const i=y*CW+x,w=((y*sy)|0)*WMW+((x*sx)|0);if(G.sea[w]||G.lake[w]){cost[i]=-1;continue}rv[i]=rd[i*4]>100?1:0;cost[i]=1+Math.max(0,G.RG[w]-.55)*6*sstep(G.eH-.05,G.eM,G.E[w])+(rv[i]?14:0)}
+ const K=3,lab=new Int16Array(N*K).fill(-1),dist=new Float32Array(N*K).fill(1e9),cntL=new Uint8Array(N);
+ const hk=[],hv=[];const push=(k,v)=>{hk.push(k);hv.push(v);let p=hk.length-1;while(p>0){const q=(p-1)>>1;if(hk[q]<=k)break;hk[p]=hk[q];hv[p]=hv[q];p=q}hk[p]=k;hv[p]=v};
+ const pop=()=>{const rv0=hv[0],rk=hk[0],lk=hk.pop(),lv=hv.pop();if(hk.length){let p=0;for(;;){let c=2*p+1;if(c>=hk.length)break;if(c+1<hk.length&&hk[c+1]<hk[c])c++;if(hk[c]>=lk)break;hk[p]=hk[c];hv[p]=hv[c];p=c}hk[p]=lk;hv[p]=lv}return[rk,rv0]};
+ P.forEach((p,j)=>{let x=Math.round(p.x/sx),y=Math.round(p.y/sy);x=Math.max(0,Math.min(CW-1,x));y=Math.max(0,Math.min(CH-1,y));push(0,(y*CW+x)*128+j)});
+ const DX=[1,-1,0,0,1,1,-1,-1],DY=[0,0,1,-1,1,-1,1,-1];
+ while(hk.length){const[d,v]=pop(),i=Math.floor(v/128),j=v%128;if(cntL[i]>=K)continue;let dup=false;for(let t=0;t<cntL[i];t++)if(lab[i*K+t]===j){dup=true;break}if(dup)continue;lab[i*K+cntL[i]]=j;dist[i*K+cntL[i]]=d;cntL[i]++;
+  const x=i%CW,y=(i/CW)|0;for(let k=0;k<8;k++){const xx=x+DX[k],yy=y+DY[k];if(xx<0||yy<0||xx>=CW||yy>=CH)continue;const n=yy*CW+xx;if(cost[n]<0||cntL[n]>=K)continue;push(d+(k<4?1:1.4142)*(cost[n]+cost[i])*.5,n*128+j)}}
+ const near=new Int16Array(N*3).fill(-1),wt=new Float32Array(N*3),own=new Int16Array(N).fill(-1);
+ for(let i=0;i<N;i++){if(!cntL[i])continue;own[i]=lab[i*K];let s=0;for(let t=0;t<cntL[i];t++){near[i*3+t]=lab[i*K+t];const w=1/Math.pow(Math.max(1,(dist[i*K+t]-dist[i*K])*3+8),1.6);wt[i*3+t]=w;s+=w}for(let t=0;t<cntL[i];t++)wt[i*3+t]/=s}
+ const adj={};P.forEach(p=>adj[p.id]=new Set());for(let y=0;y<CH;y++)for(let x=0;x<CW;x++){const a=own[y*CW+x];if(a<0)continue;for(const[n,ok]of[[y*CW+x+1,x+1<CW],[(y+1)*CW+x,y+1<CH]]){if(!ok)continue;const b=own[n];if(b>=0&&b!==a){adj[P[a].id].add(P[b].id);adj[P[b].id].add(P[a].id)}}}
+ const FN=FW*FH,fnear=new Int16Array(FN*3),fwt=new Float32Array(FN*3),fown=new Int16Array(FN);for(let y=0;y<FH;y++)for(let x=0;x<FW;x++){const f=y*FW+x,h=Math.min(CH-1,y>>1)*CW+Math.min(CW-1,x>>1);fown[f]=own[h];for(let t=0;t<3;t++){fnear[f*3+t]=near[h*3+t];fwt[f*3+t]=wt[h*3+t]}}
+ const fsx=WMW/FW,fsy=WMH/FH;const Eb=(X,Y)=>{X=Math.max(0,Math.min(WMW-1.001,X));Y=Math.max(0,Math.min(WMH-1.001,Y));const x0=X|0,y0=Y|0,fx=X-x0,fy=Y-y0,i=y0*WMW+x0;return G.E[i]*(1-fx)*(1-fy)+G.E[i+1]*fx*(1-fy)+G.E[i+WMW]*(1-fx)*fy+G.E[i+WMW+1]*fx*fy};
+ const base=new Uint8Array(FN*3),C={sea:[44,78,112],lake:[60,104,140],mount:[150,140,124],hills:[132,140,92],desert:[208,184,124],marsh:[96,124,92],forest:[66,104,52],plains:[134,164,88]};
+ for(let y=0;y<FH;y++)for(let x=0;x<FW;x++){const i=y*FW+x,X=x*fsx,Y=y*fsy,w=(Y|0)*WMW+(X|0),b=wgBiome(w);let c=C[b].slice();const e=Eb(X,Y);
+  if(b==='sea'){const t=Math.max(0,Math.min(1,(G.SL-e)*5));c=[c[0]+(1-t)*30,c[1]+(1-t)*36,c[2]+(1-t)*30]}else if(b!=='lake'){if(e<G.SL+.012)c=[214,200,150];if(b==='plains'||b==='forest'){const m=G.M[w];c=c.map((v,k)=>v+(m-.5)*[-20,8,-10][k])}
+   const sh=1+(Eb(X-.6,Y-.6)-Eb(X+.6,Y+.6))*4+GNZ(X*1.7,Y*1.7,99)*.04;c=c.map(v=>v*Math.max(.7,Math.min(1.3,sh)))}
+  if(rv[Math.min(CH-1,y>>1)*CW+Math.min(CW-1,x>>1)]&&0)c=[90,150,190];base[i*3]=c[0];base[i*3+1]=c[1];base[i*3+2]=c[2]}
+ G.rk=key;G.rd={near:fnear,wt:fwt,own:fown,adj,base};return G.rd}
+const _mig3=migrate;migrate=function(){if(S&&S.gen>=2)wgBuild();else{WG=null;WRIV.length=0;WRIV0.forEach(r=>WRIV.push(r))}_mig3()};
 
 // ================= LAUNCH v2: high-detail bas-relief, WebGL lighting from off-screen torches =================
 const RV={TW:4096,TH:1024,ready:false,run:false,gl:null,emb:[],off:[0,1700],t0:performance.now()};
