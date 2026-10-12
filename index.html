@@ -27,6 +27,7 @@ button.pri{background:linear-gradient(180deg,#c88c34,#9a6420);border-color:#e0b0
 #tabs button .ico{width:20px;height:20px}#tabs button.sel{background:rgba(216,162,74,.16);border-color:rgba(216,162,74,.45)}
 #drawer{position:fixed;z-index:5;left:0;right:0;bottom:58px;max-height:58vh;overflow:auto;border-radius:12px 12px 0 0;padding:0 12px 12px;transform:translateY(105%);opacity:0;transition:transform .25s cubic-bezier(.2,.8,.2,1),opacity .2s;pointer-events:none}
 #drawer.open{transform:none;opacity:1;pointer-events:auto}
+body.placing #drawer,body.placing #tabs,body.placing #insp{display:none!important}#pbar{display:none;position:fixed;z-index:6;left:8px;right:8px;bottom:calc(10px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(24,22,20,.94);border:1px solid var(--bd2);touch-action:manipulation}#pbar .pn{flex:1;min-width:0;font-size:12px}#pbar .pi{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#pbar .pe{color:#ff9070}#pbar button{min-height:40px;padding:0 12px}
 .dh{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:10px 0 6px;background:linear-gradient(180deg,rgba(32,29,26,.98),rgba(32,29,26,.85));z-index:1}.dh span{font-variant:small-caps;letter-spacing:.08em;font-size:15px;color:#f2e6cc}
 @media(min-width:900px){#drawer{top:52px;bottom:58px;left:8px;right:auto;width:400px;max-height:none;border-radius:10px;transform:translateX(-110%)}#drawer.open{transform:none}body.dopen #insp{left:418px}}
 .cats{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}.cat{display:flex;align-items:center;gap:5px;font-size:11px}.cat .ico{width:16px;height:16px}
@@ -49,7 +50,7 @@ table.wt{width:100%;border-collapse:collapse;font-size:12px}.wt th{font-variant:
 #mm{position:fixed;z-index:4;right:10px;bottom:66px;width:min(28vw,170px);height:auto;aspect-ratio:1;border-radius:8px;border:1px solid var(--bd2);box-shadow:0 6px 16px rgba(0,0,0,.5);touch-action:none}
 #zoomb{position:fixed;z-index:4;right:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:4px;padding:4px;border-radius:10px}#zoomb button{min-width:36px;min-height:36px;margin:0;padding:0;font-size:16px}
 #alerts{position:fixed;z-index:4;right:10px;top:64px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;max-width:min(60vw,280px)}
-.al,.letter{font-size:11px;padding:5px 9px;border-radius:6px;background:rgba(24,22,20,.86);border:1px solid var(--bd);border-left:3px solid var(--warn);cursor:pointer;animation:slin .3s ease-out;transition:transform .12s}.al:hover,.letter:hover{transform:translateX(-3px)}
+.al,.letter{font-size:11px;padding:5px 6px 5px 9px;border-radius:6px;background:rgba(24,22,20,.86);border:1px solid var(--bd);border-left:3px solid var(--warn);cursor:pointer;transition:transform .12s;display:flex;align-items:center;gap:6px}.anew{animation:slin .3s ease-out,alfl .9s ease-out 1}@keyframes alfl{0%,40%{box-shadow:0 0 0 2px rgba(240,200,120,.7)}100%{box-shadow:none}}.alx{background:none;border:0;color:var(--mu);font-size:14px;line-height:1;padding:0 2px;cursor:pointer;margin-left:2px}.alx:hover{color:#fff}.alc{color:var(--ac);font-weight:700}.lic{display:inline-flex}.al.dall{border-left-color:var(--mu);color:var(--mu);font-size:10px;padding:3px 8px}.al:hover,.letter:hover{transform:translateX(-3px)}
 .al.bad{border-left-color:var(--bad)}.al.info{border-left-color:#6aa0d8}
 .letter{display:flex;align-items:center;gap:6px;border-left-width:4px;font-weight:600}.letter.good{border-left-color:var(--ok)}.letter.bad{border-left-color:var(--bad)}.letter.info{border-left-color:#6aa0d8}.letter .ico{width:16px;height:16px}
 @keyframes slin{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
@@ -76,7 +77,7 @@ body.battle #tabs,body.battle #alerts,body.battle #insp,body.battle #drawer,body
 <div id="title"><canvas id="tc" width="256" height="160"></canvas><button id="start" class="pri">▶ Play</button><button id="reset">New Game</button></div>
 <canvas id="vc" width="400" height="264"></canvas>
 <div id="top" class="glass"><div id="tinfo"><span id="tier"></span><span id="day"></span></div><div id="res"></div><span id="pop" hidden></span><div id="speed"><button data-s="0" title="Pause (Space)">⏸</button><button data-s="1" title="Normal (1)">▶</button><button data-s="2" title="Fast (2)">▶▶</button><button data-s="3" title="Fastest (3)">▶▶▶</button></div></div>
-<div id="alerts"></div><div id="evbar"></div>
+<div id="pbar"></div><div id="alerts"></div><div id="evbar"></div>
 <canvas id="mm" width="128" height="128"></canvas>
 <div id="zoomb" class="glass"><button id="zin" title="Zoom in">+</button><button id="zout" title="Zoom out">−</button><button id="heatb" title="Congestion overlay"></button><button id="beautb" title="Beauty overlay">✿</button></div>
 <div id="insp" class="glass"></div>
@@ -339,7 +340,7 @@ function log(m){S.log.unshift(m);S.log.length=Math.min(S.log.length,30);renderLo
 const cnt=t=>S.bl.reduce((a,b,i)=>a+(b.t===t&&on(i)?b.l:0),0);
 const housing=()=>S.bl.reduce((a,b,i)=>a+(b.t==='house'?(on(i)?b.l*5+(b.l>=4?b.l*2:0)+Math.max(0,Math.min(b.l*3,Math.floor((DES[i]||0)/2))):Math.ceil(b.l*2.5)):b.t==='tent'?b.l*3:b.t==='palace'?12:0),0)+2*(S.tier+1);
 const cap=()=>250+cnt('granary')*250+cnt('stockpile')*100+S.tier*250;
-function jobCap(j){for(const k in BLD)if(BLD[k].job===j)return cnt(k)*2;if(j==='scribe')return Math.max(0,S.tier-1)*2+cnt('temple');return S.extraJobs[j]?4+S.tier*2:0}
+const BLD_JOB={};function jobCap(j){if(!jobCap.i){jobCap.i=1;for(const k in BLD)if(BLD[k].job)BLD_JOB[BLD[k].job]=1}for(const k in BLD)if(BLD[k].job===j)return cnt(k)*2;if(j==='scribe')return Math.max(0,S.tier-1)*2+cnt('temple');return S.extraJobs[j]?4+S.tier*2:0}
 const employed=()=>Object.values(S.jobs).reduce((a,b)=>a+b,0);
 function bcost(k,l){const m=(S.tech.masonry?.75:1)*Math.pow(1.6,l);const o={};for(const r in BLD[k].cost)o[r]=Math.ceil(BLD[k].cost[r]*m);return o}
 const can=c=>Object.keys(c).every(r=>S.res[r]>=c[r]);
@@ -348,7 +349,7 @@ const cstr=c=>Object.keys(c).map(r=>c[r]+' '+r).join(', ');
 function tick(){if(BV)return;if(S.autoWork&&S.t%3===0)autoAssign();
  const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod*hapMul();
  const p={food:0,wood:0,stone:0,copper:0,tin:0,bronze:0};
- for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult;if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}p[J[1]]+=v}
+ for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}p[J[1]]+=v}
  for(const r in S.bonus)p[r]*=1+S.bonus[r];{const X=cX(),E=X.eco||{};for(const r in E)if(p[r]>0)p[r]*=1+E[r];if(X.purple)p.bronze+=(S.jobs.merchant||0)*X.purple}
  const sm=S.jobs.smith||0;if(sm){let n=Math.min(sm*0.3,S.res.copper/1,S.res.tin/0.5);S.res.copper-=n;S.res.tin-=n*.5;p.bronze+=n*mult*(1+(S.bonus.bronze||0))}
  let up=S.pop*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up*RATION[S.ration||'normal'].up;
@@ -369,7 +370,7 @@ function btn(txt,fn,dis,cls){const b=document.createElement('button');b.textCont
 function row(parent,label,sub,...btns){const r=document.createElement('div');r.className='row';const l=document.createElement('div');l.innerHTML=label+(sub?'<div class="small">'+sub+'</div>':'');r.appendChild(l);const b=document.createElement('div');btns.forEach(x=>b.appendChild(x));r.appendChild(b);parent.appendChild(r);return r}
 function bldAvail(k){const B=BLD[k];if(B.tier>S.tier)return'Needs '+TIERS[B.tier].n;if(B.tech&&!S.tech[B.tech])return'Needs '+TECH[B.tech].n;if(B.req&&!S.won.some(i=>REG[i]&&REG[i].v===B.req))return'Conquer Tin Hills';return''}
 function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderArchitect(V);return}if(cur==='jobs'){renderWork(V);renderPolicy(V);return}if(cur==='log'){V.innerHTML='<div id="loglist"></div>';renderLog();return}
- if(cur==='build'){V.innerHTML='<h3>Build</h3><div class="small">Tap Place, then tap a spot (tap again to confirm). Glowing tiles = building radius ('+RAD[S.tier]+'). Tap a building to upgrade.</div>';
+ if(cur==='build'){V.innerHTML='<h3>Build</h3><div class="small">Tap Place, then tap a spot (tap again to confirm). Build anywhere — distant buildings lose output to walking time. Tap a building to upgrade.</div>';
   V.appendChild(btn('📍 Jump to settlement',()=>centerOn(S.center.x,S.center.y)));
   if(S.tier>=1){const rm=roadMax(),rv=document.createElement('div');rv.className='small';rv.innerHTML='<b>Roads</b> — buildings must touch a road to work. Drag on the map to draw; tap Done to pan again.';V.appendChild(rv);
    [[1,'🟫 Dirt path (free)'],[2,'🟧 Packed road (1 stone)'],[3,'⬜ Paved road (3 stone)']].forEach(([l,n])=>{if(l<=rm)V.appendChild(btn(n,()=>{placing='__road';roadPick=l;ghost=null},0,placing==='__road'&&roadPick===l?'sel':''))});
@@ -463,8 +464,12 @@ const RAD=[5,9,13,18,24];
 function rebuildOcc(){occ=new Int16Array(MW*MH);S.bl.forEach((b,i)=>{const s=bsz(b.t);for(let y=b.y;y<b.y+s;y++)for(let x=b.x;x<b.x+s;x++)if(x>=0&&y>=0&&x<MW&&y<MH)occ[y*MW+x]=i+1})}
 const nearT=(x,y,s,types,d)=>{for(let yy=y-d;yy<y+s+d;yy++)for(let xx=x-d;xx<x+s+d;xx++)if(types.includes(ter(xx,yy)))return true;return false};
 const NEAR={lumber:[[T_FOREST],3,'forest'],lodge:[[T_FOREST],4,'forest'],quarry:[[T_ROCK],2,'rock'],copper:[[T_CU],2,'copper ore'],tin:[[T_SN],2,'tin ore']};
+const STORES={stockpile:1,granary:1,market:1};
+function logi(x,y,s){const cx=x+s/2,cy=y+s/2;const h=hubT();let d=Math.abs(cx-h.x)+Math.abs(cy-h.y);for(const b of S.bl)if(STORES[b.t]){const z=bsz(b.t);d=Math.min(d,Math.abs(cx-b.x-z/2)+Math.abs(cy-b.y-z/2))}d=Math.max(0,d-s/2);const sec=d*2/1.6;const eff=Math.max(.3,Math.min(1,1/(1+Math.max(0,d-8)/16)));return{d:Math.round(d),sec:Math.round(sec),eff}}
+function effCol(e){return e>=.9?'#9fe07a':e>=.65?'#e8d070':'#ff9070'}
+function jobEff(j){let n=0,a=0;for(const b of S.bl)if(BLD[b.t].job===j){a+=logi(b.x,b.y,bsz(b.t)).eff;n++}return n?a/n:1}
 function placeErrBase(t,x,y,ignoreNear){const s=bsz(t),R=RAD[S.tier];for(let yy=y;yy<y+s;yy++)for(let xx=x;xx<x+s;xx++){if(xx<0||yy<0||xx>=MW||yy>=MH)return'Off the map';const tt=ter(xx,yy);if(tt===T_WATER||(tt===T_SAND&&[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>ter(xx+a,yy+b)===T_WATER)))return'Not on water or shore';if(tt===T_FOREST)return'Forest in the way';if(occ[yy*MW+xx])return'Tile taken'}
- if(Math.max(Math.abs(x+s/2-S.center.x),Math.abs(y+s/2-S.center.y))>R+.5)return'Outside settlement radius ('+R+')';const N=NEAR[t];if(N&&!ignoreNear&&!nearT(x,y,s,N[0],N[1]))return'Must be near '+N[2];if(BLD[t].max&&cnt2(t)>=BLD[t].max)return'Only one allowed';return''}
+ const N=NEAR[t];if(N&&!ignoreNear&&!nearT(x,y,s,N[0],N[1]))return'Must be near '+N[2];if(BLD[t].max&&cnt2(t)>=BLD[t].max)return'Only one allowed';return''}
 const cnt2=t=>S.bl.filter(b=>b.t===t).length;
 const AG=new Float32Array(MW*MH),AP=new Int32Array(MW*MH),AS=new Int32Array(MW*MH);let astamp=1;
 function astar(sx,sy,tx,ty){sx=Math.max(0,Math.min(MW-1,sx|0));sy=Math.max(0,Math.min(MH-1,sy|0));tx=Math.max(0,Math.min(MW-1,tx|0));ty=Math.max(0,Math.min(MH-1,ty|0));astamp++;const M=26,bx0=Math.min(sx,tx)-M,bx1=Math.max(sx,tx)+M,by0=Math.min(sy,ty)-M,by1=Math.max(sy,ty)+M,st=astamp,h=(x,y)=>Math.abs(x-tx)+Math.abs(y-ty),heap=[];
@@ -548,7 +553,7 @@ vc.addEventListener('pointerup',e=>{const p=toCanvas(e);ptrs.delete(e.pointerId)
  if(drag&&!drag.moved)tapWorld(toWorld(p),e.pointerType);drag=null});
 vc.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);if(drag&&drag.paint)paintCancel();drag=null;pinch=null});
 vc.addEventListener('wheel',e=>{e.preventDefault();const p=toCanvas(e);const d=e.deltaMode===1?e.deltaY*16:e.deltaY;zoomAt(cam.tz*Math.exp(-d*(e.ctrlKey?.01:.0018)),p.x,p.y)},{passive:false});
-vc.addEventListener('contextmenu',e=>e.preventDefault());
+vc.addEventListener('contextmenu',e=>{e.preventDefault();if(placing)pCancel()});
 window.addEventListener('resize',fitCanvas);
 
 function ghostAt(t){if(!placing||placing==='__move')return t;const s=bsz(placing);return{gx:t.gx-(s>>1),gy:t.gy-(s>>1)}}
@@ -562,7 +567,7 @@ function celebrate(){vis.party=12;if(S.tier>=1){rebuildOcc();S.bl.forEach(b=>aut
  const x=cv.getContext('2d');x.imageSmoothingEnabled=false;x.fillStyle='#2a3a7a';x.fillRect(0,0,192,96);for(let i=0;i<30;i++){x.fillStyle=TUN[i%8];const a=i/30*6.28;x.fillRect(96+Math.cos(a)*(30+i%3*8)|0,34+Math.sin(a)*(18+i%3*5)|0,3,3)}
  const k=['tent','house','granary','temple','palace'][S.tier]||'house',sp=bspr(k,3);const sc=Math.min(1,80/sp.c.height);x.drawImage(sp.c,96-sp.c.width*sc/2,92-sp.c.height*sc,sp.c.width*sc,sp.c.height*sc);
  for(let i=0;i<5;i++)x.drawImage(pspr(Object.assign({},OUTFIT.farmer,{t:TUN[i]}),'f',i%4,i%2),14+i*14+(i>2?96:0),60);
- const h=document.createElement('h3');h.textContent='🎉 We are now a '+TIERS[S.tier].n+'!';h.style.textAlign='center';B.appendChild(h);const p=document.createElement('div');p.textContent='New buildings, jobs and a larger building radius ('+RAD[S.tier]+' tiles) are unlocked. The people celebrate for days!';B.appendChild(p);
+ const h=document.createElement('h3');h.textContent='🎉 We are now a '+TIERS[S.tier].n+'!';h.style.textAlign='center';B.appendChild(h);const p=document.createElement('div');p.textContent='New buildings and jobs are unlocked. The people celebrate for days!';B.appendChild(p);
  B.appendChild(btn('Hooray!',()=>{M.style.display='none'}));M.style.display='flex';worldChanged()}
 // ---- minimap ----
 
@@ -778,7 +783,7 @@ function showInsp(){const P=$('insp');if(!sel){P.style.display='none';return}P.i
  if(sel.a){const a=sel.a,L=LINES[a.role]||['Villager','Hi!'];h.textContent=L[0];d.innerHTML=(a.sick?'Health: <span style="color:#d8e890">ill</span>':'Health: good')+'<br>Doing: '+(a.carry?'hauling '+a.carry:a.state==='work'?'working':a.state==='home'?'resting':a.state)+'<br>Mood: '+pawnMood(a)+'% ('+moodW(pawnMood(a))+')<br><span class="small">'+(S.hapF||[]).slice().sort((x,y)=>Math.abs(y[1])-Math.abs(x[1])).slice(0,4).map(f=>(f[1]>0?'+':'')+f[1]+' '+f[0]).join('<br>')+'</span><br><i>"'+L[1]+'"</i>'}
  else{const i=sel.i,b=S.bl[i];if(!b){sel=null;P.style.display='none';return}const s=bsz(b.t),mx=3+S.tier,c=bcost(b.t,b.l);h.textContent=BLD[b.t].n+'  Lv'+b.l;
   let tx=BLD[b.t].d+'<br>Size '+s+'x'+s;if(S.tier>=1&&!NOROAD[b.t])tx+='<br>Road: '+(CONN[i]?'<span style="color:#9fe07a">connected</span>':'<span style="color:#ff9070">NOT connected — inactive</span>');
-  if(b.t==='house')tx+='<br>Desirability: '+DES[i]+' (+'+Math.max(0,Math.min(b.l*3,Math.floor(DES[i]/2)))+' housing)';if(BLD[b.t].job)tx+='<br>Workers: '+(S.jobs[BLD[b.t].job]||0)+'/'+jobCap(BLD[b.t].job);d.innerHTML=tx;
+  if(b.t==='house')tx+='<br>Desirability: '+DES[i]+' (+'+Math.max(0,Math.min(b.l*3,Math.floor(DES[i]/2)))+' housing)';if(BLD[b.t].job)tx+='<br>Workers: '+(S.jobs[BLD[b.t].job]||0)+'/'+jobCap(BLD[b.t].job);{const L=logi(b.x,b.y,s);tx+='<br>Haul: '+L.d+' tiles · ~'+L.sec+'s round trip<br>Efficiency: <b style="color:'+effCol(L.eff)+'">'+Math.round(L.eff*100)+'%</b>'+(L.eff<1?' <span class="small">(build storage nearby)</span>':'')}d.innerHTML=tx;
   const r=document.createElement('div');r.style.marginTop='4px';r.appendChild(btn(b.l<mx?'Upgrade ('+cstr(c)+')':'Max level',()=>{if(pay(c)){b.l++;log(BLD[b.t].n+' upgraded to Lv'+b.l);burst(b.x+s/2,b.y+s/2,PB.gold[5],24);worldChanged()}showInsp()},b.l>=mx||!can(c)));
   if(!CONN[i]&&S.tier>=1&&!NOROAD[b.t])r.appendChild(btn('Build path',()=>{const n=autoRoadFor(b);worldChanged();log(n?'Laid '+n+' tiles of path.':'No route found.');showInsp()}));P.appendChild(r)}
  const x=document.createElement('button');x.textContent='✕';x.className='ix';x.onclick=e=>{e.stopPropagation();sel=null;showInsp()};P.appendChild(x);P.style.display='block'}
@@ -787,9 +792,18 @@ function tapAgent(w){const a=hitAgent(w);if(!a)return false;const L=LINES[a.role
 function toTile(w){return{gx:Math.floor(w.x/TS),gy:Math.floor(w.y/TS)}}
 function tapWorld(w,ptype){if(BV){bvTap(w);return}if(roadMode())return;if(!placing&&cam.z>=.5&&tapAgent(w))return;const t=toTile(w);
  if(placing==='__move'){if(ptype!=='mouse'&&(!ghost||ghost.gx!==t.gx||ghost.gy!==t.gy)){ghost=t;return}moveCamp(t.gx,t.gy);placing=null;ghost=null;return}
- if(placing){const g=ghostAt(t);if(ptype!=='mouse'&&(!ghost||ghost.gx!==g.gx||ghost.gy!==g.gy)){ghost=g;return}const err=placeErr(placing,g.gx,g.gy);if(err){log(err);ghost=g;return}
-  if(pay(bcost(placing,0))){const nb={t:placing,l:1,x:g.gx,y:g.gy};S.bl.push(nb);rebuildOcc();const n=autoRoadFor(nb);worldChanged();log('Built '+BLD[placing].n+(n?' + '+n+' path tiles':''));if(S.tier>=1&&!NOROAD[nb.t]&&!touchesRoad(nb))log('⚠ '+BLD[placing].n+' needs a road to work!');const s=bsz(placing);burst(g.gx+s/2,g.gy+s/2,'#e8d8a8',20)}else log('Not enough resources');placing=null;ghost=null;save();renderView();renderTop();return}
+ if(placing){const g=ghostAt(t);if(ptype!=='mouse'&&(!ghost||ghost.gx!==g.gx||ghost.gy!==g.gy)){ghost=g;return}placeAt(g);return}
  if(t.gx<0||t.gy<0||t.gx>=MW||t.gy>=MH)return;const o=occ[t.gy*MW+t.gx];sel=o?{i:o-1}:null;showInsp()}
+function placeAt(g){{const err=placeErr(placing,g.gx,g.gy);if(err){log(err);ghost=g;return}
+  if(pay(bcost(placing,0))){const nb={t:placing,l:1,x:g.gx,y:g.gy};S.bl.push(nb);rebuildOcc();const n=autoRoadFor(nb);worldChanged();log('Built '+BLD[placing].n+(n?' + '+n+' path tiles':''));if(S.tier>=1&&!NOROAD[nb.t]&&!touchesRoad(nb))log('⚠ '+BLD[placing].n+' needs a road to work!');const s=bsz(placing);burst(g.gx+s/2,g.gy+s/2,'#e8d8a8',20)}else log('Not enough resources');placing=null;ghost=null;save();renderView();renderTop();return}}
+function pCancel(){if(placing==='__road'||placing==='__erase'){try{paintCancel()}catch(e){}}placing=null;ghost=null;renderView()}
+function pbarSync(){const B=$('pbar');if(!B)return;const on=!!placing&&!BV;document.body.classList.toggle('placing',on);
+ if(on&&!pbarSync.h){pbarSync.h=1;try{history.pushState({pl:1},'')}catch(e){}}else if(!on&&pbarSync.h){pbarSync.h=0;if(history.state&&history.state.pl)try{history.back()}catch(e){}}
+ const sig=on?placing+'|'+(ghost?ghost.gx+','+ghost.gy:'')+'|'+(placing[0]!=='_'&&can(bcost(placing,0))):'';if(sig===pbarSync.sig)return;pbarSync.sig=sig;if(!on){B.style.display='none';return}
+ let nm,info='',canOk=false,ok='✔ Confirm';if(placing==='__road'||placing==='__erase'){nm=placing==='__erase'?'Removing roads':'Painting roads';info='Drag on the map';canOk=true;ok='✔ Done'}else if(placing==='__move'){nm='Move camp';info=ghost?'':'Tap open ground';canOk=!!ghost}else{nm=BLD[placing].n;info=costHTML(bcost(placing,0));if(ghost){const e=placeErr(placing,ghost.gx,ghost.gy);if(e)info+=' <span class="pe">'+e+'</span>';else{const L=logi(ghost.gx,ghost.gy,bsz(placing));info+=' <span style="color:'+effCol(L.eff)+'">'+L.d+' tiles · ~'+L.sec+'s · '+Math.round(L.eff*100)+'%</span>';canOk=can(bcost(placing,0))}}else info+=' <span class="muted">Tap the map</span>'}
+ B.innerHTML='<div class="pn"><b>'+nm+'</b><div class="pi">'+info+'</div></div>';const c=document.createElement('button');c.textContent='✕ Cancel';c.onclick=pCancel;const o=document.createElement('button');o.className='pri';o.textContent=ok;o.disabled=!canOk;
+ o.onclick=()=>{if(placing==='__road'||placing==='__erase'){placing=null;ghost=null;renderView()}else if(placing==='__move'){if(ghost){moveCamp(ghost.gx,ghost.gy);placing=null;ghost=null}}else if(ghost)placeAt(ghost)};B.appendChild(c);B.appendChild(o);B.style.display='flex'}
+addEventListener('popstate',()=>{if(placing){pbarSync.h=0;pCancel()}});setInterval(pbarSync,120);
 // ---------- frame ----------
 let PCH={};function visProps(vl,vr,vt,vb){if(visProps.src!==props){PCH={};props.forEach(p=>{const k=((p.gx/CS)|0)+','+((p.gy/CS)|0);(PCH[k]=PCH[k]||[]).push(p)});visProps.src=props}const o=[],W=CS*TS;for(let cy=Math.max(0,Math.floor(vt/W));cy<=Math.min(MH/CS-1,Math.floor(vb/W));cy++)for(let cx=Math.max(0,Math.floor(vl/W));cx<=Math.min(MW/CS-1,Math.floor(vr/W));cx++){const a=PCH[cx+','+cy];if(a)for(const p of a)o.push(p)}return o}
 function drawAgent(a,p,moving,now){if(a.state==='home'&&a.inB&&!moving&&!(a.route&&a.route.length)&&night()){const t=a.inB.t;if(t==='tent'){if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.8)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+6,p.y-14-(now/90%10))}return}
@@ -843,15 +857,15 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  if(S.heat){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){const i=gy*MW+gx;if(!roadSet[i])continue;const L=Math.min(1,LOAD[i]/1.4);vx.fillStyle='hsla('+((1-L)*120|0)+',85%,50%,.5)';vx.fillRect(gx*TS+1,gy*TS+1,TS-2,TS-2)}}
  if(z<=.5)blist.forEach(o=>{const sp=bspr(o.b.t,o.b.l);if(!sp.m.walled)return;const X=o.gx*TS,Y=o.gy*TS,s=o.s*TS;vx.globalAlpha=z<=.25?.85:.55;rr(vx,X+1,Y+1,s-2,s-2,1,S.tier>=3?'#9a5a3e':'#b8975c');vx.globalAlpha=z<=.25?.85:.4;for(let y=Y+4;y<Y+s;y+=5)ln(vx,X+2,y,X+s-2,y,'rgba(60,40,20,.5)',1);vx.globalAlpha=1});
  // unconnected warnings
- if(S.tier>=1)blist.forEach(o=>{if(NOROAD[o.b.t]||CONN[o.i])return;const X=(o.gx+o.s/2)*TS,Y=o.gy*TS-4;if(!inV(X,Y))return;const pu=Math.sin(now/250)*1.5;circ(vx,X,Y+pu,6,'#d8402a','#fff3d4',1.2);vx.fillStyle='#fff';vx.font='bold 9px sans-serif';vx.textAlign='center';vx.fillText('!',X,Y+3.5+pu);vx.textAlign='left'});
+ if(S.tier>=1)blist.forEach(o=>{if(NOROAD[o.b.t]||CONN[o.i])return;const X=(o.gx+o.s/2)*TS,Y=o.gy*TS-4;if(!inV(X,Y))return;const pu=0;circ(vx,X,Y+pu,6,'#d8402a','#fff3d4',1.2);vx.fillStyle='#fff';vx.font='bold 9px sans-serif';vx.textAlign='center';vx.fillText('!',X,Y+3.5+pu);vx.textAlign='left'});
  // selection brackets
  if(sel){let x0,y0,x1,y1;if(sel.a){const p=isoP(sel.a.x,sel.a.y);x0=p.x-11;y0=p.y-30;x1=p.x+11;y1=p.y+4}else if(S.bl[sel.i]){const b=S.bl[sel.i],s=bsz(b.t);x0=b.x*TS-2;y0=b.y*TS-2;x1=(b.x+s)*TS+2;y1=(b.y+s)*TS+2}
   if(x0!=null){const L=6;vx.strokeStyle='#fff';vx.lineWidth=1.5/z+.5;vx.beginPath();for(const[x,y,dx,dy]of[[x0,y0,1,1],[x1,y0,-1,1],[x0,y1,1,-1],[x1,y1,-1,-1]]){vx.moveTo(x+dx*L,y);vx.lineTo(x,y);vx.lineTo(x,y+dy*L)}vx.stroke()}}
  // placement
- if(placing){const R=RAD[S.tier],c=S.center;vx.fillStyle='rgba(255,243,212,'+(.06+.03*Math.sin(now/200))+')';vx.fillRect((c.x-R)*TS,(c.y-R)*TS,(2*R+1)*TS,(2*R+1)*TS);vx.setLineDash([6,4]);vx.strokeStyle='rgba(255,243,212,.7)';vx.lineWidth=1.5;vx.strokeRect((c.x-R)*TS,(c.y-R)*TS,(2*R+1)*TS,(2*R+1)*TS);vx.setLineDash([]);
+ if(placing){const R=6,c=ghost?{x:ghost.gx,y:ghost.gy}:S.center;
   if(z>=.5){vx.strokeStyle='rgba(255,255,255,.07)';vx.lineWidth=1;vx.beginPath();for(let x=c.x-R;x<=c.x+R+1;x++){vx.moveTo(x*TS,(c.y-R)*TS);vx.lineTo(x*TS,(c.y+R+1)*TS)}for(let y=c.y-R;y<=c.y+R+1;y++){vx.moveTo((c.x-R)*TS,y*TS);vx.lineTo((c.x+R+1)*TS,y*TS)}vx.stroke()}
   if(ghost&&placing[0]!=='_'){const s=bsz(placing),err=placeErr(placing,ghost.gx,ghost.gy)||(can(bcost(placing,0))?'':'Not enough resources'),ok=!err;vx.fillStyle=ok?'rgba(110,240,110,.3)':'rgba(240,74,74,.3)';vx.fillRect(ghost.gx*TS,ghost.gy*TS,s*TS,s*TS);
-   const sp=bspr(placing,1);vx.globalAlpha=ok?.75:.4;vx.drawImage(sp.c,ghost.gx*TS-8,ghost.gy*TS-8,s*TS+16,s*TS+16);vx.globalAlpha=1;if(err){vx.font='bold 11px sans-serif';vx.textAlign='center';vx.fillStyle='#24140c';vx.fillText(err,(ghost.gx+s/2)*TS+1,ghost.gy*TS-5);vx.fillStyle='#ffb0a0';vx.fillText(err,(ghost.gx+s/2)*TS,ghost.gy*TS-6);vx.textAlign='left'}}
+   const sp=bspr(placing,1);vx.globalAlpha=ok?.75:.4;vx.drawImage(sp.c,ghost.gx*TS-8,ghost.gy*TS-8,s*TS+16,s*TS+16);vx.globalAlpha=1;if(ok){const L=logi(ghost.gx,ghost.gy,s),tl=L.d+' tiles · ~'+L.sec+'s · '+Math.round(L.eff*100)+'%';vx.font='bold 11px sans-serif';vx.textAlign='center';vx.lineWidth=3;vx.strokeStyle='#24140c';vx.strokeText(tl,(ghost.gx+s/2)*TS,ghost.gy*TS-12);vx.fillStyle=effCol(L.eff);vx.fillText(tl,(ghost.gx+s/2)*TS,ghost.gy*TS-12)}if(err){vx.font='bold 11px sans-serif';vx.textAlign='center';vx.fillStyle='#24140c';vx.fillText(err,(ghost.gx+s/2)*TS+1,ghost.gy*TS-5);vx.fillStyle='#ffb0a0';vx.fillText(err,(ghost.gx+s/2)*TS,ghost.gy*TS-6);vx.textAlign='left'}}
   else if(ghost&&placing==='__move'){const sp=bspr('campfire',1);vx.drawImage(sp.c,ghost.gx*TS-8,ghost.gy*TS-8,48,48)}
   else if(roadMode()){vx.fillStyle=placing==='__erase'?'rgba(240,74,74,.35)':'rgba(220,190,130,.45)';const ff=(x,y)=>vx.fillRect(x*TS,y*TS,TS,TS);if(drag&&drag.paint&&drag.st&&roadShape!=='free')shapeTiles(drag.st,drag.cur,ff);else if(ghost)brushTiles(ghost.gx,ghost.gy,ff)}}
  // fx
@@ -881,7 +895,7 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  requestAnimationFrame(vframe)}
 let mmBase=null;const mm=$('mm'),mmx=mm.getContext('2d');
 function drawMinimap(){if(!mmBase){const[c,g]=mk(128,128);if(!ov64)buildOverview();g.imageSmoothingEnabled=true;g.drawImage(ov64,0,0,128,128);S.bl.forEach(b=>{const s=bsz(b.t);g.fillStyle=b.t==='wall'||b.t==='gate'?'#e8d0a0':FLATB[b.t]?'#c8b060':'#e8502a';g.fillRect(b.x*128/MW,b.y*128/MW,Math.max(1.5,s*128/MW),Math.max(1.5,s*128/MW))});mmBase=c}
- mmx.clearRect(0,0,128,128);mmx.drawImage(mmBase,0,0);const R=RAD[S.tier],c=S.center;mmx.strokeStyle='rgba(255,240,180,.8)';mmx.lineWidth=1;mmx.strokeRect((c.x-R)*128/MW,(c.y-R)*128/MW,(2*R+1)*128/MW,(2*R+1)*128/MW);
+ mmx.clearRect(0,0,128,128);mmx.drawImage(mmBase,0,0);const R=0,c=S.center;mmx.strokeStyle='rgba(255,240,180,0)';mmx.lineWidth=1;mmx.strokeRect((c.x-R)*128/MW,(c.y-R)*128/MW,(2*R+1)*128/MW,(2*R+1)*128/MW);
  mmx.strokeStyle='#fff';mmx.strokeRect(cam.x/WW*128,cam.y/WH*128,Math.max(2,VW/cam.z/WW*128),Math.max(2,VH/cam.z/WH*128))}
 mm.addEventListener('pointerdown',e=>{e.stopPropagation();const r=mm.getBoundingClientRect();centerOn((e.clientX-r.left)/r.width*MW,(e.clientY-r.top)/r.height*MH)});
 
@@ -891,7 +905,7 @@ function brushTiles(gx,gy,f){const b=roadBrush,o=(b-1)>>1;for(let y=gy-o;y<gy-o+
 function lineTiles(a,b,f){let x0=a.gx,y0=a.gy;const x1=b.gx,y1=b.gy,dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let e=dx+dy;for(let n=0;n<600;n++){f(x0,y0);if(x0===x1&&y0===y1)break;const e2=2*e;if(e2>=dy){e+=dy;x0+=sx}if(e2<=dx){e+=dx;y0+=sy}}}
 function shapeTiles(a,b,f){if(roadShape==='rect'){for(let y=Math.min(a.gy,b.gy);y<=Math.max(a.gy,b.gy);y++)for(let x=Math.min(a.gx,b.gx);x<=Math.max(a.gx,b.gx);x++)f(x,y)}else lineTiles(a,b,(x,y)=>brushTiles(x,y,f))}
 function paintTile(gx,gy){if(gx<0||gy<0||gx>=MW||gy>=MH)return;const i=gy*MW+gx;
- if(placing==='__erase'){if(!roadSet[i])return;roadSet[i]=0}else{const R=RAD[S.tier];if(Math.max(Math.abs(gx-S.center.x),Math.abs(gy-S.center.y))>R+2){paintAt.err='Outside settlement radius';return}if(TER[i]===T_WATER||occ[i])return;if(roadSet[i]>=roadPick)return;if(!pay(RCOST[roadPick])){paintAt.err='Not enough stone';return}roadSet[i]=roadPick}
+ if(placing==='__erase'){if(!roadSet[i])return;roadSet[i]=0}else{if(TER[i]===T_WATER||occ[i])return;if(roadSet[i]>=roadPick)return;if(!pay(RCOST[roadPick])){paintAt.err='Not enough stone';return}roadSet[i]=roadPick}
  paintAt.n=(paintAt.n||0)+1;dirtyTile(gx,gy)}
 function paintAt(){}
 function paintStart(p){const t=toTile(toWorld(p));drag.st=t;drag.cur=t;drag.last=t;if(roadShape==='free'){brushTiles(t.gx,t.gy,paintTile);roadsChanged(true)}}
@@ -984,14 +998,27 @@ function renderWork(V){S.prio=S.prio||{};const idle=S.pop-employed();V.insertAdj
 // letters & alerts
 let letters=[];const GOODEV={harvest:1,festival:1,migrants:1,caravan:1};const BADEV={plague:1,drought:1,fire:1,raiders:1,quake:1};
 function addLetter(id){const D=EVT[id];const B=$('mbody');const kind=GOODEV[id]?'good':BADEV[id]?'bad':'info';const clone=B.cloneNode(true);clone.querySelectorAll('button').forEach(x=>x.remove());const c0=B.querySelector('canvas'),c1=clone.querySelector('canvas');if(c0&&c1)c1.getContext('2d').drawImage(c0,0,0);
- letters.unshift({id,n:D.n,kind,html:clone,t:S.t});letters=letters.slice(0,7);renderAlerts()}
-function renderAlerts(){const A=$('alerts');if(!A)return;A.innerHTML='';const al=[];const idle=S.pop-employed();let openJobs=0;for(const j in JOBS)openJobs+=Math.max(0,jobCap(j)-(S.jobs[j]||0));if(idle>0&&openJobs>0)al.push(['warn',idle+' idle colonists','Open jobs available — see Work.',()=>openTab('jobs')]);
- if(S.tier>=1){const un=S.bl.filter((b,i)=>!NOROAD[b.t]&&!CONN[i]).length;if(un)al.push(['warn',un+' building'+(un>1?'s':'')+' without road','They do nothing until connected.',()=>{const i=S.bl.findIndex((b,i)=>!NOROAD[b.t]&&!CONN[i]);if(i>=0){const b=S.bl[i];centerOn(b.x+1,b.y+1);sel={i};showInsp()}}])}
- if(S.res.food<25&&S.rate&&S.rate.food<0)al.push(['bad','Food running out','Assign farmers or hunters.',()=>openTab('jobs')]);if(S.pop>=housing())al.push(['info','Need housing','Build houses or tents to grow.',()=>{acat='housing';openTab('build')}]);
- if(congest)al.push(['warn','Congested path near the '+congest.near,'Widen or upgrade it (load '+Math.round(congest.load*100)+'%).',()=>{centerOn(congest.x,congest.y);S.heat=true}]);
- (S.ev.act||[]).filter(e=>EVT[e.id]).forEach(e=>al.push([BADEV[e.id]?'bad':'info',EVT[e.id].n+' · '+e.left+'s','Ongoing event.',null]));
- al.forEach(([k,t,d,f])=>{const el=document.createElement('div');el.className='al '+k;el.innerHTML='<b>'+t+'</b>';tipOn(el,()=>d);if(f)el.onclick=f;A.appendChild(el)});
- letters.forEach((L,i)=>{const el=document.createElement('div');el.className='letter '+L.kind;el.appendChild(ICO('letter',16));el.appendChild(document.createTextNode(L.n));el.onclick=()=>{const B=$('mbody');B.innerHTML='';B.appendChild(L.html);B.appendChild(btn('Close',()=>{$('modal').style.display='none'}));$('modal').style.display='flex';letters.splice(i,1);renderAlerts()};A.appendChild(el)})}
+ const ex=letters.find(L=>L.id===id);if(ex){ex.n2=(ex.n2||1)+1;ex.html=clone;ex.t=S.t;ex.fresh=1}else{letters.unshift({id,n:D.n,kind,html:clone,t:S.t,n2:1,fresh:1});letters=letters.slice(0,12)}renderAlerts()}
+// Alerts: keyed reconcile so items animate ONCE on arrival, then stay static until dismissed.
+const alDis={};const alEls=new Map();
+function alItem(A,key,cls,html,tip,onOpen,onX){let el=alEls.get(key);if(!el){el=document.createElement('div');el.className=cls+' anew';el.addEventListener('animationend',()=>el.classList.remove('anew'),{once:true});
+  const tx=document.createElement('span');tx.className='altx';el.appendChild(tx);const x=document.createElement('button');x.className='alx';x.textContent='×';x.title='Dismiss';x.onclick=e=>{e.stopPropagation();el._x()};el.appendChild(x);alEls.set(key,el);if(tip)tipOn(el,()=>el._tip)}
+ else if(el.className.replace(' anew','')!==cls)el.className=cls+(el.classList.contains('anew')?' anew':'');
+ el._tip=tip;el._x=onX;el.onclick=onOpen?()=>onOpen():null;const tx=el.firstChild;if(tx._h!==html){tx._h=html;tx.innerHTML=html}A.appendChild(el);return el}
+function renderAlerts(){const A=$('alerts');if(!A)return;const al=[];const idle=S.pop-employed();let openJobs=0;for(const j in JOBS)openJobs+=Math.max(0,jobCap(j)-(S.jobs[j]||0));if(idle>0&&openJobs>0)al.push(['idle','warn',idle+' idle colonists','Open jobs available — see Work.',()=>openTab('jobs')]);
+ if(S.tier>=1){const un=S.bl.filter((b,i)=>!NOROAD[b.t]&&!CONN[i]).length;if(un)al.push(['noroad','warn',un+' building'+(un>1?'s':'')+' without road','They do nothing until connected.',()=>{const i=S.bl.findIndex((b,i)=>!NOROAD[b.t]&&!CONN[i]);if(i>=0){const b=S.bl[i];centerOn(b.x+1,b.y+1);sel={i};showInsp()}}])}
+ if(S.res.food<25&&S.rate&&S.rate.food<0)al.push(['food','bad','Food running out','Assign farmers or hunters.',()=>openTab('jobs')]);if(S.pop>=housing())al.push(['house','info','Need housing','Build houses or tents to grow.',()=>{acat='housing';openTab('build')}]);
+ if(congest)al.push(['cong','warn','Congested path near the '+congest.near,'Widen or upgrade it (load '+Math.round(congest.load*100)+'%).',()=>{centerOn(congest.x,congest.y);S.heat=true}]);
+ (S.ev.act||[]).filter(e=>EVT[e.id]).forEach(e=>al.push(['ev:'+e.id,BADEV[e.id]?'bad':'info',EVT[e.id].n+' · '+e.left+'s','Ongoing event.',null]));
+ const live=new Set();for(const k in alDis)if(!al.some(a=>a[0]===k))delete alDis[k];
+ const vis=al.filter(a=>!alDis[a[0]]),n=vis.length+letters.length;
+ if(n>1){live.add('__all');const d=alItem(A,'__all','al dall','Dismiss all ('+n+')',null,()=>{vis.forEach(a=>alDis[a[0]]=1);letters.length=0;renderAlerts()},()=>{vis.forEach(a=>alDis[a[0]]=1);letters.length=0;renderAlerts()});d.lastChild.style.display='none'}
+ vis.forEach(([key,k,t,d,f])=>{live.add(key);alItem(A,key,'al '+k,'<b>'+t+'</b>',d,f,()=>{alDis[key]=1;renderAlerts()})});
+ letters.forEach(L=>{const key='L:'+L.id;live.add(key);if(L.fresh){const o=alEls.get(key);if(o){o.remove();alEls.delete(key)}L.fresh=0}
+  alItem(A,key,'letter '+L.kind,'<i class="lic"></i>'+L.n+(L.n2>1?' <span class="alc">×'+L.n2+'</span>':''),null,()=>{const B=$('mbody');B.innerHTML='';B.appendChild(L.html);B.appendChild(btn('Close',()=>{$('modal').style.display='none'}));$('modal').style.display='flex';const i=letters.indexOf(L);if(i>=0)letters.splice(i,1);renderAlerts()},()=>{const i=letters.indexOf(L);if(i>=0)letters.splice(i,1);renderAlerts()});
+  const ic=alEls.get(key).querySelector('.lic');if(ic&&!ic.firstChild)ic.appendChild(ICO('letter',16))});
+ for(const[k,el]of alEls)if(!live.has(k)){el.remove();alEls.delete(k)}
+ const first=alEls.get('__all');if(first&&A.firstChild!==first)A.insertBefore(first,A.firstChild)}
 
 // ================= CIVILIZATIONS: architecture =================
 const CIV={
@@ -1144,13 +1171,13 @@ const _walkC0=walkC;walkC=function(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const
  if(TER[i]===T_WATER){if(bridgeAt(i))return .45;const l=wlev(i);return l===1?(FORDS.has(i)?3:4):l===2?8:FERRY&&FERRY[i]?5:0}
  const o=occ[i];if(o){const b=S.bl[o-1];if(b&&b.t==='dock')return 1}return _walkC0(x,y)};
 function bridgeSpan(t,x,y){if(x<0||y<0||x>=MW||y>=MH)return{err:'Off the map'};if(TER[y*MW+x]!==T_WATER)return{err:'Place a bridge on water'};
- const R=RAD[S.tier];if(Math.max(Math.abs(x-S.center.x),Math.abs(y-S.center.y))>R+8)return{err:'Too far from the settlement'};let best=null;
+ let best=null;
  for(const[dx,dy,o]of[[1,0,'h'],[0,1,'v']]){const tl=[[x,y]];let ok=true;for(const s of[-1,1]){let X=x+dx*s,Y=y+dy*s,n=0;while(X>=0&&Y>=0&&X<MW&&Y<MH&&TER[Y*MW+X]===T_WATER){tl.push([X,Y]);X+=dx*s;Y+=dy*s;if(++n>16){ok=false;break}}if(X<0||Y<0||X>=MW||Y>=MH)ok=false}
   if(ok&&(!best||tl.length<best.tiles.length))best={tiles:tl,o}}
  if(!best)return{err:'Too wide to bridge here'};if(best.tiles.some(([X,Y])=>occ[Y*MW+X]))return{err:'Something is in the way'};
  if(t==='bridge'&&best.tiles.some(([X,Y])=>wlev(Y*MW+X)>=3))return{err:'Too deep for a wooden bridge — build a Stone Bridge'};return best}
 function dockErr(x,y){let w=0,l=0;for(let yy=y;yy<y+2;yy++)for(let xx=x;xx<x+2;xx++){if(xx<0||yy<0||xx>=MW||yy>=MH)return'Off the map';if(occ[yy*MW+xx])return'Tile taken';if(TER[yy*MW+xx]===T_WATER)w++;else l++}
- if(!w||!l)return'A dock must sit on the shoreline (part land, part water)';const R=RAD[S.tier];if(Math.max(Math.abs(x-S.center.x),Math.abs(y-S.center.y))>R+4)return'Outside settlement radius';return''}
+ if(!w||!l)return'A dock must sit on the shoreline (part land, part water)';return''}
 function dockDir(x,y){let sx=0,sy=0;for(let yy=y;yy<y+2;yy++)for(let xx=x;xx<x+2;xx++)if(TER[yy*MW+xx]===T_WATER){sx+=xx-x-.5;sy+=yy-y-.5}return Math.abs(sx)>=Math.abs(sy)?(sx>0?'e':'w'):(sy>0?'s':'n')}
 const _placeErr0=placeErr;placeErr=function(t,x,y,ig){if(isBrT(t))return bridgeSpan(t,x,y).err||'';if(t==='dock')return dockErr(x,y);return _placeErr0(t,x,y,ig)};
 const _tap0=tapWorld;tapWorld=function(w,ptype){
