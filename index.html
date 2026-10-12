@@ -2547,7 +2547,7 @@ if(!S.log.length)log('Welcome, chief! Assign jobs, build a Barracks, and conquer
 #tabs .tsep{width:1px;align-self:stretch;background:rgba(216,162,74,.28);margin:4px 3px;flex:none}
 #tabs button .gl{font-size:16px;line-height:20px;height:20px}
 #tabs button.sel2{background:rgba(216,162,74,.16);border-color:rgba(216,162,74,.45)}
-@media(max-width:820px){#tabs{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}#tabs button{min-width:46px;padding:4px 3px}}
+@media(max-width:820px){#tabs{justify-content:flex-start;overflow-x:auto;scrollbar-width:none}#tabs button{min-width:46px;padding:4px 3px}#menub{order:-3}#setb{order:-2}#tabs .tsep:last-of-type{order:-1}}
 #pm{position:fixed;inset:0;z-index:40;background:rgba(6,4,2,.62);display:none;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
 #pm .panel{width:min(94vw,460px);max-height:88vh;overflow:auto;padding:16px 18px;border-radius:12px}
 #pm h2{margin:0 0 10px;text-align:center;font-variant:small-caps;letter-spacing:.08em}
@@ -2747,7 +2747,7 @@ const WV={on:false,x:0,y:0,z:1,tz:1,ax:0,ay:0,base:null,dirty:true,raf:0};
  c.addEventListener('mousemove',e=>{const h=wvHit(e.clientX,e.clientY);c.style.cursor=h?'pointer':'grab'});
  addEventListener('resize',()=>{if(WV.on){wvFit();wvDirty()}})})();
 const WVW=1024,WVH=600;
-function wvFit(){const c=$('wvc'),d=Math.min(2,devicePixelRatio||1);c.width=innerWidth*d;c.height=innerHeight*d;WV.dpr=d;WV.fit=Math.min(innerWidth/WVW,(innerHeight-40)/WVH)}
+function wvFit(){const c=$('wvc'),d=Math.min(2,devicePixelRatio||1);c.width=innerWidth*d;c.height=innerHeight*d;WV.dpr=d;WV.fit=Math.max(Math.min(innerWidth/WVW,(innerHeight-40)/WVH),(innerHeight-40)/WVH*.55)}
 function wvClamp(){const s=WV.fit*WV.z,w=WVW*s,h=WVH*s,m=80;WV.x=w<innerWidth?(innerWidth-w)/2:Math.max(innerWidth-w-m,Math.min(m,WV.x));WV.y=h<innerHeight-40?(innerHeight-h)/2+20:Math.max(innerHeight-h-m,Math.min(m+40,WV.y))}
 function wvZoom(k,cx,cy,inst){WV.tz=Math.max(1,Math.min(6,WV.tz*k));WV.ax=cx;WV.ay=cy;if(inst){wvApplyZ(WV.tz)}wvDirty()}
 function wvApplyZ(nz){const s0=WV.fit*WV.z,s1=WV.fit*nz,mx=(WV.ax-WV.x)/s0,my=(WV.ay-WV.y)/s0;WV.z=nz;WV.x=WV.ax-mx*s1;WV.y=WV.ay-my*s1;wvClamp()}
