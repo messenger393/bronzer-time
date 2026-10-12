@@ -503,16 +503,18 @@ function syncRoster(){const pop=S.pop,sig=JSON.stringify([S.jobs,pop,bgSig,armyN
  const sc=Math.min(1,MAXW/Math.max(1,pop)),want=[];for(const j in S.jobs){const n=Math.round((S.jobs[j]||0)*sc);for(let k=0;k<n;k++)want.push(j+'#'+k)}
  const idle=Math.round(Math.max(0,pop-employed())*sc);for(let k=0;k<idle;k++)want.push('idle#'+k);for(let k=0;k<Math.min(12,armyN());k++)want.push('soldier#'+k);for(let k=0;k<Math.min(6,Math.floor(pop/6));k++)want.push('kid#'+k);
  const keep={};agents.forEach(a=>keep[a.key]=a);const h=hubT(),homes=blds('house').concat(blds('tent'));
- agents=want.map((key,n)=>{const a=keep[key];if(a&&a.sig===bgSig)return a;const role=key.split('#')[0],idx=+key.split('#')[1];const home=homes.length?doorOf(pick(homes).b):h;const wb=JOBB[role]?blds(JOBB[role]):[];
+ agents=want.map((key,n)=>{const a=keep[key];if(a&&a.sig===bgSig)return a;const role=key.split('#')[0],idx=+key.split('#')[1];const hbo=homes.length?pick(homes):null,home=hbo?inSpot(hbo,idx+n,1):h;const wb=JOBB[role]?blds(JOBB[role]):[];
   const o=Object.assign({},OUTFIT[role]||{t:TUN[n%TUN.length],t2:lighten(TUN[n%TUN.length],-.35),hat:'none'});o.hair=pick(['#3a2414','#24140c','#6a4226','#1a1010','#8a5a32']);if(role==='kid'){o.kid=1;o.t=TUN[(n+3)%TUN.length];o.t2=lighten(o.t,-.3)}civDress(o,role,n);
-  return{key,role,idx,sig:bgSig,x:home.x,y:home.y,home,work:wb.length?pick(wb):null,route:[],state:'start',t:Math.random()*2,o,dir:0,ft:0,sick:false}});
+  return{key,role,idx,sig:bgSig,x:home.x,y:home.y,home,inB:hbo?hbo.b:null,work:wb.length?pick(wb):null,route:[],state:'start',t:Math.random()*2,o,dir:0,ft:0,sick:false}});
  critters=[];const fs=blds('farm'),fc=Math.min(12,fs.length*3),gc=(S.extraJobs||{}).herder?Math.min(6,2+S.tier*2):0;
  for(let k=0;k<fc+gc;k++){const f=fs.length?fs[k%fs.length]:{gx:S.center.x,gy:S.center.y,s:1};const d=doorOf(f.b||{t:'tent',x:f.gx,y:f.gy});critters.push({k:k>=fc?'goat':'chicken',x:d.x+Math.random()-.5,y:d.y+Math.random()*.5,tx:0,ty:0,t:0,dir:1,hx:d.x,hy:d.y})}
  (spotCache.forest||[]).slice(0,6).forEach((s,k)=>critters.push({k:'deer',x:s.x,y:s.y,tx:0,ty:0,t:0,dir:1,hx:s.x,hy:s.y}))}
 function workSpot(a){if(a.role==='fisher'){const w=spotCache.water;return w.length?w[a.idx%w.length]:hubT()}if(a.role==='gatherer'||(a.role==='hunter'&&!a.work)){const f=spotCache.forest;return f.length?f[(a.idx*3)%f.length]:hubT()}
  if(a.role==='hunter'){const f=spotCache.forest;return f.length?f[(a.idx*5+7)%f.length]:hubT()}if(!a.work)return{x:a.home.x+Math.random()-.5,y:a.home.y+.3};const o=a.work,s=o.s;
- if(o.b.t==='farm')return{x:o.gx+.3+Math.random()*(s-.6),y:o.gy+.3+Math.random()*(s-.6),inside:1};const d=doorOf(o.b);return{x:d.x+(a.idx%2?.3:-.3),y:d.y}}
-function go(a,to,st){a.route=pathTo(a,to);a.state=st}
+ if(o.b.t==='farm')return{x:o.gx+.3+Math.random()*(s-.6),y:o.gy+.3+Math.random()*(s-.6),inside:1};if(!FLATB[o.b.t]&&o.s>=2)return inSpot(o,a.idx+((Math.random()*3)|0),0);const d=doorOf(o.b);return{x:d.x+(a.idx%2?.3:-.3),y:d.y}}
+function inSpot(o,k,sl){const s=o.s||bsz(o.b.t);const d=doorOf(o.b);if(s<2)return{x:o.gx+.5,y:o.gy+.55,door:d,b:o.b};if(sl)return{x:o.gx+.45+(k%3)*(s-.9)/2,y:o.gy+.75+((k/3|0)%3)*(s-1.1)/2,door:d,b:o.b};return{x:o.gx+.75+((k*.618+(sl?.1:.4))%1)*(s-1.5),y:o.gy+.85+((k*.382+(sl?.05:.55))%1)*(s-1.6),door:d,b:o.b}}
+function go(a,to,st){let r;const pth=(f,t)=>t&&t.door?(t.b===a.inB?[{x:t.x,y:t.y}]:pathTo(f,t.door).concat([{x:t.x,y:t.y}])):pathTo(f,t);
+ if(a.inB&&(!to||to.b!==a.inB)){const d=doorOf(a.inB);a.inB=null;r=[{x:d.x,y:d.y}].concat(pth({x:d.x,y:d.y},to))}else r=pth(a,to);a.inB=to&&to.b||null;a.route=r;a.state=st}
 const dayP=()=>(S.t%180)/180,night=()=>{const p=dayP();return p>.62&&p<.95};
 function think(a){const h=hubT(),n=night();if(n&&a.state==='home'&&a.role!=='soldier'&&a.role!=='kid'){a.t=3;return}
  if(a.role==='soldier'){const br=blds('barracks')[0];if(!br){a.route=[{x:h.x+1+(a.idx%4)*.5,y:h.y+1+(a.idx>>2)*.5}];a.state='drill';a.t=3;return}const d=doorOf(br.b);const col=a.idx%4,rw=Math.floor(a.idx/4);a.route=[{x:d.x-1+col*.6+(Math.floor(performance.now()/3000)%2)*.5,y:d.y+.6+rw*.5}];a.state='drill';a.t=2+Math.random();return}
@@ -790,7 +792,11 @@ function tapWorld(w,ptype){if(BV){bvTap(w);return}if(roadMode())return;if(!placi
  if(t.gx<0||t.gy<0||t.gx>=MW||t.gy>=MH)return;const o=occ[t.gy*MW+t.gx];sel=o?{i:o-1}:null;showInsp()}
 // ---------- frame ----------
 let PCH={};function visProps(vl,vr,vt,vb){if(visProps.src!==props){PCH={};props.forEach(p=>{const k=((p.gx/CS)|0)+','+((p.gy/CS)|0);(PCH[k]=PCH[k]||[]).push(p)});visProps.src=props}const o=[],W=CS*TS;for(let cy=Math.max(0,Math.floor(vt/W));cy<=Math.min(MH/CS-1,Math.floor(vb/W));cy++)for(let cx=Math.max(0,Math.floor(vl/W));cx<=Math.min(MW/CS-1,Math.floor(vr/W));cx++){const a=PCH[cx+','+cy];if(a)for(const p of a)o.push(p)}return o}
-function drawAgent(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({},a.o,{sick:1}):a.o,d=a.dir==null?1:a.dir;const bob=moving?(Math.floor(a.ft)%2):0,jump=a.state==='dance'&&Math.floor(now/200+a.idx)%2?3:0;
+function drawAgent(a,p,moving,now){if(a.state==='home'&&a.inB&&!moving&&!(a.route&&a.route.length)&&night()){const t=a.inB.t;if(t==='tent'){if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.8)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+6,p.y-14-(now/90%10))}return}
+  vx.save();vx.translate(p.x,p.y-6);vx.rotate(-Math.PI/2);rr(vx,-11,-5,19,10,2,'#e8dcc0','rgba(60,40,20,.6)',.7);vx.drawImage(pawnSpr(a.o,1,2),-9,-12,18,24);rr(vx,-6,-5,13,10,2,TUN[(a.idx||0)%TUN.length],'rgba(40,20,10,.5)',.6);vx.restore();
+  if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.85)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+8,p.y-18-(now/90%10))}return}
+ _drawAgent0(a,p,moving,now)}
+function _drawAgent0(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({},a.o,{sick:1}):a.o,d=a.dir==null?1:a.dir;const bob=moving?(Math.floor(a.ft)%2):0,jump=a.state==='dance'&&Math.floor(now/200+a.idx)%2?3:0;
  ell(vx,X,Y+1,6.5,2.8,'rgba(20,14,8,.28)');vx.drawImage(pawnSpr(o,d,2),X-12,Y-29-bob-jump,24,32);const fl=d===2?-1:1,hx=X+(d===1||d===3?7:fl*7),hy=Y-12-bob,w=(now/220+(a.idx||0))%4;
  if(a.state==='work'&&!moving){const sw=Math.sin(now/160+(a.idx||0))*.8;const tool=(len,col,head)=>{vx.save();vx.translate(hx,hy);vx.rotate(-.6+sw);ln(vx,0,0,0,-len,'#7a5232',1.6);if(head)rr(vx,-2,-len-2,4+(col==='#9a9a9a'?2:0),3,1,col);vx.restore()};
   if(a.role==='woodcutter'||a.role==='quarrier'||a.role==='coppermin'||a.role==='tinmin'||a.role==='smith'){tool(11,'#9a9a9a',1);if(w<.08)burst2(hx+4,hy,a.role==='woodcutter'?PB.wood[5]:'#d8d0c0')}
@@ -828,7 +834,7 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  const sickP=evOn('plague');
  for(const a of agents){if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?RSPD[rl]*Math.max(.35,congF(ri)):1,sp=(a.role==='kid'?1.4:a.carry?.75:1)*(a.sick?.6:1)*rd*dt;
    if(rl)TR[ri]+=dt*(a.carry&&S.tier>=2?2:1);if(d>.01)a.dir=dirOf(dx,dy);a.ft+=dt*(a.role==='kid'?10:7);if(d<=sp){a.x=p.x;a.y=p.y;a.route.shift();if(!a.route.length){if(a.state==='towork'){a.state='work';a.t=3+Math.random()*4}else if(a.state==='home')a.t=3}}else{a.x+=dx/d*sp;a.y+=dy/d*sp}}
-  else{a.t-=dt;if(a.t<=0)think(a)}a.sick=!!sickP&&a.idx%3===0&&a.role!=='soldier';if(a.state==='home'&&!a.route.length)continue;if(z<.5)continue;const p=isoP(a.x,a.y);if(!inV(p.x,p.y))continue;const mv=a.route.length>0;D.push({k:p.y,f:()=>drawAgent(a,p,mv,now)})}
+  else{a.t-=dt;if(a.t<=0)think(a)}a.sick=!!sickP&&a.idx%3===0&&a.role!=='soldier';if(a.state==='home'&&!a.route.length&&!a.inB)continue;if(z<.5)continue;const p=isoP(a.x,a.y);if(!inV(p.x,p.y))continue;const mv=a.route.length>0;D.push({k:a.inB&&!mv?(a.inB.y+bsz(a.inB.t))*TS:p.y,f:()=>drawAgent(a,p,mv,now)})}
  vis.migr=vis.migr.filter(m=>{if(!m.route.length)return false;const p=m.route[0],dx=p.x-m.x,dy=p.y-m.y,d=Math.hypot(dx,dy),sp=.9*dt;m.dir=dirOf(dx,dy);m.ft+=dt*7;if(d<=sp){m.x=p.x;m.y=p.y;m.route.shift()}else{m.x+=dx/d*sp;m.y+=dy/d*sp}const P=isoP(m.x,m.y);if(z>=.5)D.push({k:P.y,f:()=>drawAgent(m,P,true,now)});return m.route.length>0});
  if(vis.raid&&z>=.5){const c=S.center,R=RAD[S.tier];for(let k=0;k<Math.min(10,vis.raid);k++){const p=isoP(c.x-R-1+(k%2)*.7,c.y-2+k*.6);const a={o:OUTFIT.raider,dir:0,ft:now/140+k,role:'soldier',idx:k};D.push({k:p.y,f:()=>drawAgent(a,p,true,now)})}}
  if(vis.caravan&&z>=.5){const h=hubT();for(let k=0;k<3;k++){const c={k:'goat',x:h.x+1+k*.8,y:h.y+.4,dir:1};D.push({k:c.y*TS,f:()=>{critDraw(c,now);rr(vx,c.x*TS-5,c.y*TS-6,10,5,1,k%2?PB.red[3]:PB.glaze[3],OUTL,.6)}})}const mp=isoP(h.x+.4,h.y-.4);D.push({k:mp.y,f:()=>drawAgent({o:OUTFIT.merchant,dir:1,ft:0,idx:0},mp,false,now)})}
