@@ -356,8 +356,8 @@ function tick(){LTk=performance.now();if(BV)return;rnInit();rnBuild();rnTick();i
  let up=S.pop*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up*RATION[S.ration||'normal'].up;
  const C=cap();for(const r of RES)S.res[r]=Math.max(0,Math.min(C,S.res[r]+p[r]));
  S.rate=p;
- if(S.res.food<=0&&p.food<0){if(armyN()>0&&Math.random()<.1){const c=S.companies.find(c=>c.men>0);c.men--;S.companies=S.companies.filter(c=>c.men>0);log('Starving! A soldier of '+c.name+' deserted.')}else if(S.pop>1&&Math.random()<.05){S.pop--;fixJobs();log('Starving! A villager left.')}}
- else if(S.pop<housing()&&S.res.food>10&&EM.grow>0&&(p.food>0||S.res.food>S.pop*12)&&(S.pop-employed())<=Math.max(2,S.pop*.2)){S.growT+=EM.grow*(cX().grow||1)*hapGrow();if(S.growT>=Math.max(8,20-S.tier*3)){S.growT=0;S.pop++;log('A new villager arrived!')}}
+ if(S.res.food<=0&&p.food<0){if(armyN()>0&&Math.random()<.1){const c=S.companies.find(c=>c.men>0);c.men--;S.companies=S.companies.filter(c=>c.men>0);log('Starving! A soldier of '+c.name+' deserted.')}else if(S.pop>3&&Math.random()<.03){S.pop--;fixJobs();log('Starving! A villager left.')}}
+ else if(S.pop<housing()&&S.res.food>10&&EM.grow>0&&(p.food>0.45||(p.food>-0.1&&S.res.food>S.pop*15))&&(S.pop-employed())<=Math.max(2,S.pop*.2)){S.growT+=EM.grow*(cX().grow||1)*hapGrow();if(S.growT>=Math.max(8,20-S.tier*3)){S.growT=0;S.pop++;log('A new villager arrived!')}}
  hapTick();evTick();evHUD();if(S.t%5===0)spawnPops(p);
  S.t++;if(S.t%10===0)save();renderTop();if(cur==='jobs'||cur==='army'){if(S.t%2===0)renderView()}
 }
@@ -1578,7 +1578,7 @@ function bvOver(now,inV){const z=cam.z,K=Math.max(1,Math.min(4,.9/z));
   rr(vx,x-W/2,y,W,H,1,'rgba(10,10,10,.6)');rr(vx,x-W/2,y,W*Math.max(0,g.men)/g.men0,H,1,g.side?'#e0604a':'#5aa0f0');rr(vx,x-W/2,y+H+1,W,H*.7,1,'rgba(10,10,10,.6)');rr(vx,x-W/2,y+H+1,W*g.mo/100,H*.7,1,g.routed?'#888':'#e8c040');
   if(K<2.5||BV.sel===k){vx.font='600 '+(8*K|0)+'px sans-serif';vx.textAlign='center';vx.fillStyle='rgba(0,0,0,.6)';vx.fillText(g.name+(g.routed?' — ROUTED':''),x+1,y-16*K+1);vx.fillStyle=g.routed?'#bbb':g.side?'#ffb8a8':'#b8d8ff';vx.fillText(g.name+(g.routed?' — ROUTED':''),x,y-16*K);vx.textAlign='left'}}}
 function bvTap(w){let best=null,bd=9;for(const k in BV.G){const al=BV.P.filter(p=>p.g===k&&p.alive);for(const p of al){const d=(p.x-w.x/TS)**2+(p.y-w.y/TS)**2;if(d<bd){bd=d;best=k}}}BV.sel=best;bvHud()}
-function bvHud(light){let h=$('bhud');if(!h){h=document.createElement('div');h.id='bhud';h.className='glass';document.body.appendChild(h)}const R=BV.res,N=R.frames.length,tot=s=>Object.values(BV.G).filter(g=>g.side===s).reduce((a,g)=>a+Math.max(0,g.men),0),t0=s=>Object.values(BV.G).filter(g=>g.side===s).reduce((a,g)=>a+g.men0,0);
+function bvHud(light){if(!BV){const o=$('bhud');if(o)o.remove();return}let h=$('bhud');if(!h){h=document.createElement('div');h.id='bhud';h.className='glass';document.body.appendChild(h)}const R=BV.res,N=R.frames.length,tot=s=>Object.values(BV.G).filter(g=>g.side===s).reduce((a,g)=>a+Math.max(0,g.men),0),t0=s=>Object.values(BV.G).filter(g=>g.side===s).reduce((a,g)=>a+g.men0,0);
  const ph=BV.t<BV.DEP?'Deployment':BV.done?(R.win?'VICTORY':'DEFEAT'):'Round '+(BV.fi+1)+' / '+N+(R.frames[BV.fi]&&R.frames[BV.fi].engaged?' · Melee':' · Advance & volleys');
  const bar=(s)=>'<div class="bvs"><b style="color:'+(s?'#ff9a80':'#8ac0ff')+'">'+CIV[BV.civ[s]].n+(s?'':' (you)')+'</b> '+tot(s)+'/'+t0(s)+'<i><u style="width:'+(100*tot(s)/t0(s))+'%;background:'+(s?'#e0604a':'#5aa0f0')+'"></u></i></div>';
  let html='<h3>Battle of '+(BV.i<0?'the Raid':REG[BV.i].n)+'</h3><div class="small">'+TERR[R.T].n+' · '+ph+'</div>'+bar(0)+bar(1)+'<div class="bvl">';
@@ -1628,8 +1628,8 @@ plague:{n:'Plague!',w:()=>S.pop>8?1+S.tier*.5:0,dur:40,init:e=>{e.k=0;e.cap=Math
  tick:e=>{const dens=Math.min(1.5,S.pop/Math.max(1,housing()));const ch=.07*dens*plagueMit()*(e.q?.5:1)*(e.heal?.5:1);if(e.k<e.cap&&S.pop>4&&Math.random()<ch){S.pop--;e.k++;fixJobs();log('A villager succumbed to the plague.')}}},
 drought:{n:'Drought',w:()=>1,dur:60,init:e=>{e.left=S.tech.irrigation?40:60},text:()=>'The river runs low and fields turn brown. Farm output '+(S.tech.irrigation?'×0.7 (Irrigation helps)':'×0.4')+'. Granaries ease it.',
  ch:e=>[['Ration food (eat −30%, no growth)',()=>{e.ration=1}],['Endure',()=>{}]]},
-immig:{n:'Immigrants Arrive',w:()=>1.2,dur:0,init:e=>{e.n=3+S.tier*3+Math.floor(Math.random()*3)},text:e=>e.n+' families from the hills ask to settle here. Housing: '+S.pop+'/'+housing()+'. Overcrowding causes unrest.',
- ch:e=>[['Welcome them',()=>{S.pop+=e.n;spawnMigr(e.n,true);log(e.n+' newcomers joined!');if(S.pop>housing()+2){S.ev.act.push({id:'unrest',left:60});log('Overcrowding! Unrest grows.')}}],['Turn them away',()=>{spawnMigr(e.n,false)}]]},
+immig:{n:'Immigrants Arrive',w:()=>1.2,dur:0,init:e=>{e.n=3+S.tier*3+Math.floor(Math.random()*3)},text:e=>e.n+' families from the hills ask to settle here. Housing: '+S.pop+'/'+housing()+', food '+(S.rate&&S.rate.food>=0?'+':'')+(S.rate?S.rate.food.toFixed(1):'0')+'/tick. They bring '+e.n*12+' food, but each eats. Overcrowding causes unrest.',
+ ch:e=>[['Welcome them',()=>{S.pop+=e.n;S.res.food=Math.min(cap(),S.res.food+e.n*12);spawnMigr(e.n,true);log(e.n+' newcomers joined!');if(S.pop>housing()+2){S.ev.act.push({id:'unrest',left:60});log('Overcrowding! Unrest grows.')}}],['Turn them away',()=>{spawnMigr(e.n,false)}]]},
 unrest:{n:'Unrest',hidden:1,w:()=>0,dur:60},
 harvest:{n:'Bountiful Harvest',w:()=>cnt('farm')?1:0,dur:30,init:()=>{S.res.food=Math.min(cap(),S.res.food+30+S.tier*30)},text:()=>'The gods smile! +'+(30+S.tier*30)+' food and farms ×1.6 for a while.',ch:()=>[['Praise the gods!',()=>{}]]},
 fire:{n:'Fire!',w:()=>blds().filter(o=>o.b.t!=='farm').length>2?1:0,dur:18,init:e=>{const c=blds().filter(o=>o.b.t!=='farm');e.bi=pick(c).i},text:e=>'The '+BLD[S.bl[e.bi].t].n+' is burning! Wells make the bucket brigade more likely to save it.',
