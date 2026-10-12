@@ -1,0 +1,7 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Bronze and Blood — RimWorld-style pawns (concept, review only)</title>
+<style>body{margin:0;background:#17130f;color:#e8dcc0;font:14px Georgia,serif}h1{font-size:20px;padding:12px 16px 0;margin:0}.note{padding:4px 16px;color:#b8a888}canvas{display:block;margin:6px 16px;border:1px solid #3a2e22;border-radius:6px}</style></head><body>
+<h1>Bronze and Blood — layered top-down pawns (RimWorld style)</h1>
+<div class="note">Layers: body shape → apparel → head → hair → beard → headgear; tool sprite drawn separately and rotated toward the target. Facings S/E/N, W = mirrored E. Movement: glide + slight bob; lying = rotated sprite.</div>
+<div id="out"></div>
+<script src="people-core.js"></script><script>const L2W=(v,f,o)=>[o[0]+v[0]*Math.cos(f)+v[1]*Math.sin(f),o[1]-v[0]*Math.sin(f)+v[1]*Math.cos(f),o[2]+v[2]];</script><script src="people-nature.js"></script><script src="pawns.js"></script>
+</body></html>
