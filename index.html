@@ -348,10 +348,10 @@ function bcost(k,l){const m=(S.tech.masonry?.75:1)*Math.pow(1.6,l);const o={};fo
 const can=c=>Object.keys(c).every(r=>S.res[r]>=c[r]);
 function pay(c){if(!can(c))return false;for(const r in c)S.res[r]-=c[r];return true}
 const cstr=c=>Object.keys(c).map(r=>c[r]+' '+r).join(', ');
-function tick(){LTk=performance.now();siteTick();milTick();if(S.needStore){S.needStore=0;try{rebuildOcc();if(autoPlace('storehouse',1,true)){worldChanged();log('Your stores were gathered into a new Storehouse.')}}catch(e){console.warn(e)}}if(BV&&!$('bhud')&&performance.now()-(BV.born||0)>3000){console.warn('orphan battle state cleared');BV=null}if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0){if(S.rate&&S.rate.food<0&&S.res.food<S.pop*3&&S.t%15===0){const fj=Object.keys(JOBS).filter(j=>JOBS[j][1]==='food'&&(S.jobs[j]||0)<jobCap(j));const nf=Object.keys(S.jobs).find(j=>S.jobs[j]>0&&JOBS[j][1]!=='food'&&(S.prio[j]||3)>1);if(fj.length&&nf){S.jobs[nf]--}}autoAssign()}
+function tick(){LTk=performance.now();{const se=seasonOf();if(S.seaSeen!==se){if(S.seaSeen!=null)log('The season turns: '+['Spring','Summer','Autumn','Winter'][se]+'.');S.seaSeen=se;CH={};chunkSig++}}siteTick();milTick();if(S.needStore){S.needStore=0;try{rebuildOcc();if(autoPlace('storehouse',1,true)){worldChanged();log('Your stores were gathered into a new Storehouse.')}}catch(e){console.warn(e)}}if(BV&&!$('bhud')&&performance.now()-(BV.born||0)>3000){console.warn('orphan battle state cleared');BV=null}if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0){if(S.rate&&S.rate.food<0&&S.res.food<S.pop*3&&S.t%15===0){const fj=Object.keys(JOBS).filter(j=>JOBS[j][1]==='food'&&(S.jobs[j]||0)<jobCap(j));const nf=Object.keys(S.jobs).find(j=>S.jobs[j]>0&&JOBS[j][1]!=='food'&&(S.prio[j]||3)>1);if(fj.length&&nf){S.jobs[nf]--}}autoAssign()}
  const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod*hapMul();
  const p={food:0,wood:0,stone:0,copper:0,tin:0,bronze:0};
- const pj={};for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]&&!RNJ[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}v=rnJobOut(j,v);p[J[1]]+=v;pj[j]=v}
+ const pj={};for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]&&!RNJ[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm*FARMSEAS[seasonOf()]}v=rnJobOut(j,v);p[J[1]]+=v;pj[j]=v}
  for(const r in S.bonus)p[r]*=1+S.bonus[r];{const X=cX(),E=X.eco||{};for(const r in E)if(p[r]>0)p[r]*=1+E[r];if(X.purple)p.bronze+=(S.jobs.merchant||0)*X.purple}
  const sm=S.jobs.smith||0;if(sm){let n=Math.min(sm*0.3,S.res.copper/1,S.res.tin/0.5);S.res.copper-=n;S.res.tin-=n*.5;p.bronze+=n*mult*(1+(S.bonus.bronze||0))}
  let up=S.pop*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up*RATION[S.ration||'normal'].up;
@@ -612,7 +612,7 @@ function workSpot(a){if(a.role==='fisher'){const w=spotCache.water;return w.leng
 function inSpot(o,k,sl){const s=o.s||bsz(o.b.t);const d=doorOf(o.b);{const M=fpMask(o.b.t,bfp(o.b));if(M){const cs=[];for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(M[j*s+i]===1)cs.push([i,j]);if(!cs.length)for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(M[j*s+i])cs.push([i,j]);const c=cs[Math.abs((k*7919+(sl?3:0)))%cs.length];return{x:o.gx+c[0]+.5,y:o.gy+c[1]+.55,door:d,b:o.b}}}if(s<2)return{x:o.gx+.5,y:o.gy+.55,door:d,b:o.b};if(sl)return{x:o.gx+.45+(k%3)*(s-.9)/2,y:o.gy+.75+((k/3|0)%3)*(s-1.1)/2,door:d,b:o.b};return{x:o.gx+.75+((k*.618+(sl?.1:.4))%1)*(s-1.5),y:o.gy+.85+((k*.382+(sl?.05:.55))%1)*(s-1.6),door:d,b:o.b}}
 function go(a,to,st){let r;const pth=(f,t)=>t&&t.door?(t.b===a.inB?[{x:t.x,y:t.y}]:pathTo(f,t.door).concat([{x:t.x,y:t.y}])):pathTo(f,t);
  a.outB=null;if(a.inB&&(!to||to.b!==a.inB)){const d=doorOf(a.inB);a.outB=a.inB;a.inB=null;r=[{x:d.x,y:d.y}].concat(pth({x:d.x,y:d.y},to))}else r=pth(a,to);a.inB=to&&to.b||null;a.route=r;a.state=st}
-const DAYLEN=540;let LTk=0;const dayP=()=>(S.t%DAYLEN)/DAYLEN,night=()=>{const p=dayP();return p>.64&&p<.94};
+const DAYLEN=540,YDAYS=60,SDAYS=15;const calDay=()=>Math.floor(S.t/DAYLEN),seasonOf=()=>(calDay()/SDAYS|0)%4,yearP=()=>((S.t/DAYLEN)%YDAYS)/YDAYS,calStr=()=>{const d=calDay();return['Spring','Summer','Autumn','Winter'][(d/SDAYS|0)%4]+' '+(d%SDAYS+1)+' · Year '+(Math.floor(d/YDAYS)+1)};const FARMSEAS=[.5,.9,2,.6];let LTk=0;const dayP=()=>(S.t%DAYLEN)/DAYLEN,night=()=>{const p=dayP();return p>.64&&p<.94};
 function lightT(now){const f=spd?Math.min(1,Math.max(0,(now-LTk)*spd/1000)):0;return S.t+f}
 function think(a){const h=hubT(),n=night();if(a.carry==='sack'&&a.state==='home'&&!a.load)a.carry=null;if(n&&a.state==='home'&&a.role!=='soldier'&&a.role!=='kid'){a.t=3;return}
  if(a.role==='soldier'&&milThink(a,h,n))return;
@@ -744,7 +744,7 @@ function renderChunk(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);con
    const k=(ly+(gy-cy*CS)*32)*W*4+(lx+(gx-cx*CS)*32)*4;d[k]=R*m;d[k+1]=G*m;d[k+2]=B*m;d[k+3]=255;
    if(wat>.08&&wat<.6&&h>.18){const fa=Math.max(0,1-Math.abs(wat-.3)*4.2)*(.55+.45*Math.sin((X+Y)*.35+n2*9));if(!fimg){fimg=g.createImageData(W,W);fd=fimg.data}fd[k]=236;fd[k+1]=244;fd[k+2]=240;fd[k+3]=Math.max(0,fa)*215}
    else if(wat>.99&&hsh(X>>1,Y>>1,71)<.006){if(!fimg){fimg=g.createImageData(W,W);fd=fimg.data}fd[k]=200;fd[k+1]=228;fd[k+2]=240;fd[k+3]=150}}}
- g.putImageData(img,0,0);if(CLIFF)for(let gy=cy*CS;gy<cy*CS+CS;gy++)for(let gx=cx*CS;gx<cx*CS+CS;gx++){if(!CLIFF[gy*MW+gx])continue;const px=(gx-cx*CS)*32,py=(gy-cy*CS)*32;g.fillStyle='#5a4c40';g.fillRect(px,py,32,32);g.fillStyle='#7a6a58';g.fillRect(px,py,32,12);const s2=gy+1<MH&&!CLIFF[(gy+1)*MW+gx];g.fillStyle='#3a3029';for(let k=0;k<4;k++)g.fillRect(px+3+k*8+(hsh(gx,gy,k)*3|0),py+12,2,s2?20:16);if(s2){g.fillStyle='rgba(20,14,8,.35)';g.fillRect(px,py+32-4,32,4)}}
+ seaTint(d); g.putImageData(img,0,0);if(CLIFF)for(let gy=cy*CS;gy<cy*CS+CS;gy++)for(let gx=cx*CS;gx<cx*CS+CS;gx++){if(!CLIFF[gy*MW+gx])continue;const px=(gx-cx*CS)*32,py=(gy-cy*CS)*32;g.fillStyle='#5a4c40';g.fillRect(px,py,32,32);g.fillStyle='#7a6a58';g.fillRect(px,py,32,12);const s2=gy+1<MH&&!CLIFF[(gy+1)*MW+gx];g.fillStyle='#3a3029';for(let k=0;k<4;k++)g.fillRect(px+3+k*8+(hsh(gx,gy,k)*3|0),py+12,2,s2?20:16);if(s2){g.fillStyle='rgba(20,14,8,.35)';g.fillRect(px,py+32-4,32,4)}}
  // painterly grass tufts / pebbles / reeds
  for(let gy=cy*CS;gy<cy*CS+CS;gy++)for(let gx=cx*CS;gx<cx*CS+CS;gx++){const gi=gy*MW+gx,r=RT[gi];if(occ[gi]||roadSet[gi])continue;{let nb=0;for(const[dx,dy]of NBD){const o=occ[(gy+dy)*MW+gx+dx];if(o&&S.bl[o-1]&&!FLATB[S.bl[o-1].t]&&!APX[S.bl[o-1].t])nb=1}if(nb&&hsh(gx,gy,44)<.8)continue}const lx0=(gx-cx*CS)*32,ly0=(gy-cy*CS)*32;
   if(r<=R_FOREST){const n=3+(hsh(gx,gy,3)*5|0);for(let k=0;k<n;k++){const x=lx0+3+hsh(gx,gy,k*3+1)*26,y=ly0+4+hsh(gx,gy,k*3+2)*25,gr=r===R_MARSH?[78,104,60]:dry?[150,130,70]:[84+hsh(k,gx)*30,118+hsh(k,gy)*24,52];
@@ -755,7 +755,7 @@ function renderChunk(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);con
  let f=null;if(fimg){const[fc,fg]=mk(W,W);fg.putImageData(fimg,0,0);f=fc}return{c,f,ox,oy}}
 // ---- wheat farms: cached base (soil, furrows, ditches, border) + per-plant growth stages with wind sway ----
 const FARMC=new Map();
-function farmStage(b){return((S.t/DAYLEN)/4+hsh(b.x,b.y,5))%1}
+function farmStage(b){const y=Math.max(0,Math.min(.999,yearP()+(hsh(b.x,b.y,5)-.5)*.02));return y<.25?.1+y/.25*.22:y<.5?.32+(y-.25)/.25*.38:y<.58?.7+(y-.5)/.08*.17:y<.75?.9+(y-.58)/.17*.09:.05}
 function farmBase(b,s,v){const k=b.x+','+b.y+','+s+v;let F=FARMC.get(k);if(F)return F;const W=s*32,R=2,[c,g]=mk(W*R,W*R);g.scale(R,R);const H=i=>hsh(b.x,b.y,300+i),rot=H(1)<.5,ditch=(H(2)*4)|0,brush=H(3)<.45,split=s>=2&&H(4)<.6,dry=v==='dry';
  const soil=dry?[138,112,74]:[110,84,54];for(let y=0;y<W;y++)for(let x=0;x<W;x+=2){const n=(hsh(x+b.x*32,y+b.y*32,9)-.5)*14;g.fillStyle='rgb('+(soil[0]+n|0)+','+(soil[1]+n*.8|0)+','+(soil[2]+n*.6|0)+')';g.fillRect(x,y,2,1)}
  const rows=[];const gap=4.6+H(5)*1.6,m=3.5;for(let r=m+2;r<W-m;r+=gap)rows.push(r);
@@ -1321,7 +1321,7 @@ function icon(r){return ICO(r,18)}
 const tipEl=()=>$('tip');function tipOn(el,fn){el.addEventListener('mouseenter',()=>{const t=tipEl();t.innerHTML=fn();t.style.display='block';const r=el.getBoundingClientRect();t.style.left=Math.min(innerWidth-230,r.left)+'px';t.style.top=(r.bottom+6)+'px'});el.addEventListener('mouseleave',()=>tipEl().style.display='none');
  el.addEventListener('touchstart',()=>{const t=tipEl();t.innerHTML=fn();t.style.display='block';const r=el.getBoundingClientRect();t.style.left=Math.min(innerWidth-230,Math.max(4,r.left))+'px';t.style.top=(r.bottom+6)+'px';clearTimeout(tipOn.t);tipOn.t=setTimeout(()=>t.style.display='none',2200)},{passive:true})}
 const RNAME={food:'Food',wood:'Wood',stone:'Stone',copper:'Copper',tin:'Tin',bronze:'Bronze'};
-function renderTop(){$('tier').textContent=TIERS[S.tier].n;$('day').textContent='Day '+Math.floor(S.t/DAYLEN+1)+' · '+(night()?'Night':'Day');
+function renderTop(){$('tier').textContent=TIERS[S.tier].n;$('day').textContent=calStr()+' · '+(night()?'Night':'Day');
  const R=$('res');if(!R.children.length){RES.forEach(r=>{const d=document.createElement('div');d.className='chip';d.appendChild(ICO(r,16));const s=document.createElement('span');s.id='r_'+r;d.appendChild(s);const q=document.createElement('em');q.id='rd_'+r;d.appendChild(q);R.appendChild(d);tipOn(d,()=>'<b>'+RNAME[r]+'</b><br>'+Math.floor(S.res[r])+' / '+cap()+' stored<br>Rate: '+(((S.rate&&S.rate[r])||0)>=0?'+':'')+(((S.rate&&S.rate[r])||0)).toFixed(2)+' per second')});
   const d=document.createElement('div');d.className='chip';d.id='popc';d.appendChild(ICO('pop',16));const s=document.createElement('span');s.id='r_pop';d.appendChild(s);R.appendChild(d);tipOn(d,()=>'<b>Population</b><br>'+S.pop+' people, housing '+housing()+'<br>Idle: '+(S.pop-employed())+'<br>Soldiers: '+armyN())
   {const d=document.createElement('div');d.className='chip';d.id='hapc';d.appendChild(ICO('pop',16));const s=document.createElement('span');s.id='r_hap';d.appendChild(s);R.appendChild(d);tipOn(d,()=>'<b>Happiness '+Math.round(S.hap||50)+'%</b> — '+moodW(S.hap||50)+'<br>'+(S.hapF||[]).map(f=>(f[1]>0?'+':'')+f[1]+' '+f[0]).join('<br>')+'<br><i>≥70: faster work, growth, immigrants. &lt;35: slowdown, emigration, work refusal; &lt;15 riots.</i>')}}
@@ -2140,6 +2140,7 @@ function genWorld2(seed){const W=MW,H=MH,N=W*H,B=Object.assign({h:.65,f:.66},cX(
  blob(START.x-7,START.y-2,3,T_FOREST);blob(START.x+5,START.y-9,3,T_FOREST);blob(START.x+10,START.y+1,2,T_ROCK);blob(START.x-6,START.y-11,2,T_CU);blob(START.x+17,START.y-12,2,T_SN);blob(START.x-15,START.y+5,4,T_FOREST)}
 
 let CLIFF=null;
+function seaTint(d){const se=seasonOf(),cold=S.civ==='hittite'||S.civ==='mitanni';if(se===0)return;for(let i=0;i<d.length;i+=4){let r=d[i],g=d[i+1],b=d[i+2];if(b>r+18&&b>g-10)continue;if(se===1){r+=5;b-=6}else if(se===2){r=r*1.04+2;g*=.985;b*=.9}else{const l=(r+g+b)/3,f=cold?.26:.1,ds=cold?.35:.2;r+=(l-r)*ds;g+=(l-g)*ds;b+=(l-b)*ds;r+=(226-r)*f;g+=(232-g)*f;b+=(240-b)*f}d[i]=r;d[i+1]=g;d[i+2]=b}}
 function terrainX(seed){CLIFF=new Uint8Array(MW*MH);if(MW<=256)return;const W=MW,H=MH,rnd=(a,b)=>hsh(seed*7+a,b,77),sx=START.x,sy=START.y,setT=(x,y,t)=>{if(x>=0&&y>=0&&x<W&&y<H)TER[y*W+x]=t};
  const nearStart=(x,y,r)=>Math.hypot(x-sx,y-sy)<r;
  // two wide rivers: one east-west (north or south of start), one north-south (east or west of start)
@@ -2511,7 +2512,7 @@ function fxFrame(D,flats,rdt,dt,now,z,inV,vl,vr,vt,vb){if(rdt>0)FX.fps=FX.fps*.9
 const RND={t:{n:'Tree',r:'wood',max:30,job:'woodcutter'},b:{n:'Berry bush',r:'food',max:20,job:'gatherer'},s:{n:'Stone outcrop',r:'stone',max:140,job:'quarrier'},c:{n:'Copper deposit',r:'copper',max:90,job:'coppermin'},n:{n:'Tin deposit',r:'tin',max:60,job:'tinmin'}};
 const RNJ={woodcutter:'t',gatherer:'b',quarrier:'s',coppermin:'c',tinmin:'n',hunter:'h',fisher:'f'};
 const RN={src:null,list:{t:[],b:[],s:[],c:[],n:[]},has:new Set(),cand:{},cur:{},ct:-99,anim:new Map(),R:48};
-const rnSeason=()=>(S.t/(DAYLEN*2)|0)%4,SEASONS=['Spring','Summer','Autumn','Winter'];
+const rnSeason=()=>seasonOf(),SEASONS=['Spring','Summer','Autumn','Winter'];
 function rnKind(x,y){const t=ter(x,y),r=hsh(x,y,3);if(t===T_FOREST)return r<.45?'tb':'t';if(t===T_GRASS)return r>=.03&&r<.065?'b':'';if(t===T_HILL)return r<.15?'s':'';if(t===T_ROCK)return r<.35?'s':'';if(t===T_CU)return r<.5?'c':'';if(t===T_SN)return r<.5?'n':'';return''}
 function rnInit(){if(!S.rn)S.rn={v:1,d:{},z:{}};if(!S.fish){let w=0;const c=S.center;for(let y=c.y-24;y<=c.y+24;y++)for(let x=c.x-24;x<=c.x+24;x++)if(ter(x,y)===T_WATER)w++;S.fish={n:Math.min(600,w*3),max:Math.min(600,w*3)}}
  if(!S.herds){S.herds=[];const c=S.center,cs=[];for(let y=c.y-36;y<=c.y+36;y++)for(let x=c.x-36;x<=c.x+36;x++){const d=Math.hypot(x-c.x,y-c.y);if(d<10||d>36)continue;if(ter(x,y)===T_FOREST&&walkC(x,y+1)&&hsh(x,y,77)<.05)cs.push([x,y+1])}
@@ -2529,7 +2530,7 @@ function rnTake(j,v){if(!S.rn)return v;const q=RNJ[j];if(!q)return v;
  if(q==='f'){const t=Math.min(v,S.fish.n*5*.02);S.fish.n-=t/5;return t}
  const L=rnCands(j);let got=0;const cur=[];for(const n of L){const a=rnAmt(n.k);if(a<=0)continue;if(v>1e-6){const t=Math.min(a,v);rnSet(n.k,a-t);v-=t;got+=t*n.e}if(cur.length<6)cur.push(n)}RN.cur[j]=cur;if(!cur.length)RN.cand[j]=null;if(q==='b'&&v>0)got+=v*.5;return got}// gatherers forage roots & greens at half rate when bushes are bare
 // regrowth / breeding, once per tick
-function rnTick(){if(!S.rn)return;const se=rnSeason(),bm=[1,1.4,.7,.08][se];
+function rnTick(){if(!S.rn)return;const se=rnSeason(),bm=[1,1.4,.7,.2][se];
  for(const k in S.rn.d){const q=k[0],M=RND[q].max,a=S.rn.d[k];if(q==='t'){const z=S.rn.z[k];if(z!==undefined&&S.t-z<500)continue;rnSet(k,a+M/1200)}else if(q==='b')rnSet(k,a+M/220*bm)}
  for(const H of S.herds){if(H.n>=1.5)H.n=Math.min(H.max,H.n+.02*H.n*(1-H.n/H.max));else if(Math.random()<.0004)H.n=2}
  const F=S.fish;if(F.max)F.n=Math.min(F.max,F.n+.01*Math.max(F.n,4)*(1-F.n/F.max))}
