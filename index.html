@@ -401,7 +401,7 @@ function siteTick(){let ch=0;for(const b of S.bl){const c=b.cp;if(!c)continue;co
 function buildThink(a){const sites=S.bl.filter(b=>b.cp);if(a.bsite&&!sites.includes(a.bsite)){a.bsite=null;a.bclr=0}if(!sites.length)return false;
  if(a.state==='bfetch'&&a.bsite){a.carry=a.bmat||'log';const d=doorOf(a.bsite);go(a,{x:d.x+(Math.random()-.5),y:d.y+(Math.random()-.5)*.4},'bdeliver');return true}
  if(a.state==='bdeliver'&&a.bsite){a.bsite.cp.md+=1;a.carry=null}
- let b=a.bsite;if(!b){const crew=x=>agents.filter(q=>q.bsite===x).length;b=sites.sort((p,q)=>crew(p)-crew(q))[0];if(crew(b)>=4&&a.role!=='builder')return false;a.bsite=b}
+ let b=a.bsite;if(!b){const X=ax(),crew=x=>X.bsite.get(x)||0;b=sites.sort((p,q)=>crew(p)-crew(q))[0];if(crew(b)>=4&&a.role!=='builder')return false;a.bsite=b;X.bsite.set(b,crew(b)+1)}
  const ph=sitePhase(b),s=bsz(b.t);if(ph===1){const st=S.bl.filter(q=>STORES[q.t]&&!q.cp)[0];const c=bcost(b.t,0);a.bmat=(c.stone||0)>(c.wood||0)?'stone':'log';if(st){go(a,doorOf(st),'bfetch');return true}a.bsite.cp.md+=1;}
  a.bclr=ph===0?1:0;const side=(a.idx||0)%4,t=((a.idx||0)*.37+Math.random()*.3)%1,P=side===0?{x:b.x+t*s,y:b.y-.4}:side===1?{x:b.x+s+.4,y:b.y+t*s}:side===2?{x:b.x+t*s,y:b.y+s+.4}:{x:b.x-.4,y:b.y+t*s};go(a,P,'towork');a.t=2+Math.random()*2;return true}
 function siteDraw(b,sp,X,Y,s,now){const c=b.cp,W=s*32,ph=sitePhase(b),bp=Math.min(1,c.wd/c.w);
@@ -416,8 +416,8 @@ function siteDraw(b,sp,X,Y,s,now){const c=b.cp,W=s*32,ph=sitePhase(b),bp=Math.mi
 // ---- harvest orders: Gatherer's Hut harvesters (fast) and idle villagers (slow) ----
 function harvestThink(a,rate){if(a.state==='deliver'&&a.load)return haulThink(a);if(!S.hv)return false;
  if(a.hvk&&a.state==='work'){const k=a.hvk;a.hvk=null;const am=rnAmt(k);if(am>0){const t=Math.min(am,rate*(1+(S.tech.bronzetools?.3:0)));rnSet(k,am-t);(window.HVS=window.HVS||{})[a.role]=(HVS[a.role]||0)+t;if(rnAmt(k)<=0)delete S.hv[k];RN.cand={};const r=RND[k[0]].r,i=+k.slice(1),x=i%MW,y=(i/MW)|0,dst=nearStore(x,y,r);a.load={r,n:t};a.carry=ITM[r].carry;if(dst){go(a,doorOf(dst),'deliver');a.dst=bid(dst)}else{go(a,hubT(),'deliver');a.dst=null}popup(x+.5,y,'+'+Math.round(t)+' '+r,'#e8d8a8');return true}}
- let best=null,bd=1e9;for(const k in S.hv){if(!RND[k[0]])continue;if(rnAmt(k)<=0){delete S.hv[k];continue}const i=+k.slice(1),x=i%MW,y=(i/MW)|0;const tk=agents.some(o=>o!==a&&o.hvk===k);const d=Math.abs(x-a.x)+Math.abs(y-a.y)+(tk?12:0);if(d<bd){bd=d;best=k}}
- if(!best)return false;const i=+best.slice(1),x=i%MW,y=(i/MW)|0;a.hvk=best;a.hvTool=best[0]==='t'?'axe':best[0]==='b'?'sickle':'pick';go(a,{x:x+.5+(a.x<x?-.6:.6),y:y+.7},'towork');return true}
+ let best=null,bd=1e9;const HX=ax().hvk;for(const k in S.hv){if(!RND[k[0]])continue;if(rnAmt(k)<=0){delete S.hv[k];continue}const i=+k.slice(1),x=i%MW,y=(i/MW)|0;const tk=(HX.get(k)||0)-(a.hvk===k?1:0)>0;const d=Math.abs(x-a.x)+Math.abs(y-a.y)+(tk?12:0);if(d<bd){bd=d;best=k}}
+ if(!best)return false;const i=+best.slice(1),x=i%MW,y=(i/MW)|0;a.hvk=best;HX.set(best,(HX.get(best)||0)+1);a.hvTool=best[0]==='t'?'axe':best[0]==='b'?'sickle':'pick';go(a,{x:x+.5+(a.x<x?-.6:.6),y:y+.7},'towork');return true}
 // ================= MILITARY: duty rotation (drill / patrol / rest), xp from drill, decay without =================
 function milDeco(g,t,W){if(t==='archery'){for(let i=0;i<3;i++){const x=W*.78,y=W*(.22+i*.28);circ(g,x,y,3.4,'#e8dcc0','#4a3420',.5);circ(g,x,y,2.2,'#c84a2a');circ(g,x,y,.9,'#e8dcc0')}}
  else if(t==='slingfield'){for(let i=0;i<5;i++)circ(g,W*.75+hsh(i,1)*W*.15,W*.3+hsh(i,2)*W*.4,1.6,'#8a8478','#3a3630',.4)}
@@ -444,8 +444,8 @@ function nearStore(x,y,r){let best=null,bd=1e9;for(const b of S.bl){if(!STORES[b
 function haulThink(a){S.stk=S.stk||{};const sc=Math.min(1,MAXW/Math.max(1,S.pop));
  if(a.state==='pickup'&&a.haul){const o=S.stk[a.haul.k];const b=S.bl.find(q=>bid(q)===a.haul.k);a.haul=null;if(!o||!b)return false;let r=null,mx=0;for(const q in o)if(o[q]>mx){mx=o[q];r=q}if(!r||mx<.5)return false;const n=Math.min(mx,8/sc);o[r]-=n;const ws=r==='food'&&b.t==='farm'?wantGrain(b.x,b.y):null,dst=ws||nearStore(b.x,b.y,r);a.load={r,n,to:ws?'inb':''};a.carry=ITM[r].carry;if(dst){const sz=bsz(dst.t);go(a,sz>=2&&!FLATB[dst.t]?inSpot({b:dst,gx:dst.x,gy:dst.y,s:sz},a.idx||0,0):doorOf(dst),'deliver');a.dst=bid(dst)}else{go(a,hubT(),'deliver');a.dst=null}return true}
  if(a.state==='deliver'&&a.load){const C=cap(),L=a.load;if(L.to==='inb'&&a.dst){S.inb=S.inb||{};const ib=S.inb[a.dst]||(S.inb[a.dst]={grain:0});ib.grain+=L.n}else if(L.r==='bread')S.res.food=Math.min(C,S.res.food+L.n);else if(L.r==='beer'){S.gd=S.gd||{beer:0};S.gd.beer=Math.min(200,(S.gd.beer||0)+L.n)}else S.res[L.r]=Math.min(C,S.res[L.r]+L.n);if(a.dst){(S.dlv||(S.dlv={}))[a.dst]=(S.dlv[a.dst]||0)+a.load.n}a.load=null;a.carry=null;a.state='idle2';a.t=.4;return true}
- let best=null,bv=1.5;for(const b of S.bl){const k=bid(b),t=stkTot(k);if(t<=bv)continue;const taken=agents.some(o=>o!==a&&o.haul&&o.haul.k===k)?t*.5:t;if(taken>bv){bv=taken;best=b}}
- if(!best)return false;a.haul={k:bid(best)};go(a,doorOf(best),'pickup');return true}
+ let best=null,bv=1.5;const HL=ax().haul;for(const b of S.bl){const k=bid(b),t=stkTot(k);if(t<=bv)continue;const taken=(HL.get(k)||0)-(a.haul&&a.haul.k===k?1:0)>0?t*.5:t;if(taken>bv){bv=taken;best=b}}
+ if(!best)return false;a.haul={k:bid(best)};HL.set(a.haul.k,(HL.get(a.haul.k)||0)+1);go(a,doorOf(best),'pickup');return true}
 function stkIcon(g,ic,x,y,k){if(ic==='log'){rr(g,x-4,y-1.6,8,3.2,1.5,'#8a5a32','#3a2410',.5);circ(g,x+4,y,1.5,'#c8a070','#3a2410',.4)}else if(ic==='block'){rr(g,x-3,y-2.2,6,4.4,.6,lighten('#a8a294',(hsh(k,3)-.5)*.2),'#4a463e',.5)}else if(ic==='cu'||ic==='sn'){circ(g,x,y,2.4,'#6e6a62','#3a3630',.5);circ(g,x-.6,y-.4,1,ic==='cu'?'#e0843c':'#c8e0f0')}else if(ic==='ingot'){rr(g,x-3,y-1.4,6,2.8,.4,'#d8a040','#5a3a14',.5)}else if(ic==='sheaf'){ell(g,x,y,2,3.6,'#d8bc60','#6a5020',.4);ln(g,x-2,y,x+2,y,'#9a7a30',.7)}else if(ic==='bread'){ell(g,x,y,2.8,2,'#c8843a','#5a3414',.5)}else if(ic==='beer'){circ(g,x,y,2.4,'#b8643a','#4a2814',.5);circ(g,x,y,1,'#e8c060')}else{circ(g,x,y,2,'#d8c69a','#6a5a3a',.5)}}
 function stkDraw(b,X,Y,s){const o=S.stk&&S.stk[bid(b)];if(!o)return;const d=doorOf(b),dx=d.x*TS,dy=d.y*TS;let k=0;for(const r in o){const n=Math.min(12,Math.floor(o[r]/3));for(let i=0;i<n;i++,k++){const col=k%4,row=(k>>2)%3,lay=k/12|0;stkIcon(vx,ITM[r].ic,dx-9+col*6+(row%2)*2+lay,dy+4+row*4-lay*2,k)}}}
 function spawnPops(p){const m={food:'farm',wood:'lumber',stone:'quarry',copper:'copper',tin:'tin',bronze:'smelter'},col={food:'#f8e070',wood:'#e0b070',stone:'#e0e4ea',copper:'#f0a050',tin:'#bfe0f0',bronze:'#f8d040'};
@@ -594,7 +594,12 @@ let agents=[],critters=[],parts=[],clouds=[],birds=[],pops=[],bubble=null,roster
 function blds(t){const o=[];S.bl.forEach((b,i)=>{if(!t||b.t===t)o.push({b,i,gx:b.x,gy:b.y,s:bsz(b.t)})});return o}
 function pick(a){return a[Math.floor(Math.random()*a.length)]}
 function nearSpots(types,max){const c=S.center,o=[];for(let r=1;r<18&&o.length<max;r++)for(let y=c.y-r;y<=c.y+r;y++)for(let x=c.x-r;x<=c.x+r;x++){if(Math.max(Math.abs(x-c.x),Math.abs(y-c.y))!==r)continue;if(types.includes(ter(x,y))){for(const[dx,dy]of[[0,1],[1,0],[0,-1],[-1,0]])if(walkC(x+dx,y+dy)&&ter(x+dx,y+dy)!==T_FOREST&&ter(x+dx,y+dy)!==T_WATER){o.push({x:x+dx+.5,y:y+dy+.5});break}}}return o}
-const PC=new Map();const FF=new Map(),FFN=new Map(),FFR=110,FFMAX=96;let ffNow=0;
+const PC=new Map();
+// per-frame agent index: replaces O(N) agents.filter/some scans inside per-agent AI and per-building draws
+let AXF=0;const AX={f:-1,hvk:new Map(),haul:new Map(),bsite:new Map(),inB:new Map(),lz:0};
+function ax(){if(AX.f===AXF)return AX;AX.f=AXF;AX.hvk.clear();AX.haul.clear();AX.bsite.clear();AX.inB.clear();AX.lz=0;const inc=(m,k)=>m.set(k,(m.get(k)||0)+1);
+ for(const a of agents){if(a.hvk)inc(AX.hvk,a.hvk);if(a.haul&&a.haul.k!=null)inc(AX.haul,a.haul.k);if(a.bsite)inc(AX.bsite,a.bsite);if(a.inB&&!(a.route&&a.route.length)){let l=AX.inB.get(a.inB);if(!l)AX.inB.set(a.inB,l=[]);l.push(a)}if(a.state==='leisure')AX.lz++}return AX}
+const FF=new Map(),FFN=new Map(),FFR=110,FFMAX=96;let ffNow=0;
 function ffBuild(gx,gy){const x0=Math.max(0,gx-FFR),y0=Math.max(0,gy-FFR),x1=Math.min(MW-1,gx+FFR),y1=Math.min(MH-1,gy+FFR),w=x1-x0+1,h=y1-y0+1,N=w*h,par=new Int32Array(N).fill(-2),G=new Float64Array(N).fill(1e9);
  const hp=[],hv=[];const push=(n,f)=>{hp.push(n);hv.push(f);let i=hp.length-1;while(i>0){const q=(i-1)>>1;if(hv[q]<=hv[i])break;[hp[q],hp[i]]=[hp[i],hp[q]];[hv[q],hv[i]]=[hv[i],hv[q]];i=q}};
  const pop=()=>{const t=hp[0],ln=hp.pop(),lv=hv.pop();if(hp.length){hp[0]=ln;hv[0]=lv;let i=0;for(;;){const a=2*i+1,b=a+1;let m=i;if(a<hp.length&&hv[a]<hv[m])m=a;if(b<hp.length&&hv[b]<hv[m])m=b;if(m===i)break;[hp[m],hp[i]]=[hp[i],hp[m]];[hv[m],hv[i]]=[hv[i],hv[m]];i=m}}return t};
@@ -1212,7 +1217,7 @@ function aniSpr(k,fr){const key=k+fr;if(ASPR[key])return ASPR[key];const A=ANI[k
 function critDraw(c,now){const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1,A=ANI[c.k]||ANI.deer;const mv=c.tx!=null&&Math.hypot((c.tx||0)-c.x,(c.ty||0)-c.y)>.03;const fr=mv?Math.floor(now/140+(c.x*7|0))%4:(c.graze?4:0),bob=mv?Math.abs(Math.sin(now/140*Math.PI/2))*.8:0;
  ell(vx,X+1,Y+1.5,A.w*.95,A.h*.55,'rgba(20,14,8,.25)');vx.save();vx.translate(X,Y-bob);if(f<0)vx.scale(-1,1);vx.drawImage(aniSpr(c.k,fr),-24,-26,48,36);vx.restore()}
 let vign=null;
-function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;last=now;camStep(rdt);PAT.bud=48;farmDraw.bud=2;if(spd){vframe.tt=(vframe.tt||0)+dt;if(vframe.tt>.5){vframe.tt=0;trafficStep()}vframe.pc=(vframe.pc||0)+dt;if(vframe.pc>6){vframe.pc=0;PC.clear();ffNow+=6;ffAge(0)}}
+function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;last=now;camStep(rdt);AXF++;PAT.bud=48;farmDraw.bud=2;if(spd){vframe.tt=(vframe.tt||0)+dt;if(vframe.tt>.5){vframe.tt=0;trafficStep()}vframe.pc=(vframe.pc||0)+dt;if(vframe.pc>6){vframe.pc=0;PC.clear();ffNow+=6;ffAge(0)}}
  const dsig=!!evOn('drought')+'';if(dsig!==vframe.ds){vframe.ds=dsig;chunkSig++;ov64=null}if(!RT)calcRT();if(!bgSig){bgSig='b'+Math.random();rosterSig='';calcDistricts()}syncRoster();
  vx.setTransform(PXR,0,0,PXR,0,0);vx.fillStyle='#2e4a60';vx.fillRect(0,0,VW,VH);let sx=0,sy=0;if(vis.shake>0){vis.shake-=dt;sx=(Math.random()-.5)*8;sy=(Math.random()-.5)*6}
  const z=cam.z,TF=()=>vx.setTransform(z*PXR,0,0,z*PXR,Math.round((-cam.x+sx)*z*PXR),Math.round((-cam.y+sy)*z*PXR));TF();vx.imageSmoothingEnabled=true;
@@ -1645,7 +1650,7 @@ function hapCalc(){const F=[],add=(n,v)=>{if(Math.abs(v)>=.5)F.push([n,Math.roun
  const cr=S.pop/Math.max(1,housing());if(cr>.95)add('Crowding',-(cr-.95)*60-4);
  let be=0,n=0;S.bl.forEach((b,i)=>{if(b.t==='house'){be+=beautyAt(b.x+1,b.y+1);n++}});add('Beauty near homes',n?Math.min(12,be/n/2.5)-2:0);
  const emp=employed()/Math.max(1,S.pop);add(emp>.97?'Overworked, no rest':'Rest',emp>.97?(S.pop>=10?-5:-2):emp<.9?3:1);
- add('Recreation (temple, market, gardens)',Math.min(9,cnt('temple')*3+cnt('market')*2+cnt('garden')+cnt('statue')*1.5));{const bh=Math.min(2,cnt('tavern'));add('Beer hall'+(S.gd&&S.gd.beer>1&&bh?' with beer':''),bh*3+(S.gd&&S.gd.beer>1&&bh?3:0));add('Shrines',Math.min(4,cnt('shrine')*2));add('Senet games',Math.min(3,cnt('senet')));add('Plazas',Math.min(4,cnt('plaza')*2));const lz=agents.filter(a=>a.state==='leisure').length;if(lz)add('Evenings out ('+lz+')',Math.min(4,lz*.5))}
+ add('Recreation (temple, market, gardens)',Math.min(9,cnt('temple')*3+cnt('market')*2+cnt('garden')+cnt('statue')*1.5));{const bh=Math.min(2,cnt('tavern'));add('Beer hall'+(S.gd&&S.gd.beer>1&&bh?' with beer':''),bh*3+(S.gd&&S.gd.beer>1&&bh?3:0));add('Shrines',Math.min(4,cnt('shrine')*2));add('Senet games',Math.min(3,cnt('senet')));add('Plazas',Math.min(4,cnt('plaza')*2));const lz=ax().lz;if(lz)add('Evenings out ('+lz+')',Math.min(4,lz*.5))}
  if((S.ev.act||[]).some(e=>/plague|sick|fever/.test(e.id)))add('Sickness',-15);
  add('Mourning the dead',-Math.min(25,S.grief||0));add('Fallen soldiers',-Math.min(20,(S.wargrief||0)));
  add('Rations: '+RATION[S.ration||'normal'].n,RATION[S.ration||'normal'].h);add('Taxes: '+TAX[S.tax||'normal'].n,TAX[S.tax||'normal'].h);
@@ -3057,7 +3062,7 @@ function tentIntSpr(b){const F=tentFurn(b),k=b.x+','+b.y+'|'+F.key;if(TINT[k])re
  g.fillStyle='#9a7a54';g.fillRect(cx-4,cy+r-3,8,5);return TINT[k]=c}
 // cut-away when zoomed in close or when the tent is selected
 function tentCut(vl,vr,vt,vb,now,z){const selB=sel&&sel.i!=null?S.bl[sel.i]:null;for(const b of S.bl){if(b.t!=='tent')continue;if(!(z>=2.2||b===selB))continue;const s=bsz('tent'),X=b.x*TS,Y=b.y*TS,W=s*TS;if(X>vr||X+W<vl||Y>vb||Y+W<vt)continue;
- vx.drawImage(tentIntSpr(b),X,Y,W,W);const ins=agents.filter(a=>a.inB===b&&!(a.route&&a.route.length));ins.forEach((a,i)=>{const sp=pawnSpr(a.o,1,2);const ang=i/Math.max(1,ins.length)*6.28;vx.drawImage(sp,X+W/2+Math.cos(ang)*W*.25-8,Y+W/2+Math.sin(ang)*W*.22-20,16,22)})}}
+ vx.drawImage(tentIntSpr(b),X,Y,W,W);const ins=ax().inB.get(b)||[];ins.forEach((a,i)=>{const sp=pawnSpr(a.o,1,2);const ang=i/Math.max(1,ins.length)*6.28;vx.drawImage(sp,X+W/2+Math.cos(ang)*W*.25-8,Y+W/2+Math.sin(ang)*W*.22-20,16,22)})}}
 {const _fo=fbOver;fbOver=function(vl,vr,vt,vb,now,z){tentCut(vl,vr,vt,vb,now,z);_fo(vl,vr,vt,vb,now,z)}}
 {const _si2=showInsp;showInsp=function(){_si2();if(!sel||sel.i==null||!S)return;const b=S.bl[sel.i];if(!b||b.t!=='tent')return;const P=$('insp');if(P.style.display==='none')return;const F=tentFurn(b),o=tentOcc(b);const d=document.createElement('div');d.className='small';d.style.marginTop='3px';
  d.innerHTML='<b>Inside:</b> '+F.beds+' bedroll'+(F.beds>1?'s':'')+' ('+F.layout+' layout), '+(F.hearth==='center'?'central':'side')+' hearth, '+F.jars+' storage jar'+(F.jars>1?'s':'')+(F.rug?', woven rug':'')+(F.tools.length?', '+F.tools.join(', '):'')+'<br>Household: '+(o.length?o.map(a=>(LINES[a.role]||[a.role])[0]).join(', '):'nobody yet');P.insertBefore(d,P.children[2]||null)}}
