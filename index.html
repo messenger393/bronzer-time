@@ -347,7 +347,7 @@ function bcost(k,l){const m=(S.tech.masonry?.75:1)*Math.pow(1.6,l);const o={};fo
 const can=c=>Object.keys(c).every(r=>S.res[r]>=c[r]);
 function pay(c){if(!can(c))return false;for(const r in c)S.res[r]-=c[r];return true}
 const cstr=c=>Object.keys(c).map(r=>c[r]+' '+r).join(', ');
-function tick(){LTk=performance.now();if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0){if(S.rate&&S.rate.food<0&&S.res.food<S.pop*3&&S.t%15===0){const fj=Object.keys(JOBS).filter(j=>JOBS[j][1]==='food'&&(S.jobs[j]||0)<jobCap(j));const nf=Object.keys(S.jobs).find(j=>S.jobs[j]>0&&JOBS[j][1]!=='food'&&(S.prio[j]||3)>1);if(fj.length&&nf){S.jobs[nf]--}}autoAssign()}
+function tick(){LTk=performance.now();if(BV&&!$('bhud')&&performance.now()-(BV.born||0)>3000){console.warn('orphan battle state cleared');BV=null}if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0){if(S.rate&&S.rate.food<0&&S.res.food<S.pop*3&&S.t%15===0){const fj=Object.keys(JOBS).filter(j=>JOBS[j][1]==='food'&&(S.jobs[j]||0)<jobCap(j));const nf=Object.keys(S.jobs).find(j=>S.jobs[j]>0&&JOBS[j][1]!=='food'&&(S.prio[j]||3)>1);if(fj.length&&nf){S.jobs[nf]--}}autoAssign()}
  const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod*hapMul();
  const p={food:0,wood:0,stone:0,copper:0,tin:0,bronze:0};
  for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]&&!RNJ[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}v=rnJobOut(j,v);p[J[1]]+=v}
@@ -1515,17 +1515,17 @@ function bvGen(T,ecv){const sv=new Uint8Array(BF.w*BF.h),I=(x,y)=>y*MW+x;for(let
   for(let y=BF.y+1;y<BF.y+BF.h-1;y++)BV.walls.push({x:wx,y,gate:Math.abs(y-cy)<2});for(let k=0;k<7;k++)BV.houses.push({x:wx+3+(k%3)*4,y:BF.y+4+Math.floor(k/3)*12+(k%2)*2,t:k===3?'temple':'house'})}
  worldChanged()}
 function bvRestore(){if(!BV||!BV.sv)return;const I=(x,y)=>y*MW+x;for(let y=0;y<BF.h;y++)for(let x=0;x<BF.w;x++){TER[I(BF.x+x,BF.y+y)]=BV.sv[y*BF.w+x];roadSet[I(BF.x+x,BF.y+y)]=BV.rs[y*BF.w+x]}worldChanged()}
-function bvStart(res,i,ecv){if(BV)bvEnd();$('modal').style.display='none';BV={res,i,ecv,civ:[S.civ||'egypt',ecv],t:0,spd:1,paused:false,fi:-1,DEP:2.6,RD:2.2,P:[],bodies:[],arrows:[],stuck:[],dust:[],fx:[],G:{},sel:null,done:false,cam:{x:cam.x,y:cam.y,z:cam.z}};
+function bvStart(res,i,ecv){if(BV)bvEnd();let _m=null;if($('modal').style.display==='flex'){_m=document.createDocumentFragment();while($('mbody').firstChild)_m.appendChild($('mbody').firstChild)}$('modal').style.display='none';BV={born:performance.now(),stash:_m,res,i,ecv,civ:[S.civ||'egypt',ecv],t:0,spd:1,paused:false,fi:-1,DEP:2.6,RD:2.2,P:[],bodies:[],arrows:[],stuck:[],dust:[],fx:[],G:{},sel:null,done:false,cam:{x:cam.x,y:cam.y,z:cam.z}};
  bvGen(res.T,ecv);const F0=res.frames[0];
  for(const g of res.G){const k=g.side+':'+g.id,U=UNIT[g.type],ch=!!U.chariot,per=ch?2:1,n=Math.ceil(g.men0/per);const cn=CIV[BV.civ[g.side]].n.replace(/ans$|ns$|s$/,m=>m==='ans'?'an':m==='ns'?'n':'');BV.G[k]={k,side:g.side,name:g.name.indexOf(cn)===0?g.name:cn+' '+g.name,type:g.type,men0:g.men0,men:g.men0,mo:100,routed:false,ch,per,wep:bvWep(U),n};
   const cols=ch?Math.ceil(n/2):Math.ceil(n/3),dep=ch?2:3,sp=ch?1.25:.62,s=g.side?-1:1;
   for(let j=0;j<n;j++){const r=j%dep,c=Math.floor(j/dep),q=bvT(bpos(F0,k).x,bpos(F0,k).y);const ox=-r*sp*s*(ch?1.6:1)+(c%2?.12:0)*s,oy=(c-(cols-1)/2)*sp;
    BV.P.push({g:k,side:g.side,ox,oy,x:q.x+ox-(g.side?-3:3),y:q.y+oy,o:bvDress(BV.civ[g.side],g.type,j+g.id.toString().length*7,g.side),ch,alive:true,die:0,hit:0,sw:0,ft:Math.random()*4,mv:0,j})}}
  document.body.classList.add('battle');bvHud();zoomAt(Math.min(1.2,Math.max(.4,VW/(BF.w*TS)*.95)),VW/2,VH/2,true);centerOn(BF.x+BF.w/2-(VW>900?160/(cam.z*TS):0),BF.y+BF.h/2);BV.last=performance.now()}
-function bvEnd(){if(!BV)return;bvRestore();document.body.classList.remove('battle');const h=$('bhud');if(h)h.remove();cam.x=BV.cam.x;cam.y=BV.cam.y;zoomAt(BV.cam.z,VW/2,VH/2,true);centerOn(S.center.x,S.center.y);BV=null;renderView();renderTop()}
+function bvEnd(){if(!BV)return;bvRestore();document.body.classList.remove('battle');const h=$('bhud');if(h)h.remove();cam.x=BV.cam.x;cam.y=BV.cam.y;zoomAt(BV.cam.z,VW/2,VH/2,true);centerOn(S.center.x,S.center.y);const _st=BV.stash;BV=null;renderView();renderTop();if(_st&&$('modal').style.display!=='flex'){$('mbody').innerHTML='';$('mbody').appendChild(_st);$('modal').style.display='flex'}}
 function bvStep(){const now=performance.now(),rdt=Math.min(.1,(now-BV.last)/1000);BV.last=now;const dt=BV.paused?0:rdt*BV.spd;BV.t+=dt;const R=BV.res,N=R.frames.length;
  const fi=Math.min(N-1,Math.max(0,Math.floor((BV.t-BV.DEP)/BV.RD))),ph=BV.t<BV.DEP?0:Math.min(1,((BV.t-BV.DEP)/BV.RD)-fi);
- if(BV.t>=BV.DEP&&fi!==BV.fi){BV.fi=fi;bvRound(R.frames[fi])}if(BV.t>BV.DEP+N*BV.RD&&!BV.done){BV.done=true;bvHud()}
+ if(BV.t>=BV.DEP&&fi!==BV.fi){BV.fi=fi;bvRound(R.frames[fi])}if(BV.t>BV.DEP+N*BV.RD&&!BV.done){BV.done=true;BV.doneAt=now;bvHud()}if(BV.done&&BV.inv&&!BV.endQ&&now-BV.doneAt>8000){BV.endQ=1;setTimeout(()=>{if(BV&&BV.endQ)bvEnd()},0)}
  if(!BV.F0){const f0=R.frames[0];BV.F0=Object.assign({},f0,{engaged:false,gs:f0.gs.map(g=>Object.assign({},g,{fp:0,arr:false}))})}const F=BV.t<BV.DEP?BV.F0:R.frames[fi],Fp=BV.t<BV.DEP||fi===0?BV.F0:R.frames[fi-1],e=Math.min(1,ph*1.5),ee=e*e*(3-2*e);
  for(const k in BV.G){const g=BV.G[k],a=bpos(Fp,k),b=bpos(F,k);const A=bvT(a.x,a.y),B=bvT(b.x,b.y);g.cx=A.x+(B.x-A.x)*ee;g.cy=A.y+(B.y-A.y)*ee;const fg=F.gs.find(x=>x.k===k);if(fg){g.routed=fg.routed;if(fg.mo!=null)g.mo=Math.max(0,Math.min(100,fg.mo))}g.eng=F.engaged&&fg&&fg.slot==='front'}
  for(const p of BV.P){if(!p.alive){if(p.die&&BV.t>=p.die&&!p.fell){p.fell=BV.t;BV.bodies.push(p);if(BV.bodies.length>500)BV.bodies.shift()}continue}
@@ -1840,7 +1840,7 @@ function wmDefend(a,q){const N=S.wm.nat[a];const ar=[['spear',Math.ceil(6+N.str*
  const res=simBattle(go,E,{terrain:q.terr==='walls'?'plains':q.terr,fa:S.formation||'line',fd:'wedge',moraleA:20+(q.fort*10),moraleD:0,genA:S.general.lvl});
  res.G.filter(g=>g.side===0).forEach(g=>{const c=S.companies.find(c=>c.id===g.id);if(c){c.men=g.men;c.xp+=res.win?10:4}});S.companies=S.companies.filter(c=>c.men>0);
  if(res.win){q.ctl.P=(q.ctl.P||0)+35;q.ctl[a]=(q.ctl[a]||0)*.3;N.str*=.7;log('VICTORY: we throw the '+N.n+' back from '+q.n+'!')}else{q.ctl[a]=(q.ctl[a]||0)+50;q.ctl.P=(q.ctl.P||0)*.45;log('DEFEAT at '+q.n+'.')}
- save();bvStart(res,q.reg>=0?q.reg:0,a)}
+ save();bvStart(res,q.reg>=0?q.reg:0,a);if(BV)BV.inv=1}
 // player-facing map
 let WMSEL=null;function renderMapIfOpen(){if(cur==='map'&&$('drawer').classList.contains('open')&&!$('wmc'))return;if(cur==='map'&&$('wmc'))wmDraw($('wmc'))}
 function wmPix(c){const P=S.wm.prov,W=c.width,H=c.height,sx=WMW/W,sy=WMH/H;if(S.gen>=2)return wgRaster(P,W,H);if(wmPix.k===P.length+'|'+W)return wmPix.d;const near=new Int16Array(W*H*3),wt=new Float32Array(W*H*3),own=new Int16Array(W*H);
