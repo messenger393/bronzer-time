@@ -234,7 +234,7 @@ function simBattle(A,D,o){const rnd=o.rnd||Math.random,T=o.terrain,log=[],frames
  G.filter(g=>g.side!==ws&&g.men>0).forEach(g=>{const k=Math.floor(g.men*(pur?.3:.15));g.men-=k;g.lost+=k});
  log.push(win?'VICTORY!':'DEFEAT.');return{win,rounds:Math.min(r,30),log,frames,G,T,cross:CR}}
 function enemyOf(i){const R=REG[i];return R.army.map((a,k)=>({id:'e'+k,name:['Tribal','Hill','Valley','Ridge','Shrine','Ford','Cedar','Horse','Salt','Citadel'][i]+' '+UNIT[a[0]].n,type:a[0],men:a[1],armor:a[2]||0,xp:a[3]||0,slot:defSlot(a[0])}))}
-const enemyMen=i=>REG[i].army.reduce((a,x)=>a+x[1],0);
+const enemyMen=i=>enemyOf(i).reduce((a,x)=>a+x.men,0);
 // ---- prep / battle UI ----
 let prep=null;
 function regionModal(i){prep={i,form:S.formation||'line'};renderPrep()}
@@ -1872,7 +1872,7 @@ function wmRenderTab(V){V.innerHTML='<h3>World</h3><div class="small">Zones of c
  c.onmousemove=e=>{const p=wmPick(c,e);tip.style.display='block';tip.style.left=(e.clientX+12)+'px';tip.style.top=(e.clientY+12)+'px';tip.innerHTML='<b>'+p.n+'</b> · '+wmNat(p.own).n+'<br>'+wmCtlTxt(p)};c.onmouseleave=()=>tip.style.display='none';
  c.onclick=e=>{WMSEL=wmPick(c,e).id;tip.style.display='none';renderView()};
  const pane=document.createElement('div');pane.className='panel';V.appendChild(pane);
- if(WMSEL!=null){const p=S.wm.prov[WMSEL],o=wmNat(p.own),A=wmAuth(p),mine=p.own==='P';pane.innerHTML='<b>'+p.n+'</b>'+(p.cap?' ★ capital':'')+'<div class="small">Owner: <span style="color:'+o.col+'">'+o.n+'</span> · Terrain: '+TERR[p.terr].n+' · Produces '+p.res+'<br>Garrison '+Math.round(p.gar)+(p.fort?' · Fort '+p.fort:'')+(p.road?' · Roads':'')+(p.shrine?' · Shrine':'')+'<br>Authority '+Math.round(A*100)+'% '+(A>.7?'(core: full taxes & levies)':A>.35?'(frontier: reduced income)':'(contested: unrest & rebellion risk)')+'</div><div class="small">'+wmCtlTxt(p)+'</div>';
+ if(WMSEL!=null){const p=S.wm.prov[WMSEL],o=wmNat(p.own),A=wmAuth(p),mine=p.own==='P';pane.innerHTML='<b>'+p.n+'</b>'+(p.cap?' ★ capital':'')+'<div class="small">Owner: <span style="color:'+o.col+'">'+o.n+'</span> · Terrain: '+TERR[p.terr].n+' · Produces '+p.res+'<br>Garrison '+(p.own==='P'?Math.round(p.gar):wmDefN(p)+' defenders')+(p.fort?' · Fort '+p.fort:'')+(p.road?' · Roads':'')+(p.shrine?' · Shrine':'')+'<br>Authority '+Math.round(A*100)+'% '+(A>.7?'(core: full taxes & levies)':A>.35?'(frontier: reduced income)':'(contested: unrest & rebellion risk)')+'</div><div class="small">'+wmCtlTxt(p)+'</div>';
   const adj=S.wm.prov.some(q=>q.own==='P'&&wmAdj(q).includes(p));
   if(mine){for(const[l,c2,f]of[['🏰 Fort',{stone:60,wood:30},()=>p.fort++],['🛡 Garrison +6',{food:40},()=>p.gar+=6],['🛤 Roads',{wood:40,stone:10},()=>p.road=1],['⛩ Shrine',{stone:40,wood:20},()=>p.shrine=1]])pane.appendChild(btn(l+' ('+cstr(c2)+')',()=>{if(pay(c2)){f();wmCalc();log('Improved '+p.n+'.');save()}renderView()},!can(c2)||(l.includes('Roads')&&p.road)||(l.includes('Shrine')&&p.shrine)))}
   else{if(p.reg<0){p.reg=REG.length;REG.push({n:p.n,terr:p.terr,form:'line',m:0,army:[],x:p.x,y:p.y,rw:'res',v:p.res,d:'Province ('+p.res+')'})}
@@ -1888,7 +1888,8 @@ function wmRenderTab(V){V.innerHTML='<h3>World</h3><div class="small">Zones of c
 function wmCheckCiv(){if(S.wm&&S.civ&&S.wm.nat[S.civ]&&!S.wm.nat[S.civ].tribe){const won=S.won;wmGen()}}
 const _rv2=renderView;renderView=function(){wmCheckCiv();_rv2();if(cur==='map'&&S.wm){const V=$('view');V.innerHTML='';wmRenderTab(V)}};
 const _own2=ownersFor;ownersFor=function(me){const base=_own2(me);if(!S||!S.wm)return base;return REG.map((r,i)=>{const p=S.wm.prov.find(p=>p.reg===i);if(!p||!p.own||p.own==='P')return base[i%base.length]||'canaan';const N=S.wm.nat[p.own];return N?N.civ||p.own:base[i%base.length]})};
-const _enemy2=enemyOf;enemyOf=function(i){const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(p&&REG[i]){const g=Math.max(4,Math.round(p.gar+p.fort*4));const base=REG[i].army.length?REG[i].army:[['spear',5],['archer',3],['axeman',2]];const tot=base.reduce((a,x)=>a+x[1],0);REG[i]._a=REG[i]._a||base.map(x=>x.slice());REG[i].army=REG[i]._a.map(x=>{const y=x.slice();y[1]=Math.max(1,Math.round(x[1]*g/tot));return y})}return _enemy2(i)};
+const _enemy2=enemyOf;enemyOf=function(i){const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(p&&REG[i]){const g=wmDefN(p);const base=REG[i].army.length?REG[i].army:[['spear',5],['archer',3],['axeman',2]];const tot=base.reduce((a,x)=>a+x[1],0);REG[i]._a=REG[i]._a||base.map(x=>x.slice());let left=g;REG[i].army=REG[i]._a.map((x,k,A)=>{const y=x.slice();y[1]=k===A.length-1?left:Math.min(left,Math.round(x[1]*g/tot));left-=y[1];return y}).filter(y=>y[1]>0);if(!REG[i].army.length)REG[i].army=[['spear',1]]}return _enemy2(i)};
+function wmDefN(p){return Math.max(1,Math.round(p.gar+(p.fort||0)*4))}
 const _ri2=routeInfo;routeInfo=function(i){const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(!p)return _ri2(i);const from=S.wm.prov.filter(q=>q.own==='P'&&wmAdj(q).includes(p)).sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];const hx=HOME.x,hy=HOME.y;
  if(from){HOME.x=from.x;HOME.y=from.y}let r;try{r=_ri2(i)}finally{HOME.x=hx;HOME.y=hy}if(!from&&p.own!=='P'){r.blocked=true;r.cr.push({rv:'Frontier',how:'blocked',key:'-',P:[p.x,p.y]})}return r};
 const _fight2=fight;fight=function(i){const before=S.won.includes(i);_fight2(i);const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(p&&!before&&S.won.includes(i)){for(const k in p.ctl)p.ctl[k]*=.3;p.ctl.P=(p.ctl.P||0)+70;p.gar=4;const old=p.own;p.own='P';wmOwnChange(p,old);for(const q of wmAdj(p))if(q.own==='P')q.ctl.P=(q.ctl.P||0)+10;wmCalc();save()}};
