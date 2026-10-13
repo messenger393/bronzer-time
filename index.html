@@ -347,7 +347,7 @@ function bcost(k,l){const m=(S.tech.masonry?.75:1)*Math.pow(1.6,l);const o={};fo
 const can=c=>Object.keys(c).every(r=>S.res[r]>=c[r]);
 function pay(c){if(!can(c))return false;for(const r in c)S.res[r]-=c[r];return true}
 const cstr=c=>Object.keys(c).map(r=>c[r]+' '+r).join(', ');
-function tick(){LTk=performance.now();if(S.needStore){S.needStore=0;try{rebuildOcc();if(autoPlace('storehouse',1,true)){worldChanged();log('Your stores were gathered into a new Storehouse.')}}catch(e){console.warn(e)}}if(BV&&!$('bhud')&&performance.now()-(BV.born||0)>3000){console.warn('orphan battle state cleared');BV=null}if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0){if(S.rate&&S.rate.food<0&&S.res.food<S.pop*3&&S.t%15===0){const fj=Object.keys(JOBS).filter(j=>JOBS[j][1]==='food'&&(S.jobs[j]||0)<jobCap(j));const nf=Object.keys(S.jobs).find(j=>S.jobs[j]>0&&JOBS[j][1]!=='food'&&(S.prio[j]||3)>1);if(fj.length&&nf){S.jobs[nf]--}}autoAssign()}
+function tick(){LTk=performance.now();siteTick();if(S.needStore){S.needStore=0;try{rebuildOcc();if(autoPlace('storehouse',1,true)){worldChanged();log('Your stores were gathered into a new Storehouse.')}}catch(e){console.warn(e)}}if(BV&&!$('bhud')&&performance.now()-(BV.born||0)>3000){console.warn('orphan battle state cleared');BV=null}if(BV)return;rnInit();rnBuild();rnTick();if(S.autoWork&&S.t%3===0){if(S.rate&&S.rate.food<0&&S.res.food<S.pop*3&&S.t%15===0){const fj=Object.keys(JOBS).filter(j=>JOBS[j][1]==='food'&&(S.jobs[j]||0)<jobCap(j));const nf=Object.keys(S.jobs).find(j=>S.jobs[j]>0&&JOBS[j][1]!=='food'&&(S.prio[j]||3)>1);if(fj.length&&nf){S.jobs[nf]--}}autoAssign()}
  const EM=evMods();const mult=(S.tech.writing?1.25:1)*(1+0.05*(S.jobs.scribe||0)*(cX().scribe||1))*(1+0.03*(S.jobs.merchant||0)*(cX().merch||1))*EM.prod*hapMul();
  const p={food:0,wood:0,stone:0,copper:0,tin:0,bronze:0};
  const pj={};for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]&&!RNJ[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}v=rnJobOut(j,v);p[J[1]]+=v;pj[j]=v}
@@ -386,6 +386,32 @@ function bldOver(b,i,X,Y,s,z,dt){const k=bid(b),sel0=typeof sel!=='undefined'&&s
 function storeGoods(b,X,Y,s,al){const C=cap(),M=fpMask(b.t,bfp(b)),cells=[];for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(!M||M[j*s+i])cells.push([i,j]);const RS=b.t==='granary'?['food']:b.t==='market'?['food','copper','tin','bronze']:['wood','stone','copper','tin','bronze','food'];
  vx.globalAlpha=al;let k=0;const slots=cells.length*6;for(const r of RS){const f=Math.min(1,(S.res[r]||0)/C),n=Math.round(f*slots/RS.length*1.6);const ic=r==='food'?(b.t==='granary'?'sheaf':'bread'):ITM[r].ic;for(let q=0;q<n&&k<slots;q++,k++){const c=cells[k%cells.length],sl=(k/cells.length)|0,px=X+c[0]*32+7+(sl%3)*9,py=Y+c[1]*32+9+((sl/3)|0)*11;stkIcon(vx,ic,px,py,k)}}
  if(S.gd&&S.gd.beer>1&&b.t!=='granary'){const n=Math.min(6,Math.ceil(S.gd.beer/10));for(let q=0;q<n;q++)stkIcon(vx,'beer',X+s*32-8-(q%3)*6,Y+s*32-9-((q/3)|0)*6,q)}vx.globalAlpha=1}
+// ================= CONSTRUCTION: clear plot -> haul materials -> build in stages =================
+function siteInit(b){if(b.t==='campfire'||b.t==='wall'||b.t==='gate')return;const s=bsz(b.t),cl=[],y0={wood:0,stone:0,food:0};for(const p of props){if(p.gx>=b.x&&p.gx<b.x+s&&p.gy>=b.y&&p.gy<b.y+s){cl.push([p.gx,p.gy,p.k]);if(p.k==='rock')y0.stone+=4;else if(p.k==='bush'||p.k==='flowers'||p.k==='reed')y0.food+=1.5;else y0.wood+=5}}
+ const c=bcost(b.t,0);let tot=0;for(const r in c)tot+=c[r];b.cp={p:0,clr:cl.slice(0,24),cw:cl.length*2,cd:0,mt:Math.max(1,Math.ceil(tot/25)),md:0,w:Math.max(12,s*s*1.4),wd:0,y:y0}}
+function sitePhase(b){const c=b.cp;if(c.cd<c.cw)return 0;if(c.md<c.mt)return 1;return 2}
+function siteTick(){let ch=0;for(const b of S.bl){const c=b.cp;if(!c)continue;const near=agents.filter(a=>a.bsite===b&&a.state==='work'&&!a.route.length).length;const ph=sitePhase(b);
+  if(ph===0){c.cd+=near*1+.5;if(c.cd>=c.cw){const k=bid(b),o=(S.stk=S.stk||{})[k]||(S.stk[k]={});for(const r in c.y)if(c.y[r])o[r]=(o[r]||0)+c.y[r];c.clr=[];if(c.cw)log('Plot cleared for the '+BLD[b.t].n+'.')}}
+  else if(ph===1){c.md+=.08}
+  else{c.wd+=near*1+.3}
+  c.p=Math.min(1,(c.cw?.15*Math.min(1,c.cd/c.cw):.15)+.25*Math.min(1,c.md/c.mt)+.6*Math.min(1,c.wd/c.w));
+  if(c.wd>=c.w){delete b.cp;ch=1;log(BLD[b.t].n+' completed!');burst(b.x+bsz(b.t)/2,b.y+bsz(b.t)/2,'#e8d8a8',24);agents.forEach(a=>{if(a.bsite===b){a.bsite=null;a.bclr=0;a.carry=null}})}}
+ if(ch){worldChanged();rosterSig=''}}
+function buildThink(a){const sites=S.bl.filter(b=>b.cp);if(a.bsite&&!sites.includes(a.bsite)){a.bsite=null;a.bclr=0}if(!sites.length)return false;
+ if(a.state==='bfetch'&&a.bsite){a.carry=a.bmat||'log';const d=doorOf(a.bsite);go(a,{x:d.x+(Math.random()-.5),y:d.y+(Math.random()-.5)*.4},'bdeliver');return true}
+ if(a.state==='bdeliver'&&a.bsite){a.bsite.cp.md+=1;a.carry=null}
+ let b=a.bsite;if(!b){const crew=x=>agents.filter(q=>q.bsite===x).length;b=sites.sort((p,q)=>crew(p)-crew(q))[0];if(crew(b)>=4&&a.role!=='builder')return false;a.bsite=b}
+ const ph=sitePhase(b),s=bsz(b.t);if(ph===1){const st=S.bl.filter(q=>STORES[q.t]&&!q.cp)[0];const c=bcost(b.t,0);a.bmat=(c.stone||0)>(c.wood||0)?'stone':'log';if(st){go(a,doorOf(st),'bfetch');return true}a.bsite.cp.md+=1;}
+ a.bclr=ph===0?1:0;const side=(a.idx||0)%4,t=((a.idx||0)*.37+Math.random()*.3)%1,P=side===0?{x:b.x+t*s,y:b.y-.4}:side===1?{x:b.x+s+.4,y:b.y+t*s}:side===2?{x:b.x+t*s,y:b.y+s+.4}:{x:b.x-.4,y:b.y+t*s};go(a,P,'towork');a.t=2+Math.random()*2;return true}
+function siteDraw(b,sp,X,Y,s,now){const c=b.cp,W=s*32,ph=sitePhase(b),bp=Math.min(1,c.wd/c.w);
+ vx.fillStyle='rgba(120,92,60,.55)';vx.fillRect(X+1,Y+1,W-2,W-2);for(let i=0;i<s*s*2;i++){const x=X+hsh(i,b.x,7)*W,y=Y+hsh(i,b.y,8)*W;vx.fillStyle='rgba(70,50,30,.25)';vx.fillRect(x,y,2,1.2)}
+ vx.strokeStyle='rgba(230,220,190,.8)';vx.lineWidth=.8;vx.setLineDash([3,2]);vx.strokeRect(X+1.5,Y+1.5,W-3,W-3);vx.setLineDash([]);for(const[px,py]of[[X+1.5,Y+1.5],[X+W-1.5,Y+1.5],[X+1.5,Y+W-1.5],[X+W-1.5,Y+W-1.5]]){circ(vx,px,py,1.6,'#7a5232','#3a2410',.5)}
+ if(ph===0)for(const[gx,gy,k]of c.clr){const sp2=propSpr(k,(hsh(gx*7|0,gy*7|0)*3)|0);vx.globalAlpha=1-Math.min(.8,c.cd/Math.max(1,c.cw));vx.drawImage(sp2.c,gx*TS-24,gy*TS-24,48,48);vx.globalAlpha=1}
+ const mf=Math.min(1,c.md/c.mt),np=Math.round(mf*10)*(1-bp);for(let i=0;i<np;i++)stkIcon(vx,i%2?'log':'block',X+W-10-(i%4)*6,Y+W-6-((i/4)|0)*4,i);
+ if(c.wd>0){const h=W*bp;vx.save();vx.beginPath();vx.rect(X-8,Y+W-h-2,W+16,h+10);vx.clip();vx.globalAlpha=.55+.45*bp;vx.drawImage(sp.c,X-8,Y-8,W+16,W+16);vx.restore();vx.globalAlpha=1;
+  if(bp<1){const sy=Y+W-h;for(let x=X+2;x<X+W;x+=Math.max(8,W/5)){ln(vx,x,sy-6,x,Y+W,'#8a6238',1.2)}ln(vx,X+1,sy-5,X+W-1,sy-5,'#8a6238',1);ln(vx,X+1,sy-2,X+W-1,sy-2,'rgba(138,98,56,.7)',.8)}}
+ const bw=Math.min(40,W),bx=X+W/2-bw/2,by=Y-7;rr(vx,bx-1,by-1,bw+2,5,2,'rgba(20,14,8,.75)');rr(vx,bx,by,bw*c.p,3,1.5,ph===0?'#c8a060':ph===1?'#a0b8d0':'#8ad060');
+ vx.font='bold 6px sans-serif';vx.fillStyle='#fff6dc';vx.textAlign='center';vx.fillText(['Clearing','Hauling materials','Building'][ph]+' '+Math.round(c.p*100)+'%',X+W/2,by-2);vx.textAlign='left'}
 function stkTot(k){const o=S.stk&&S.stk[k];if(!o)return 0;let t=0;for(const r in o)t+=o[r];return t}
 function nearStore(x,y,r){let best=null,bd=1e9;for(const b of S.bl){if(!STORES[b.t])continue;if(r==='food'&&b.t==='storehouse'&&S.bl.some(q=>q.t==='granary'))continue;const d=Math.abs(b.x-x)+Math.abs(b.y-y);if(d<bd){bd=d;best=b}}return best}
 function haulThink(a){S.stk=S.stk||{};const sc=Math.min(1,MAXW/Math.max(1,S.pop));
@@ -495,7 +521,7 @@ const SPR={};
 // ---- buildings (hi-res sprites, multi-tile) ----
 const bsz=t=>(BLD[t]&&BLD[t].sz)||1;
 // realistic proportions: buildings at true scale vs ~0.65-tile people (art drawn at design size then scaled)
-const NSZ={tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:7,lodge:6,lumber:6,quarry:6,barracks:8,granary:7,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:2};
+const NSZ={storehouse:6,bakery:6,brewery:6,thresh:3,shed:3,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:7,lodge:6,lumber:6,quarry:6,barracks:8,granary:7,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:2};
 const BCOSTX={house:1.4,barracks:1.4,granary:1.4,temple:1.4,palace:1.3,market:1.3,smelter:1.3,lodge:1.2,lumber:1.2};
 for(const k in NSZ)if(BLD[k]){BLD[k].osz=BLD[k].sz||1;BLD[k].sz=NSZ[k];if(BCOSTX[k])for(const r in BLD[k].cost)BLD[k].cost[r]=Math.round(BLD[k].cost[r]*BCOSTX[k])}
 // ---- placement, occupancy, A*, roads ----
@@ -567,6 +593,7 @@ function think(a){const h=hubT(),n=night();if(a.carry==='sack'&&a.state==='home'
  if(!n&&a.role!=='soldier'&&a.role!=='hauler'&&a.state==='home'&&Math.random()<.25){const st=S.bl.filter(b=>b.t==='market'||b.t==='storehouse'||b.t==='granary');if(st.length){const B=st[(a.idx||0)%st.length];go(a,doorOf(B),'fetch');a.carry='sack';a.fetchHome=1;return}}
  if(a.state==='fetch'&&a.fetchHome){a.fetchHome=0;go(a,a.home,'home');a.carry='sack';a.t=3;return}
  if(!n&&a.role!=='soldier'&&a.state!=='water'&&a.state!=='carry'&&a.state!=='work'&&Math.random()<.06){const W=blds('well');if(W.length){const B=W[(a.idx||0)%W.length].b,d=doorOf(B);go(a,{x:d.x+(Math.random()-.5)*.5,y:d.y+(Math.random()-.5)*.3},'water');return}}
+ if((a.role==='hauler'||a.role==='idle'||a.role==='builder')&&!n&&buildThink(a))return;
  if((a.role==='hauler'||(a.role==='idle'&&(a.idx%2===0)))&&!n&&haulThink(a))return;
  if(a.role==='idle'){if(n&&Math.random()<.6){go(a,a.home,'home');return}const g=Math.floor(a.idx/2),side=a.idx%2;const tg={x:h.x-2.5+(g*1.7)%5+side*.45,y:h.y+.2+(g*.9)%2.5};go(a,tg,evOn('festival')||vis.party>0?'dance':'chat');a.t=4+Math.random()*4;return}
  if(n&&a.state!=='home'&&Math.random()<.7){go(a,a.home,'home');return}
@@ -1011,7 +1038,7 @@ function pspr(o,view,f,flip){return pawnSpr(o,flip?2:(view==='b'?3:0),1)}
 // ---------- roads / connectivity / desirability ----------
 const NOROAD={thresh:1,shed:1,bridge:1,sbridge:1,dock:1,campfire:1,tent:1,wall:1,gate:1,garden:1,tree:1,statue:1,well:1,stockpile:1},DECOR={garden:1,tree:1,statue:1,well:1};
 const roadMax=()=>S.tier>=3?3:S.tier>=2?2:1,RCOST={1:{},2:{stone:1},3:{stone:3}},roadMode=()=>placing==='__road'||placing==='__erase';
-const on=i=>{const b=S.bl[i];return !!b&&(S.tier<1||NOROAD[b.t]||CONN[i]===1)};
+const on=i=>{const b=S.bl[i];return !!b&&!b.cp&&(S.tier<1||NOROAD[b.t]||CONN[i]===1)};
 function perim(x,y,s,f){for(let k=0;k<s;k++){f(x+k,y-1);f(x+k,y+s);f(x-1,y+k);f(x+s,y+k)}}
 function touchXY(x,y,s){let ok=false;perim(x,y,s,(a,b)=>{if(a<0||b<0||a>=MW||b>=MH)return;const i=b*MW+a;if(roadSet[i]&&!occ[i])ok=true;else if(occ[i]){const o=S.bl[occ[i]-1];if(o&&o.t==='gate')ok=true}});return ok}
 const touchesRoad=b=>touchXY(b.x,b.y,bsz(b.t));
@@ -1056,7 +1083,7 @@ function tapWorld(w,ptype){if(BV){bvTap(w);return}if(roadMode())return;if(!placi
  if(placing){const g=ghostAt(t);if(ptype!=='mouse'&&(!ghost||ghost.gx!==g.gx||ghost.gy!==g.gy)){ghost=g;return}placeAt(g);return}
  if(t.gx<0||t.gy<0||t.gx>=MW||t.gy>=MH)return;const o=occ[t.gy*MW+t.gx];sel=o?{i:o-1}:(rnInfoAt(t.gx,t.gy)?{n:[t.gx,t.gy]}:null);showInsp()}
 function placeAt(g){{const err=placeErr(placing,g.gx,g.gy);if(err){log(err);ghost=g;return}
-  if(pay(bcost(placing,0))){const nb={t:placing,l:1,x:g.gx,y:g.gy};if(FP[placing])nb.fv={v:PV.v,r:PV.r,m:PV.m};S.bl.push(nb);rebuildOcc();const n=autoRoadFor(nb);worldChanged();log('Built '+BLD[placing].n+(n?' + '+n+' path tiles':''));if(S.tier>=1&&!NOROAD[nb.t]&&!touchesRoad(nb))log('⚠ '+BLD[placing].n+' needs a road to work!');const s=bsz(placing);burst(g.gx+s/2,g.gy+s/2,'#e8d8a8',20)}else log('Not enough resources');placing=null;ghost=null;save();renderView();renderTop();return}}
+  if(pay(bcost(placing,0))){const nb={t:placing,l:1,x:g.gx,y:g.gy};if(FP[placing])nb.fv={v:PV.v,r:PV.r,m:PV.m};siteInit(nb);S.bl.push(nb);rebuildOcc();const n=autoRoadFor(nb);worldChanged();log('Built '+BLD[placing].n+(n?' + '+n+' path tiles':''));if(S.tier>=1&&!NOROAD[nb.t]&&!touchesRoad(nb))log('⚠ '+BLD[placing].n+' needs a road to work!');const s=bsz(placing);burst(g.gx+s/2,g.gy+s/2,'#e8d8a8',20)}else log('Not enough resources');placing=null;ghost=null;save();renderView();renderTop();return}}
 function fpCycle(k){if(!FP[placing])return;if(k==='v')PV.v=(PV.v+1)%FP[placing].length;else if(k==='r')PV.r=(PV.r+1)%4;else PV.m=PV.m?0:1;CURFP={t:placing,...PV};pbarSync.sig=null}
 function pCancel(){if(placing==='__road'||placing==='__erase'){try{paintCancel()}catch(e){}}placing=null;ghost=null;renderView()}
 function pbarSync(){if(placing&&FP[placing]&&(!CURFP||CURFP.t!==placing)){PV={v:Math.floor(Math.random()*FP[placing].length),r:Math.floor(Math.random()*4),m:Math.random()<.5?1:0};CURFP={t:placing,...PV}}else if(!placing&&CURFP&&!CURFP.auto)CURFP=null;const B=$('pbar');if(!B)return;const on=!!placing&&!BV;document.body.classList.toggle('placing',on);
@@ -1084,7 +1111,7 @@ function drawAgent(a,p,moving,now){if(a.state==='home'&&a.inB&&!moving&&!(a.rout
 function _drawAgent0(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({},a.o,{sick:1}):a.o,d=a.dir==null?1:a.dir;const gl=moving?Math.abs(Math.sin((a.ft||0)*Math.PI))*1.6:Math.sin(now/700+(a.idx||0))*.25,jump=a.state==='dance'&&Math.floor(now/200+a.idx)%2?3:0,bob=gl;
  const fl=d===2?-1:1,face=d===0?0:d===2?Math.PI:d===3?-Math.PI/2:Math.PI/2,hx=X+(d===1?5:d===3?-5:fl*4),hy=Y-10-bob,cyc=(now/900+(a.idx||0)*.37)%1;
  const swingA=PWN.swing(cyc,[[0,.2],[.45,-1.5,'io'],[.58,.35,'in'],[.7,.2],[1,.2]]);
- const toolK=a.state==='work'&&!moving?({woodcutter:'axe',quarrier:'pick',coppermin:'pick',tinmin:'pick',smith:'hammer',farmer:a.work&&a.work.b&&a.work.b.t==='farm'&&farmStage(a.work.b)>=.6?'sickle':'hoe',herder:'club',hunter:'spear'})[a.role]:(a.role==='soldier'||a.role==='hunter')?'spear':null;
+ const toolK=a.bsite&&a.state==='work'&&!moving?(a.bclr?'pick':'hammer'):a.state==='work'&&!moving?({woodcutter:'axe',quarrier:'pick',coppermin:'pick',tinmin:'pick',smith:'hammer',farmer:a.work&&a.work.b&&a.work.b.t==='farm'&&farmStage(a.work.b)>=.6?'sickle':'hoe',herder:'club',hunter:'spear'})[a.role]:(a.role==='soldier'||a.role==='hunter')?'spear':null;
  const tAng=toolK==='spear'&&!(a.state==='work'&&!moving)?-Math.PI/2+fl*.25:(d===1?Math.PI/2+.5:d===3?-Math.PI/2:face),tSw=a.state==='work'&&!moving&&toolK!=='spear'?fl*swingA*(d===0||d===2?-1:1):0,tPush=toolK==='spear'&&a.state==='work'&&!moving?PWN.swing(cyc,[[0,0],[.3,-2,'io'],[.45,5,'in'],[.6,5],[1,0]]):0;
  const drawTool=()=>{if(toolK)pawnTool(toolK,hx,hy,tAng,tSw,tPush,20)};
  ell(vx,X,Y+1,6.5,2.8,'rgba(20,14,8,.28)');if(toolK&&d===3)drawTool();vx.drawImage(pawnSpr(o,d,2),X-12,Y-29-jump-bob,24,32);
@@ -1139,7 +1166,7 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  const wt=now/1000;if(z>=.5){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){if(hsh(gx,gy,9)>.18||!isWat(RT[gy*MW+gx]))continue;const X=(gx+hsh(gx,gy,4))*TS,Y=(gy+hsh(gx,gy,5))*TS,ph=(wt*.9+hsh(gx,gy,3)*6)%3;if(ph<1.6){vx.globalAlpha=Math.sin(ph/1.6*Math.PI)*.5;ln(vx,X+ph*5,Y,X+ph*5+7,Y,'#d8eef6',1);vx.globalAlpha=1}}}
  const D=[],blist=blds(),flats=[];FPB.on=1;FPB.n=FX.mob?1:2;
  blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):bspr(b.t,b.l,v);
-  const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{vx.drawImage(sp.c,X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
+  const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.cp?()=>siteDraw(b,sp,X,Y,s,now):b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{vx.drawImage(sp.c,X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
  FPB.on=0;flats.forEach(e=>e.f());if(z>=.45&&S.stk)blist.forEach(o=>{const b=o.b;if(S.stk[bid(b)])stkDraw(b,o.gx*TS,o.gy*TS,o.s)});
  if(GFX.q!=='high'&&z<(GFX.q==='low'?1.2:PBZ)){propBake(vl,vr,vt,vb,now)}else visProps(vl,vr,vt,vb).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS;if(!inV(X,Y))return;const vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';const sw=big?Math.sin(wt*1.3+pr.gx)*.6:0;D.push({k:Y+(big?10:2),f:()=>rnDrawProp(pr,X,Y,sp,sw,big)})});
  critters.forEach(c=>{c.t-=dt;if(c.t<=0){const rg=c.k==='deer'?2.5:1.4;c.tx=c.hx+(Math.random()-.5)*rg*2;c.ty=c.hy+(Math.random()-.5)*rg;if(!walkC(c.tx|0,c.ty|0)&&c.k!=='deer'){c.tx=c.x;c.ty=c.y}c.t=1+Math.random()*3}
