@@ -111,7 +111,7 @@ campfire:{n:'Campfire',cost:{wood:5},tier:0,max:1,d:'Heart of the camp'},
 stockpile:{n:'Stockpile Zone',cost:{wood:5},tier:0,sz:2,d:'2x2 storage zone: +100 storage'},
 garden:{n:'Garden',cost:{wood:5,food:5},tier:1,sz:2,d:'Fenced flower garden: +2 desirability nearby'},
 tree:{n:'Shade Tree',cost:{wood:2,food:4},tier:1,d:'Planted tree: +1 desirability'},
-farm:{n:'Farm',cost:{wood:20},job:'farmer',tier:1,sz:2,d:'2x2 wheat field, +2 farmer jobs/lvl'}, storehouse:{n:'Storehouse',cost:{wood:30,stone:10},tier:1,sz:2,d:'Haulers deliver goods here: +150 storage/lvl'}, thresh:{n:'Threshing Floor',cost:{wood:5,stone:15},tier:1,d:'Packed floor where sheaves are threshed: farms +8% food each (max +30% with sheds)'}, shed:{n:'Farm Shed',cost:{wood:20},tier:1,d:'Tool and seed store: farms +5% food each (max +30% with floors)'},
+farm:{n:'Farm',cost:{wood:20},job:'farmer',tier:1,sz:2,d:'2x2 wheat field, +2 farmer jobs/lvl'}, bakery:{n:'Bakery',cost:{wood:30,stone:20},job:'baker',tier:1,sz:2,d:'Bakers turn delivered wheat sheaves into bread (x1.4 food value)'}, brewery:{n:'Brewery',cost:{wood:35,stone:15},job:'brewer',tier:1,sz:2,d:'Brewers turn wheat into beer: +happiness while beer is in stock'}, storehouse:{n:'Storehouse',cost:{wood:30,stone:10},tier:1,sz:2,d:'Haulers deliver goods here: +150 storage/lvl'}, thresh:{n:'Threshing Floor',cost:{wood:5,stone:15},tier:1,d:'Packed floor where sheaves are threshed: farms +8% food each (max +30% with sheds)'}, shed:{n:'Farm Shed',cost:{wood:20},tier:1,d:'Tool and seed store: farms +5% food each (max +30% with floors)'},
 house:{n:'House',cost:{wood:25,stone:5},tier:1,sz:2,d:'+5 housing/lvl; multi-story at Lv4+'},
 quarry:{n:'Quarry',cost:{wood:30},job:'quarrier',tier:1,sz:2,d:'+2 quarrier jobs/lvl (near rock)'},
 barracks:{n:'Barracks',cost:{wood:50,stone:20},tier:1,sz:2,d:'Train troops; +6 army cap/lvl'},
@@ -129,7 +129,7 @@ bridge:{n:'Wooden Bridge',cost:{wood:6},tier:1,d:'Cost per span. Tap a river: sp
 sbridge:{n:'Stone Bridge',cost:{stone:14,wood:2},tier:2,d:'Cost per span. Crosses any depth, even deep rivers'},
 dock:{n:'Dock',cost:{wood:40},tier:1,sz:2,d:'2x2 on the shoreline. Reed boats ferry villagers over deep water nearby, enable boat crossings & flank landings. Egyptians/Minoans get ships at City tier'},
 statue:{n:'Statue',cost:{stone:60,bronze:10},tier:3,d:'Bronze statue: +4 desirability nearby'}};
-const JOBS={gatherer:['Gatherer','food',0.6],hunter:['Hunter','food',1.1],merchant:['Merchant',null,0],hauler:['Hauler',null,0],farmer:['Farmer','food',1.0],woodcutter:['Woodcutter','wood',0.8],quarrier:['Quarrier','stone',0.5],coppermin:['Copper Miner','copper',0.4],tinmin:['Tin Miner','tin',0.3],smith:['Smith','bronze',0.3],scribe:['Scribe',null,0],herder:['Herder','food',1.4],fisher:['Fisher','food',1.2]};
+const JOBS={gatherer:['Gatherer','food',0.6],hunter:['Hunter','food',1.1],merchant:['Merchant',null,0],hauler:['Hauler',null,0],baker:['Baker',null,0],brewer:['Brewer',null,0],farmer:['Farmer','food',1.0],woodcutter:['Woodcutter','wood',0.8],quarrier:['Quarrier','stone',0.5],coppermin:['Copper Miner','copper',0.4],tinmin:['Tin Miner','tin',0.3],smith:['Smith','bronze',0.3],scribe:['Scribe',null,0],herder:['Herder','food',1.4],fisher:['Fisher','food',1.2]};
 const TECH={
 bronze:{n:'Bronze Working',cost:{copper:30,stone:40},d:'Unlocks Smelter & bronze'},
 irrigation:{n:'Irrigation',cost:{wood:80,stone:60},d:'Farms +50%'},
@@ -354,7 +354,7 @@ function tick(){LTk=performance.now();if(S.needStore){S.needStore=0;try{rebuildO
  for(const r in S.bonus)p[r]*=1+S.bonus[r];{const X=cX(),E=X.eco||{};for(const r in E)if(p[r]>0)p[r]*=1+E[r];if(X.purple)p.bronze+=(S.jobs.merchant||0)*X.purple}
  const sm=S.jobs.smith||0;if(sm){let n=Math.min(sm*0.3,S.res.copper/1,S.res.tin/0.5);S.res.copper-=n;S.res.tin-=n*.5;p.bronze+=n*mult*(1+(S.bonus.bronze||0))}
  let up=S.pop*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up*RATION[S.ration||'normal'].up;
- const C=cap();const toStk=itemsProduce(pj,p);for(const r of RES)S.res[r]=Math.max(0,Math.min(C,S.res[r]+p[r]-(toStk[r]||0)));
+ const C=cap();const toStk=itemsProduce(pj,p);workshopTick(mult);for(const r of RES)S.res[r]=Math.max(0,Math.min(C,S.res[r]+p[r]-(toStk[r]||0)));
  S.rate=p;
  if(S.res.food<=0&&p.food<0){if(armyN()>0&&Math.random()<.1){const c=S.companies.find(c=>c.men>0);c.men--;S.companies=S.companies.filter(c=>c.men>0);log('Starving! A soldier of '+c.name+' deserted.')}else if(S.pop>3&&Math.random()<.03){S.pop--;fixJobs();log('Starving! A villager left.')}}
  else if(S.pop<housing()&&S.res.food>10&&EM.grow>0&&(p.food>0.45||(p.food>-0.1&&S.res.food>S.pop*15))&&(S.pop-employed())<=Math.max(2,S.pop*.2)){S.growT+=EM.grow*(cX().grow||1)*hapGrow();if(S.growT>=Math.max(8,20-S.tier*3)){S.growT=0;S.pop++;log('A new villager arrived!')}}
@@ -362,16 +362,20 @@ function tick(){LTk=performance.now();if(S.needStore){S.needStore=0;try{rebuildO
  S.t++;if(S.t%10===0)save();renderTop();if(cur==='jobs'||cur==='army'){if(S.t%2===0)renderView()}
 }
 // ================= PHYSICAL ITEMS: producer stacks + haulers =================
-const ITM={food:{n:'Sheaves',ic:'sheaf',carry:'sack'},wood:{n:'Logs',ic:'log',carry:'log'},stone:{n:'Stone',ic:'block',carry:'stone'},copper:{n:'Copper ore',ic:'cu',carry:'cu'},tin:{n:'Tin ore',ic:'sn',carry:'sn'},bronze:{n:'Ingots',ic:'ingot',carry:'ingot'}};
+const ITM={food:{n:'Sheaves',ic:'sheaf',carry:'sack'},wood:{n:'Logs',ic:'log',carry:'log'},stone:{n:'Stone',ic:'block',carry:'stone'},copper:{n:'Copper ore',ic:'cu',carry:'cu'},tin:{n:'Tin ore',ic:'sn',carry:'sn'},bronze:{n:'Ingots',ic:'ingot',carry:'ingot'},bread:{n:'Bread',ic:'bread',carry:'sack'},beer:{n:'Beer jars',ic:'beer',carry:'meat'}};
 const STKCAP=40,SELF=.45;
 const bid=b=>b.x+','+b.y;
-function itemsProduce(pj,p){S.stk=S.stk||{};const out={};for(const j in pj){const v=pj[j];if(v<=0)continue;const r=JOBS[j][1],bt=JOBB[j];if(!bt||!ITM[r])continue;const bs=S.bl.filter(b=>b.t===bt);if(!bs.length)continue;const st=v*(1-SELF)/bs.length;for(const b of bs){const k=bid(b),o=S.stk[k]||(S.stk[k]={});const room=Math.max(0,STKCAP*(b.l||1)-(o[r]||0));o[r]=(o[r]||0)+Math.min(room,st);out[r]=(out[r]||0)+st}}
+function itemsProduce(pj,p){S.stk=S.stk||{};const out={};for(const j in pj){const v=pj[j];if(v<=0)continue;const r=JOBS[j][1],bt=JOBB[j];if(!bt||!ITM[r])continue;const bs=S.bl.filter(b=>b.t===bt);if(!bs.length)continue;const st=v*(1-SELF)/bs.length;for(const b of bs){const k=bid(b),o=S.stk[k]||(S.stk[k]={});const room=Math.max(0,STKCAP*(b.l||1)-(o[r]||0));const put=Math.min(room,st);o[r]=(o[r]||0)+put;out[r]=(out[r]||0)+st-(st-put)*.5}}
  for(const k in S.stk){if(!S.bl.some(b=>bid(b)===k)){delete S.stk[k]}}return out}
+const WSHOP={bakery:{job:'baker',out:'bread',k:1.4},brewery:{job:'brewer',out:'beer',k:1}};
+function workshopTick(mult){S.inb=S.inb||{};S.stk=S.stk||{};S.gd=S.gd||{beer:0};for(const t in WSHOP){const W=WSHOP[t],bs=S.bl.filter(b=>b.t===t);if(!bs.length)continue;const per=(S.jobs[W.job]||0)*1*mult/bs.length;for(const b of bs){const k=bid(b),ib=S.inb[k]||(S.inb[k]={grain:0}),o=S.stk[k]||(S.stk[k]={});const n=Math.min(ib.grain,per,Math.max(0,STKCAP-(o[W.out]||0)));if(n>0){ib.grain-=n;o[W.out]=(o[W.out]||0)+n*W.k}}}
+ if(S.gd.beer>0)S.gd.beer=Math.max(0,S.gd.beer-S.pop*.01)}
+function wantGrain(x,y){let best=null,bd=1e9;for(const b of S.bl){if(!WSHOP[b.t]||!(S.jobs[WSHOP[b.t].job]>0))continue;const ib=(S.inb||{})[bid(b)];if(ib&&ib.grain>=15)continue;const d=Math.abs(b.x-x)+Math.abs(b.y-y)+(ib?ib.grain:0)*.3;if(d<bd){bd=d;best=b}}return best}
 function stkTot(k){const o=S.stk&&S.stk[k];if(!o)return 0;let t=0;for(const r in o)t+=o[r];return t}
 function nearStore(x,y,r){let best=null,bd=1e9;for(const b of S.bl){if(!STORES[b.t])continue;if(r==='food'&&b.t==='storehouse'&&S.bl.some(q=>q.t==='granary'))continue;const d=Math.abs(b.x-x)+Math.abs(b.y-y);if(d<bd){bd=d;best=b}}return best}
 function haulThink(a){S.stk=S.stk||{};const sc=Math.min(1,MAXW/Math.max(1,S.pop));
- if(a.state==='pickup'&&a.haul){const o=S.stk[a.haul.k];const b=S.bl.find(q=>bid(q)===a.haul.k);a.haul=null;if(!o||!b)return false;let r=null,mx=0;for(const q in o)if(o[q]>mx){mx=o[q];r=q}if(!r||mx<.5)return false;const n=Math.min(mx,8/sc);o[r]-=n;const dst=nearStore(b.x,b.y,r);a.load={r,n};a.carry=ITM[r].carry;if(dst){go(a,doorOf(dst),'deliver');a.dst=bid(dst)}else{go(a,hubT(),'deliver');a.dst=null}return true}
- if(a.state==='deliver'&&a.load){const C=cap();S.res[a.load.r]=Math.min(C,S.res[a.load.r]+a.load.n);if(a.dst){(S.dlv||(S.dlv={}))[a.dst]=(S.dlv[a.dst]||0)+a.load.n}a.load=null;a.carry=null;a.state='idle2';a.t=.4;return true}
+ if(a.state==='pickup'&&a.haul){const o=S.stk[a.haul.k];const b=S.bl.find(q=>bid(q)===a.haul.k);a.haul=null;if(!o||!b)return false;let r=null,mx=0;for(const q in o)if(o[q]>mx){mx=o[q];r=q}if(!r||mx<.5)return false;const n=Math.min(mx,8/sc);o[r]-=n;const ws=r==='food'&&b.t==='farm'?wantGrain(b.x,b.y):null,dst=ws||nearStore(b.x,b.y,r);a.load={r,n,to:ws?'inb':''};a.carry=ITM[r].carry;if(dst){go(a,doorOf(dst),'deliver');a.dst=bid(dst)}else{go(a,hubT(),'deliver');a.dst=null}return true}
+ if(a.state==='deliver'&&a.load){const C=cap(),L=a.load;if(L.to==='inb'&&a.dst){S.inb=S.inb||{};const ib=S.inb[a.dst]||(S.inb[a.dst]={grain:0});ib.grain+=L.n}else if(L.r==='bread')S.res.food=Math.min(C,S.res.food+L.n);else if(L.r==='beer'){S.gd=S.gd||{beer:0};S.gd.beer=Math.min(200,(S.gd.beer||0)+L.n)}else S.res[L.r]=Math.min(C,S.res[L.r]+L.n);if(a.dst){(S.dlv||(S.dlv={}))[a.dst]=(S.dlv[a.dst]||0)+a.load.n}a.load=null;a.carry=null;a.state='idle2';a.t=.4;return true}
  let best=null,bv=1.5;for(const b of S.bl){const k=bid(b),t=stkTot(k);if(t<=bv)continue;const taken=agents.some(o=>o!==a&&o.haul&&o.haul.k===k)?t*.5:t;if(taken>bv){bv=taken;best=b}}
  if(!best)return false;a.haul={k:bid(best)};go(a,doorOf(best),'pickup');return true}
 function stkIcon(g,ic,x,y,k){if(ic==='log'){rr(g,x-4,y-1.6,8,3.2,1.5,'#8a5a32','#3a2410',.5);circ(g,x+4,y,1.5,'#c8a070','#3a2410',.4)}else if(ic==='block'){rr(g,x-3,y-2.2,6,4.4,.6,lighten('#a8a294',(hsh(k,3)-.5)*.2),'#4a463e',.5)}else if(ic==='cu'||ic==='sn'){circ(g,x,y,2.4,'#6e6a62','#3a3630',.5);circ(g,x-.6,y-.4,1,ic==='cu'?'#e0843c':'#c8e0f0')}else if(ic==='ingot'){rr(g,x-3,y-1.4,6,2.8,.4,'#d8a040','#5a3a14',.5)}else if(ic==='sheaf'){ell(g,x,y,2,3.6,'#d8bc60','#6a5020',.4);ln(g,x-2,y,x+2,y,'#9a7a30',.7)}else if(ic==='bread'){ell(g,x,y,2.8,2,'#c8843a','#5a3414',.5)}else if(ic==='beer'){circ(g,x,y,2.4,'#b8643a','#4a2814',.5);circ(g,x,y,1,'#e8c060')}else{circ(g,x,y,2,'#d8c69a','#6a5a3a',.5)}}
@@ -516,8 +520,8 @@ function critSpr(k,f){const key=k+f;if(CSPR[key])return CSPR[key];const[c,g]=mk(
  outline(c);return CSPR[key]=c}
 // ---- life sim ----
 const MAXW=60;
-const JOBB={hauler:null,farmer:'farm',woodcutter:'lumber',quarrier:'quarry',coppermin:'copper',tinmin:'tin',smith:'smelter',herder:'farm',fisher:null,scribe:'temple',merchant:'market',gatherer:null,hunter:'lodge'};
-const CARRY={farmer:'sack',herder:'sack',fisher:'fish',woodcutter:'log',quarrier:'stone',coppermin:'cu',tinmin:'sn',smith:'ingot',gatherer:'sack',hunter:'meat',merchant:'sack'};
+const JOBB={hauler:null,baker:'bakery',brewer:'brewery',farmer:'farm',woodcutter:'lumber',quarrier:'quarry',coppermin:'copper',tinmin:'tin',smith:'smelter',herder:'farm',fisher:null,scribe:'temple',merchant:'market',gatherer:null,hunter:'lodge'};
+const CARRY={baker:'sack',brewer:'sack',farmer:'sack',herder:'sack',fisher:'fish',woodcutter:'log',quarrier:'stone',coppermin:'cu',tinmin:'sn',smith:'ingot',gatherer:'sack',hunter:'meat',merchant:'sack'};
 let agents=[],critters=[],parts=[],clouds=[],birds=[],pops=[],bubble=null,rosterSig='',bgSig='',vis={migr:[],raid:0,caravan:0,shake:0,party:0},spotCache=null;
 function blds(t){const o=[];S.bl.forEach((b,i)=>{if(!t||b.t===t)o.push({b,i,gx:b.x,gy:b.y,s:bsz(b.t)})});return o}
 function pick(a){return a[Math.floor(Math.random()*a.length)]}
@@ -542,9 +546,11 @@ function go(a,to,st){let r;const pth=(f,t)=>t&&t.door?(t.b===a.inB?[{x:t.x,y:t.y
  a.outB=null;if(a.inB&&(!to||to.b!==a.inB)){const d=doorOf(a.inB);a.outB=a.inB;a.inB=null;r=[{x:d.x,y:d.y}].concat(pth({x:d.x,y:d.y},to))}else r=pth(a,to);a.inB=to&&to.b||null;a.route=r;a.state=st}
 const DAYLEN=540;let LTk=0;const dayP=()=>(S.t%DAYLEN)/DAYLEN,night=()=>{const p=dayP();return p>.64&&p<.94};
 function lightT(now){const f=spd?Math.min(1,Math.max(0,(now-LTk)*spd/1000)):0;return S.t+f}
-function think(a){const h=hubT(),n=night();if(n&&a.state==='home'&&a.role!=='soldier'&&a.role!=='kid'){a.t=3;return}
+function think(a){const h=hubT(),n=night();if(a.carry==='sack'&&a.state==='home'&&!a.load)a.carry=null;if(n&&a.state==='home'&&a.role!=='soldier'&&a.role!=='kid'){a.t=3;return}
  if(a.role==='soldier'){const br=blds('barracks')[0];if(!br){a.route=pathTo(a,{x:h.x+1+(a.idx%4)*.5,y:h.y+1+(a.idx>>2)*.5});a.state='drill';a.t=3;return}const d=doorOf(br.b);const col=a.idx%4,rw=Math.floor(a.idx/4);a.route=pathTo(a,{x:d.x-1+col*.6+(Math.floor(performance.now()/3000)%2)*.5,y:d.y+.6+rw*.5});a.state='drill';a.t=2+Math.random();return}
  if(a.role==='kid'){a.route=pathTo(a,{x:h.x-1.5+Math.random()*3,y:h.y-1+Math.random()*2});a.state='play';a.t=.5;return}
+ if(!n&&a.role!=='soldier'&&a.role!=='hauler'&&a.state==='home'&&Math.random()<.25){const st=S.bl.filter(b=>b.t==='market'||b.t==='storehouse'||b.t==='granary');if(st.length){const B=st[(a.idx||0)%st.length];go(a,doorOf(B),'fetch');a.carry='sack';a.fetchHome=1;return}}
+ if(a.state==='fetch'&&a.fetchHome){a.fetchHome=0;go(a,a.home,'home');a.carry='sack';a.t=3;return}
  if(!n&&a.role!=='soldier'&&a.state!=='water'&&a.state!=='carry'&&a.state!=='work'&&Math.random()<.06){const W=blds('well');if(W.length){const B=W[(a.idx||0)%W.length].b,d=doorOf(B);go(a,{x:d.x+(Math.random()-.5)*.5,y:d.y+(Math.random()-.5)*.3},'water');return}}
  if((a.role==='hauler'||(a.role==='idle'&&(a.idx%2===0)))&&!n&&haulThink(a))return;
  if(a.role==='idle'){if(n&&Math.random()<.6){go(a,a.home,'home');return}const g=Math.floor(a.idx/2),side=a.idx%2;const tg={x:h.x-2.5+(g*1.7)%5+side*.45,y:h.y+.2+(g*.9)%2.5};go(a,tg,evOn('festival')||vis.party>0?'dance':'chat');a.t=4+Math.random()*4;return}
@@ -766,7 +772,9 @@ function _bsprA(t,l,v){l=Math.min(l||1,5);const key='B'+t+l+(v||'')+(S&&S.tier>=
   else{for(let i=0;i<6+l*2;i++){const x=6+(i%4)*14,y=6+((i/4)|0)*13;if(y>W-6)break;[()=>{for(let k=0;k<3;k++)rr(g,x-6,y-4+k*3,12,3,1.5,'#8a6038',OUTL,.5)},()=>{rr(g,x-5,y-5,10,10,1,'#a8a294',OUTL,.6);ln(g,x-5,y,x+5,y,'#767066',.6)},()=>sack(g,x,y),()=>jar(g,x,y,3.4)][i%4]()}}
   g.fillStyle='rgba('+zc+',.16)';g.fillRect(0,0,W,W);g.setLineDash([3,2]);g.strokeStyle='rgba('+zc+',.9)';g.lineWidth=1;g.strokeRect(.5,.5,W-1,W-1);g.setLineDash([])}
  else if(t==='house'){m.walled=true;X_RICH=l>=3;floorF(g,0,0,W,W,'civ');X_RICH=0;walls(g,0,0,W,W,wm);X_legacy(g,'house',W,K,m,l,key)}
- else if(t==='storehouse'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'silo',W,K,m,l,key)}
+ else if(t==='bakery'){m.walled=true;floorF(g,0,0,W,W,'earth');walls(g,0,0,W,W,wm);X_legacy(g,'kiln',W,K,m,l,key)}
+  else if(t==='brewery'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'silo',W,K,m,l,key)}
+  else if(t==='storehouse'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'silo',W,K,m,l,key)}
   else if(t==='granary'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'silo',W,K,m,l,key)}
  else if(t==='barracks'){m.walled=true;floorF(g,0,0,W,W,'earth');walls(g,0,0,W,W,wm);X_legacy(g,'barracks',W,K,m,l,key)}
  else if(t==='smelter'){m.walled=true;floorF(g,0,0,W,W,'earth');walls(g,0,0,W,W,wm);X_legacy(g,'kiln',W,K,m,l,key)}
@@ -1243,7 +1251,7 @@ let spd=1,TI=null;function setSpeed(s){spd=s;clearInterval(TI);if(s)TI=setInterv
 // drawer
 function openTab(t){const D=$('drawer');if(cur===t&&D.classList.contains('open')){D.classList.remove('open');document.body.classList.remove('dopen');document.querySelectorAll('#tabs button[data-t]').forEach(x=>x.classList.remove('sel'));return}cur=t;D.classList.add('open');document.body.classList.add('dopen');document.querySelectorAll('#tabs button[data-t]').forEach(x=>x.classList.toggle('sel',x.dataset.t===t));$('dtitle').textContent={build:'Architect',jobs:'Work',army:'Military',tech:'Research',map:'World',log:'History',help:'Guide'}[t];renderView()}
 // architect
-const CATS=[['housing','Housing','house',['tent','house']],['prod','Production','prod',['farm','thresh','shed','lumber','lodge','quarry','copper','tin','smelter']],['store','Storage','store',['stockpile','storehouse','granary','market']],['mil','Military','mil',['barracks','wall','gate']],['civic','Civic','civic',['campfire','well','temple','palace','garden','tree','statue']],['water','Water','road',['bridge','sbridge','dock']],['roads','Roads/Zones','road',[]]];
+const CATS=[['housing','Housing','house',['tent','house']],['prod','Production','prod',['farm','thresh','shed','bakery','brewery','lumber','lodge','quarry','copper','tin','smelter']],['store','Storage','store',['stockpile','storehouse','granary','market']],['mil','Military','mil',['barracks','wall','gate']],['civic','Civic','civic',['campfire','well','temple','palace','garden','tree','statue']],['water','Water','road',['bridge','sbridge','dock']],['roads','Roads/Zones','road',[]]];
 let acat='housing';
 function costHTML(c){return Object.keys(c).filter(r=>c[r]).map(r=>'<span class="cst'+(S.res[r]<c[r]?' no':'')+'"><i class="ri ri-'+r+'"></i>'+c[r]+'</span>').join(' ')||'<span class="cst">free</span>'}
 function riCSS(){const st=document.createElement('style');st.textContent=RES.map(r=>'.ri-'+r+'{background-image:url('+ICO(r,14).toDataURL()+')}').join('');document.head.appendChild(st)}
@@ -1266,7 +1274,7 @@ function renderArchitect(V){const nt=TIERS[S.tier+1];if(nt){const n=nt.need,ok=S
  const un=upgradeRoads(),rm=roadMax(),uc={stone:un*(rm===3?3:1)};if(un&&rm>1)b.appendChild(btn('Upgrade '+un+' tiles ('+uc.stone+' stone)',()=>{if(pay(uc)){for(let i=0;i<MW*MH;i++)if(roadSet[i])roadSet[i]=rm;chunkSig++;worldChanged();log('Roads upgraded!')}},!can(uc)));
  V.insertAdjacentHTML('beforeend','<p class="muted">Paint roads any width. Wider and better-surfaced roads carry more traffic: capacity = surface (dirt 2 · packed 4 · paved 7) × width. Overloaded tiles slow walkers, who reroute around jams.</p>')}
 // work table
-function autoAssign(){S.prio=S.prio||{};let idle=S.pop-employed(),guard=200;while(idle>0&&guard--){let best=null,bs=1e9;for(const j in JOBS){const c=jobCap(j),n=S.jobs[j]||0;if(n>=c)continue;const p=S.prio[j]||3;if(p>=5)continue;const hungry=(S.rate&&S.rate.food<0.3)||S.res.food<S.pop*3;const sc=p*100+n/Math.max(1,c)-(hungry&&JOBS[j][1]==='food'?250:0);if(sc<bs){bs=sc;best=j}}if(!best)break;S.jobs[best]=(S.jobs[best]||0)+1;idle--}}
+function autoAssign(){S.prio=S.prio||{};if(S.stk&&(S.jobs.hauler||0)<jobCap('hauler')){let full=0;for(const k in S.stk)if(stkTot(k)>STKCAP*.6)full++;if(full>=1&&S.pop-employed()<=0){const d=Object.keys(S.jobs).filter(j=>j!=='hauler'&&S.jobs[j]>1&&(S.prio[j]||3)>=3).sort((x,y)=>S.jobs[y]-S.jobs[x])[0];if(d){S.jobs[d]--;S.jobs.hauler=(S.jobs.hauler||0)+1}}else if(full>=1&&S.pop-employed()>0)S.jobs.hauler=(S.jobs.hauler||0)+1}let idle=S.pop-employed(),guard=200;while(idle>0&&guard--){let best=null,bs=1e9;for(const j in JOBS){const c=jobCap(j),n=S.jobs[j]||0;if(n>=c)continue;const p=S.prio[j]||3;if(p>=5)continue;const hungry=(S.rate&&S.rate.food<0.3)||S.res.food<S.pop*3;const sc=p*100+n/Math.max(1,c)-(hungry&&JOBS[j][1]==='food'?250:0);if(sc<bs){bs=sc;best=j}}if(!best)break;S.jobs[best]=(S.jobs[best]||0)+1;idle--}}
 function renderWork(V){S.prio=S.prio||{};const idle=S.pop-employed();V.insertAdjacentHTML('beforeend','<div class="hdr2"><span>'+S.pop+' people · <b>'+idle+'</b> idle</span></div>');const b=document.createElement('div');b.className='seg';b.appendChild(btn('Auto-assign idle',autoAssign,!idle,'pri'));b.appendChild(btn((S.autoWork?'✓ ':'')+'Keep auto',()=>{S.autoWork=!S.autoWork},0,S.autoWork?'sel':''));V.appendChild(b);
  const t=document.createElement('table');t.className='wt';t.innerHTML='<tr><th></th><th>Work</th><th>Prio</th><th>Workers</th><th>Output</th></tr>';
  for(const j in JOBS){const c=jobCap(j),n=S.jobs[j]||0;if(!c&&!n)continue;const J=JOBS[j],tr=document.createElement('tr'),p=S.prio[j]||3;const td=h=>{const x=document.createElement('td');if(typeof h==='string')x.innerHTML=h;else x.appendChild(h);tr.appendChild(x);return x};
@@ -1532,7 +1540,7 @@ const RATION={meagre:{n:'Meagre',up:.75,h:-12},normal:{n:'Normal',up:1,h:0},gene
 const TAX={low:{n:'Low',p:.9,h:6},normal:{n:'Normal',p:1,h:0},high:{n:'High',p:1.15,h:-12}};
 function hapCalc(){const F=[],add=(n,v)=>{if(Math.abs(v)>=.5)F.push([n,Math.round(v)])};
  const fs=['farmer','fisher','herder','hunter','gatherer'].filter(j=>(S.jobs[j]||0)>0).length+(cnt('garden')?1:0);add('Food variety ('+fs+' sources)',fs*2-3);
- if(S.res.food<=0)add('Starving',-25);
+ if(S.res.food<=0)add('Starving',-25);if(S.gd&&S.gd.beer>1)add('Beer in the stores',4);if(cnt('bakery')&&(S.jobs.baker||0)>0)add('Fresh bread',2);
  const hs=blds('house'),tents=cnt('tent');let q=0;S.bl.forEach((b,i)=>{if(b.t==='house')q+=b.l*2+Math.min(6,(DES[i]||0)/4)});add('Housing quality',hs.length?q/hs.length-3:S.tier>=1?-3:0);if(S.tier>=1&&tents>hs.length)add('Living in tents',-3);
  const cr=S.pop/Math.max(1,housing());if(cr>.95)add('Crowding',-(cr-.95)*60-4);
  let be=0,n=0;S.bl.forEach((b,i)=>{if(b.t==='house'){be+=beautyAt(b.x+1,b.y+1);n++}});add('Beauty near homes',n?Math.min(12,be/n/2.5)-2:0);
