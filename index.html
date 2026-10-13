@@ -111,7 +111,7 @@ campfire:{n:'Campfire',cost:{wood:5},tier:0,max:1,d:'Heart of the camp'},
 stockpile:{n:'Stockpile Zone',cost:{wood:5},tier:0,sz:2,d:'2x2 storage zone: +100 storage'},
 garden:{n:'Garden',cost:{wood:5,food:5},tier:1,sz:2,d:'Fenced flower garden: +2 desirability nearby'},
 tree:{n:'Shade Tree',cost:{wood:2,food:4},tier:1,d:'Planted tree: +1 desirability'},
-farm:{n:'Farm',cost:{wood:20},job:'farmer',tier:1,sz:2,d:'2x2 wheat field, +2 farmer jobs/lvl'}, trainingcamp:{n:'Training Camp',cost:{wood:40,stone:10},tier:1,d:'Basic drill for all recruits: needed to raise any company; recruits start Trained'}, spearschool:{n:'Spear School',cost:{wood:40,stone:20},tier:1,d:'Trains spearmen, heavy spearmen and guards'}, archery:{n:'Archery Range',cost:{wood:50},tier:1,d:'Trains archers and composite bowmen'}, slingfield:{n:'Slinger Field',cost:{wood:15,stone:25},tier:1,d:'Trains slingers'}, axehall:{n:'Axe & Sword Hall',cost:{wood:40,stone:30,copper:10},tier:2,d:'Trains axemen and macemen'}, stables:{n:'Stables & Chariot Yard',cost:{wood:80,stone:20},tier:2,d:'Trains light and heavy chariots'}, gatherhut:{n:"Gatherer's Hut",cost:{wood:25},job:'harvester',tier:0,d:'Harvesters carry out your harvest orders (trees, bushes, stone) 3x faster than idle villagers'}, bakery:{n:'Bakery',cost:{wood:30,stone:20},job:'baker',tier:1,sz:2,d:'Bakers turn delivered wheat sheaves into bread (x1.4 food value)'}, brewery:{n:'Brewery',cost:{wood:35,stone:15},job:'brewer',tier:1,sz:2,d:'Brewers turn wheat into beer: +happiness while beer is in stock'}, storehouse:{n:'Storehouse',cost:{wood:30,stone:10},tier:1,sz:2,d:'Haulers deliver goods here: +150 storage/lvl'}, thresh:{n:'Threshing Floor',cost:{wood:5,stone:15},tier:1,d:'Packed floor where sheaves are threshed: farms +8% food each (max +30% with sheds)'}, shed:{n:'Farm Shed',cost:{wood:20},tier:1,d:'Tool and seed store: farms +5% food each (max +30% with floors)'},
+farm:{n:'Farm',cost:{wood:20},job:'farmer',tier:1,sz:2,d:'2x2 wheat field, +2 farmer jobs/lvl'}, tavern:{n:'Beer Hall',cost:{wood:40,stone:15},tier:1,d:'Off-duty villagers drink and talk here: +3 happiness (+3 more with beer in stock)'}, shrine:{n:'Shrine',cost:{stone:20,wood:5},tier:0,d:'Small household shrine: +2 happiness; villagers pray here off duty'}, senet:{n:'Senet Boards',cost:{wood:8},tier:0,d:'Game tables in the shade: +1 happiness each (max 3)'}, plaza:{n:'Plaza',cost:{stone:30},tier:1,d:'Paved gathering square: +2 happiness, evening crowds'}, trainingcamp:{n:'Training Camp',cost:{wood:40,stone:10},tier:1,d:'Basic drill for all recruits: needed to raise any company; recruits start Trained'}, spearschool:{n:'Spear School',cost:{wood:40,stone:20},tier:1,d:'Trains spearmen, heavy spearmen and guards'}, archery:{n:'Archery Range',cost:{wood:50},tier:1,d:'Trains archers and composite bowmen'}, slingfield:{n:'Slinger Field',cost:{wood:15,stone:25},tier:1,d:'Trains slingers'}, axehall:{n:'Axe & Sword Hall',cost:{wood:40,stone:30,copper:10},tier:2,d:'Trains axemen and macemen'}, stables:{n:'Stables & Chariot Yard',cost:{wood:80,stone:20},tier:2,d:'Trains light and heavy chariots'}, gatherhut:{n:"Gatherer's Hut",cost:{wood:25},job:'harvester',tier:0,d:'Harvesters carry out your harvest orders (trees, bushes, stone) 3x faster than idle villagers'}, bakery:{n:'Bakery',cost:{wood:30,stone:20},job:'baker',tier:1,sz:2,d:'Bakers turn delivered wheat sheaves into bread (x1.4 food value)'}, brewery:{n:'Brewery',cost:{wood:35,stone:15},job:'brewer',tier:1,sz:2,d:'Brewers turn wheat into beer: +happiness while beer is in stock'}, storehouse:{n:'Storehouse',cost:{wood:30,stone:10},tier:1,sz:2,d:'Haulers deliver goods here: +150 storage/lvl'}, thresh:{n:'Threshing Floor',cost:{wood:5,stone:15},tier:1,d:'Packed floor where sheaves are threshed: farms +8% food each (max +30% with sheds)'}, shed:{n:'Farm Shed',cost:{wood:20},tier:1,d:'Tool and seed store: farms +5% food each (max +30% with floors)'},
 house:{n:'House',cost:{wood:25,stone:5},tier:1,sz:2,d:'+5 housing/lvl; multi-story at Lv4+'},
 quarry:{n:'Quarry',cost:{wood:30},job:'quarrier',tier:1,sz:2,d:'+2 quarrier jobs/lvl (near rock)'},
 barracks:{n:'Barracks',cost:{wood:50,stone:20},tier:1,sz:2,d:'Train troops; +6 army cap/lvl'},
@@ -433,6 +433,12 @@ function milThink(a,h,n){const br=blds('barracks')[0];if(!br)return false;const 
  const yard=blds('trainingcamp')[0]||br,dd=doorOf(yard.b),col=(a.idx||0)%4,rw=Math.floor((a.idx||0)/4)%3;go(a,{x:dd.x-1.2+col*.8,y:dd.y+.8+rw*.7},'towork');a.drill=1;a.t=3+Math.random()*2;return true}
 function milTick(){if(!S.companies||!S.companies.length)return;let dr=0,tot=0;for(const a of agents)if(a.role==='soldier'){tot++;if(a.duty==='drill'&&a.state==='work')dr++}const f=tot?dr/tot:0;const camp=cnt('trainingcamp')?1.5:1;
  for(const c of S.companies){if(f>0)c.xp=Math.min(200,(c.xp||0)+f*.15*camp);else if(!cnt('barracks')||S.milRot==='rest'||S.milRot==='patrol')c.xp=Math.max(0,(c.xp||0)*.9993)}}
+// ---- off duty: evening leisure at beer hall / shrine / senet / plaza / well, then home ----
+const LEIS=['tavern','shrine','senet','plaza','well','garden','temple','market'];
+function leisureThink(a,idle){const p=dayP();if(!(p>.52&&p<.64)&&!(idle&&Math.random()<.35))return false;if(a.role==='soldier'||a.role==='kid'||a.load||a.bsite)return false;if(a.state==='leisure'){if(Math.random()<.4){go(a,a.home,'home');a.t=4;return true}a.t=3+Math.random()*3;return true}
+ const L=S.bl.filter(b=>LEIS.includes(b.t)&&!b.cp);if(!L.length)return false;const w=b=>b.t==='tavern'?(S.gd&&S.gd.beer>1?4:2):b.t==='plaza'?3:b.t==='shrine'||b.t==='senet'?2:1;let tot=0;for(const b of L)tot+=w(b);let r=hsh(a.idx||0,Math.floor(S.t/DAYLEN),9)*tot,B=L[0];for(const b of L){r-=w(b);if(r<=0){B=b;break}}
+ const s=bsz(B.t);const tg=B.t==='tavern'&&s>=2?inSpot({b:B,gx:B.x,gy:B.y,s},a.idx||0,0):FLATB[B.t]?{x:B.x+.5+hsh(a.idx||0,3)*(s-1),y:B.y+.5+hsh(a.idx||0,4)*(s-1)}:(()=>{const d=doorOf(B);return{x:d.x+(hsh(a.idx||0,5)-.5)*1.6,y:d.y+(hsh(a.idx||0,6)-.2)*1.2}})();
+ go(a,tg,'leisure');a.carry=null;a.t=5+Math.random()*5;return true}
 function stkTot(k){const o=S.stk&&S.stk[k];if(!o)return 0;let t=0;for(const r in o)t+=o[r];return t}
 function nearStore(x,y,r){let best=null,bd=1e9;for(const b of S.bl){if(!STORES[b.t])continue;if(r==='food'&&b.t==='storehouse'&&S.bl.some(q=>q.t==='granary'))continue;const d=Math.abs(b.x-x)+Math.abs(b.y-y);if(d<bd){bd=d;best=b}}return best}
 function haulThink(a){S.stk=S.stk||{};const sc=Math.min(1,MAXW/Math.max(1,S.pop));
@@ -542,7 +548,7 @@ const SPR={};
 // ---- buildings (hi-res sprites, multi-tile) ----
 const bsz=t=>(BLD[t]&&BLD[t].sz)||1;
 // realistic proportions: buildings at true scale vs ~0.65-tile people (art drawn at design size then scaled)
-const NSZ={trainingcamp:7,spearschool:6,archery:7,slingfield:6,axehall:6,stables:7,gatherhut:4,storehouse:6,bakery:6,brewery:6,thresh:3,shed:3,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:7,lodge:6,lumber:6,quarry:6,barracks:8,granary:7,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:2};
+const NSZ={tavern:6,shrine:2,senet:2,plaza:5,trainingcamp:7,spearschool:6,archery:7,slingfield:6,axehall:6,stables:7,gatherhut:4,storehouse:6,bakery:6,brewery:6,thresh:3,shed:3,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:7,lodge:6,lumber:6,quarry:6,barracks:8,granary:7,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:2};
 const BCOSTX={house:1.4,barracks:1.4,granary:1.4,temple:1.4,palace:1.3,market:1.3,smelter:1.3,lodge:1.2,lumber:1.2};
 for(const k in NSZ)if(BLD[k]){BLD[k].osz=BLD[k].sz||1;BLD[k].sz=NSZ[k];if(BCOSTX[k])for(const r in BLD[k].cost)BLD[k].cost[r]=Math.round(BLD[k].cost[r]*BCOSTX[k])}
 // ---- placement, occupancy, A*, roads ----
@@ -618,8 +624,10 @@ function think(a){const h=hubT(),n=night();if(a.carry==='sack'&&a.state==='home'
  if(!n&&(a.role==='harvester'||(a.role==='idle'&&(a.idx%3===1)))&&harvestThink(a,a.role==='harvester'?6:2))return;
  if((a.role==='hauler'||a.role==='idle'||a.role==='builder')&&!n&&buildThink(a))return;
  if((a.role==='hauler'||(a.role==='idle'&&(a.idx%2===0)))&&!n&&haulThink(a))return;
+ if(a.role==='idle'&&leisureThink(a,1))return;
  if(a.role==='idle'){if(n&&Math.random()<.6){go(a,a.home,'home');return}const g=Math.floor(a.idx/2),side=a.idx%2;const tg={x:h.x-2.5+(g*1.7)%5+side*.45,y:h.y+.2+(g*.9)%2.5};go(a,tg,evOn('festival')||vis.party>0?'dance':'chat');a.t=4+Math.random()*4;return}
  if(n&&a.state!=='home'&&Math.random()<.7){go(a,a.home,'home');return}
+ if(leisureThink(a))return;
  if(a.state==='work'){go(a,{x:h.x+Math.random()*.4-.2,y:h.y},'carry');a.carry=CARRY[a.role];return}
  if(a.state==='carry'){a.carry=null;a.state='drop';a.t=.6;return}go(a,workSpot(a),'towork')}
 function dirOf(dx,dy){if(Math.abs(dx)>Math.abs(dy))return dx>0?0:2;return dy>0?1:3}
@@ -704,7 +712,7 @@ function tcol(r,n1,n2,h,X,Y,o){let c=BC[r],a=c[0],b=c[1],d=c[2];const v=VG[r];
  o[0]=a*f;o[1]=b*f;o[2]=d*f;return o}
 function rkAt(fx,fy,X,Y){const i0=Math.floor(fx),j0=Math.floor(fy),tx=fx-i0,ty=fy-j0,q=(x,y)=>isRock(rtAt(x,y))?1:0;const b=q(i0,j0)*(1-tx)*(1-ty)+q(i0+1,j0)*tx*(1-ty)+q(i0,j0+1)*(1-tx)*ty+q(i0+1,j0+1)*tx*ty;return Math.max(0,Math.min(1,(b-.5)*2.2+.5+(vnoise(X,Y,10,81)-.5)*.9))}
 const NBD=[[0,-1],[1,0],[0,1],[-1,0],[1,-1],[1,1],[-1,1],[-1,-1]];
-const FLATB={thresh:1,farm:1,garden:1,stockpile:1,quarry:1,copper:1,tin:1};
+const FLATB={plaza:1,senet:1,thresh:1,farm:1,garden:1,stockpile:1,quarry:1,copper:1,tin:1};
 function roadConn(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const i=y*MW+x;if(occ[i]){const b=S.bl[occ[i]-1];return b&&(b.t==='gate'||b.t==='bridge'||b.t==='sbridge')?1:0}return roadSet[i]?1:0}
 const APX={wall:1,gate:1,bridge:1,sbridge:1,dock:1,tree:1,statue:1};
 function renderChunk(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);const img=g.createImageData(W,W),d=img.data;let fimg=null,fd=null;const col=[0,0,0],tmp=[0,0,0];const dry=!!evOn('drought');
@@ -837,7 +845,11 @@ function _bsprA(t,l,v){l=Math.min(l||1,5);const key='B'+t+l+(v||'')+(S&&S.tier>=
   else{for(let i=0;i<6+l*2;i++){const x=6+(i%4)*14,y=6+((i/4)|0)*13;if(y>W-6)break;[()=>{for(let k=0;k<3;k++)rr(g,x-6,y-4+k*3,12,3,1.5,'#8a6038',OUTL,.5)},()=>{rr(g,x-5,y-5,10,10,1,'#a8a294',OUTL,.6);ln(g,x-5,y,x+5,y,'#767066',.6)},()=>sack(g,x,y),()=>jar(g,x,y,3.4)][i%4]()}}
   g.fillStyle='rgba('+zc+',.16)';g.fillRect(0,0,W,W);g.setLineDash([3,2]);g.strokeStyle='rgba('+zc+',.9)';g.lineWidth=1;g.strokeRect(.5,.5,W-1,W-1);g.setLineDash([])}
  else if(t==='house'){m.walled=true;X_RICH=l>=3;floorF(g,0,0,W,W,'civ');X_RICH=0;walls(g,0,0,W,W,wm);X_legacy(g,'house',W,K,m,l,key)}
- else if(['trainingcamp','spearschool','archery','slingfield','axehall','stables'].includes(t)){const yard=t!=='axehall';m.walled=true;floorF(g,0,0,W,W,yard?'earth':'plank');walls(g,0,0,W,W,wm);X_legacy(g,t==='stables'?'stable':'barracks',W,K,m,l,key);milDeco(g,t,W)}
+ else if(t==='tavern'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'house',W,K,m,l,key)}
+  else if(t==='shrine'){ell(g,17,19,13,10,SH);rr(g,4,4,24,24,2,'#b8aa90',OUTL,.8);rr(g,8,8,16,16,1,'#d8ccb0','rgba(60,40,24,.6)',.6);rr(g,12,9,8,6,1,'#8a6438',OUTL,.6);circ(g,16,12,1.6,'#e8c060');for(const[x,y]of[[10,20],[22,20]]){circ(g,x,y,2,'#b8643a',OUTL,.5);circ(g,x,y-1,.8,'#f8e070')}m.lights=[{x:10,y:19},{x:22,y:19}]}
+  else if(t==='senet'){m.flat=1;for(const[x,y]of[[9,10],[22,21]]){ell(g,x+1,y+2,8,5,SH);rr(g,x-6,y-3,12,6,1,'#9a6c40',OUTL,.6);for(let i=0;i<10;i++)rr(g,x-5.4+i*1.1,y-2.4,1,1.4,.1,i%2?'#e8dcc0':'#5a3a20');for(let i=0;i<10;i++)rr(g,x-5.4+i*1.1,y+.8,1,1.4,.1,i%2?'#5a3a20':'#e8dcc0');rr(g,x-3,y-7,6,2.4,.8,'#7a5232');rr(g,x-3,y+4.6,6,2.4,.8,'#7a5232')}}
+  else if(t==='plaza'){m.flat=1;rr(g,0,0,W,W,1,'#c8bca0');for(let y=0;y<W;y+=4)for(let x=(y/4%2)*3;x<W;x+=6)rr(g,x+.3,y+.3,5.4,3.4,.4,lighten('#c8bca0',(hsh(x,y)-.5)*.12),'rgba(90,80,60,.35)',.3);circ(g,W/2,W/2,W*.14,'#a8a294',OUTL,.7);circ(g,W/2,W/2,W*.1,'#3f7896');circ(g,W/2,W/2,W*.03,'#d8ccb0');for(const[x,y]of[[.15,.15],[.85,.15],[.15,.85],[.85,.85]])circ(g,W*x,W*y,W*.06,'#4e7a36',OUTL,.4)}
+  else if(['trainingcamp','spearschool','archery','slingfield','axehall','stables'].includes(t)){const yard=t!=='axehall';m.walled=true;floorF(g,0,0,W,W,yard?'earth':'plank');walls(g,0,0,W,W,wm);X_legacy(g,t==='stables'?'stable':'barracks',W,K,m,l,key);milDeco(g,t,W)}
   else if(t==='gatherhut'){m.walled=true;floorF(g,0,0,W,W,'earth');walls(g,0,0,W,W,wm);X_legacy(g,'lodge',W,K,m,l,key)}
   else if(t==='bakery'){m.walled=true;floorF(g,0,0,W,W,'earth');walls(g,0,0,W,W,wm);X_legacy(g,'kiln',W,K,m,l,key)}
   else if(t==='brewery'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'silo',W,K,m,l,key)}
@@ -1061,7 +1073,7 @@ function applyLook(o,L,role){const keepHat=OUTFIT[role]&&OUTFIT[role].hat&&OUTFI
 
 function pspr(o,view,f,flip){return pawnSpr(o,flip?2:(view==='b'?3:0),1)}
 // ---------- roads / connectivity / desirability ----------
-const NOROAD={thresh:1,shed:1,bridge:1,sbridge:1,dock:1,campfire:1,tent:1,wall:1,gate:1,garden:1,tree:1,statue:1,well:1,stockpile:1},DECOR={garden:1,tree:1,statue:1,well:1};
+const NOROAD={shrine:1,senet:1,plaza:1,thresh:1,shed:1,bridge:1,sbridge:1,dock:1,campfire:1,tent:1,wall:1,gate:1,garden:1,tree:1,statue:1,well:1,stockpile:1},DECOR={garden:1,tree:1,statue:1,well:1};
 const roadMax=()=>S.tier>=3?3:S.tier>=2?2:1,RCOST={1:{},2:{stone:1},3:{stone:3}},roadMode=()=>placing==='__road'||placing==='__erase';
 const on=i=>{const b=S.bl[i];return !!b&&!b.cp&&(S.tier<1||NOROAD[b.t]||CONN[i]===1)};
 function perim(x,y,s,f){for(let k=0;k<s;k++){f(x+k,y-1);f(x+k,y+s);f(x-1,y+k);f(x+s,y+k)}}
@@ -1321,7 +1333,7 @@ let spd=1,TI=null;function setSpeed(s){spd=s;clearInterval(TI);if(s)TI=setInterv
 // drawer
 function openTab(t){const D=$('drawer');if(cur===t&&D.classList.contains('open')){D.classList.remove('open');document.body.classList.remove('dopen');document.querySelectorAll('#tabs button[data-t]').forEach(x=>x.classList.remove('sel'));return}cur=t;D.classList.add('open');document.body.classList.add('dopen');document.querySelectorAll('#tabs button[data-t]').forEach(x=>x.classList.toggle('sel',x.dataset.t===t));$('dtitle').textContent={build:'Architect',jobs:'Work',army:'Military',tech:'Research',map:'World',log:'History',help:'Guide'}[t];renderView()}
 // architect
-const CATS=[['housing','Housing','house',['tent','house']],['prod','Production','prod',['gatherhut','farm','thresh','shed','bakery','brewery','lumber','lodge','quarry','copper','tin','smelter']],['store','Storage','store',['stockpile','storehouse','granary','market']],['mil','Military','mil',['trainingcamp','spearschool','archery','slingfield','axehall','stables','barracks','wall','gate']],['civic','Civic','civic',['campfire','well','temple','palace','garden','tree','statue']],['water','Water','road',['bridge','sbridge','dock']],['roads','Roads/Zones','road',[]]];
+const CATS=[['housing','Housing','house',['tent','house']],['prod','Production','prod',['gatherhut','farm','thresh','shed','bakery','brewery','lumber','lodge','quarry','copper','tin','smelter']],['store','Storage','store',['stockpile','storehouse','granary','market']],['mil','Military','mil',['trainingcamp','spearschool','archery','slingfield','axehall','stables','barracks','wall','gate']],['civic','Civic','civic',['campfire','well','shrine','senet','plaza','tavern','temple','palace','garden','tree','statue']],['water','Water','road',['bridge','sbridge','dock']],['roads','Roads/Zones','road',[]]];
 let acat='housing';
 function costHTML(c){return Object.keys(c).filter(r=>c[r]).map(r=>'<span class="cst'+(S.res[r]<c[r]?' no':'')+'"><i class="ri ri-'+r+'"></i>'+c[r]+'</span>').join(' ')||'<span class="cst">free</span>'}
 function riCSS(){const st=document.createElement('style');st.textContent=RES.map(r=>'.ri-'+r+'{background-image:url('+ICO(r,14).toDataURL()+')}').join('');document.head.appendChild(st)}
@@ -1615,7 +1627,7 @@ function hapCalc(){const F=[],add=(n,v)=>{if(Math.abs(v)>=.5)F.push([n,Math.roun
  const cr=S.pop/Math.max(1,housing());if(cr>.95)add('Crowding',-(cr-.95)*60-4);
  let be=0,n=0;S.bl.forEach((b,i)=>{if(b.t==='house'){be+=beautyAt(b.x+1,b.y+1);n++}});add('Beauty near homes',n?Math.min(12,be/n/2.5)-2:0);
  const emp=employed()/Math.max(1,S.pop);add(emp>.97?'Overworked, no rest':'Rest',emp>.97?(S.pop>=10?-5:-2):emp<.9?3:1);
- add('Recreation (temple, market, gardens)',Math.min(9,cnt('temple')*3+cnt('market')*2+cnt('garden')+cnt('statue')*1.5));
+ add('Recreation (temple, market, gardens)',Math.min(9,cnt('temple')*3+cnt('market')*2+cnt('garden')+cnt('statue')*1.5));{const bh=Math.min(2,cnt('tavern'));add('Beer hall'+(S.gd&&S.gd.beer>1&&bh?' with beer':''),bh*3+(S.gd&&S.gd.beer>1&&bh?3:0));add('Shrines',Math.min(4,cnt('shrine')*2));add('Senet games',Math.min(3,cnt('senet')));add('Plazas',Math.min(4,cnt('plaza')*2));const lz=agents.filter(a=>a.state==='leisure').length;if(lz)add('Evenings out ('+lz+')',Math.min(4,lz*.5))}
  if((S.ev.act||[]).some(e=>/plague|sick|fever/.test(e.id)))add('Sickness',-15);
  add('Mourning the dead',-Math.min(25,S.grief||0));add('Fallen soldiers',-Math.min(20,(S.wargrief||0)));
  add('Rations: '+RATION[S.ration||'normal'].n,RATION[S.ration||'normal'].h);add('Taxes: '+TAX[S.tax||'normal'].n,TAX[S.tax||'normal'].h);

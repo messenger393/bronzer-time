@@ -1,0 +1,73 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Demand Panel Mockup</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0d0b09;color:#e8dcc4;font:13px/1.35 Georgia,serif;padding:14px}
+.ex{position:fixed;top:6px;right:10px;background:#7a2a1a;color:#fff;padding:3px 8px;border-radius:3px;font:11px sans-serif;z-index:9}
+.panel{max-width:1250px;margin:auto;background:linear-gradient(#1b1611,#13100c);border:1px solid #6b4f2a;border-radius:6px;box-shadow:0 0 0 1px #000,0 8px 30px #000}
+h1{margin:0;padding:10px 14px;font-size:17px;color:#d9a85b;border-bottom:1px solid #4a3720;letter-spacing:1px}
+h1 small{color:#9b8a6c;font-size:11px;font-weight:normal}
+h2{font-size:12px;color:#c99a52;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px}
+.grid{display:grid;grid-template-columns:1.25fr 1fr 0.9fr;gap:12px;padding:12px}
+.box{background:#0f0c09;border:1px solid #3a2c1a;border-radius:4px;padding:10px}
+.bars{display:flex;gap:6px;align-items:flex-end;height:230px;border-bottom:1px solid #4a3720;position:relative}
+.bars:before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed #3a2c1a}
+.b{flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;cursor:pointer}
+.b .t{font:bold 14px sans-serif}.b .f{width:70%;border-radius:2px 2px 0 0}
+.b.sel .f{outline:2px solid #f0c674;outline-offset:2px}
+.lbl{display:flex;gap:6px}.lbl div{flex:1;text-align:center;font-size:10px;color:#b8a888;padding-top:4px}
+.lock .f{background:repeating-linear-gradient(45deg,#3a332a 0 4px,#2a251f 4px 8px)!important}
+.lock{opacity:.6}
+.legend{font-size:11px;color:#9b8a6c;margin-top:8px}
+table{width:100%;border-collapse:collapse}td{padding:4px 2px;border-bottom:1px solid #241b10}
+.p{color:#7fc06a;text-align:right;font-family:sans-serif}.m{color:#d9644a;text-align:right;font-family:sans-serif}
+.tot td{border-top:1px solid #6b4f2a;font-weight:bold;color:#f0c674}
+.cand{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #241b10}
+.cand span{color:#9b8a6c;font-size:11px}
+.notice{background:#2a1f12;border:1px solid #c99a52;border-radius:4px;padding:10px;margin-bottom:10px}
+.btn{display:inline-block;padding:6px 12px;border-radius:3px;border:1px solid #6b4f2a;background:#2a2016;color:#e8dcc4;font:12px sans-serif;margin-right:6px}
+.ok{background:#3c5a2a;border-color:#7fc06a}.no{background:#5a2a20;border-color:#d9644a}
+.gold{background:linear-gradient(#a57a3a,#6b4f2a);color:#fff;width:100%;text-align:center;font-size:14px;padding:9px;margin-top:6px}
+.cost{display:flex;justify-content:space-between;font-family:sans-serif;font-size:12px;padding:3px 0}
+s{color:#8a7a60}
+.laws{display:flex;gap:18px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid #4a3720;background:#100d0a;align-items:center}
+.seg span{padding:4px 9px;border:1px solid #4a3720;font:11px sans-serif}.seg .on{background:#6b4f2a;color:#fff}
+.tog{display:inline-block;width:32px;height:16px;background:#3c5a2a;border-radius:8px;position:relative;vertical-align:middle}
+.tog:after{content:"";position:absolute;right:2px;top:2px;width:12px;height:12px;border-radius:6px;background:#e8dcc4}
+@media(max-width:700px){.grid{grid-template-columns:1fr}.bars{height:170px}.b .t{font-size:11px}.lbl div{font-size:8px}body{padding:6px}}
+</style></head><body><div class="ex">EXAMPLE DATA · MOCKUP</div>
+<div class="panel"><h1>⚖ SPECIALIST DEMAND <small>· Year 3, Late Flood · example data</small></h1>
+<div class="grid">
+<div class="box"><h2>Demand by trade</h2><div class="bars" id="bars"></div><div class="lbl" id="lbl"></div>
+<div class="legend">▲ rising ▼ falling ▬ steady · Green = strong demand, amber = moderate, red = oversupplied · 🔒 needs wealthier households</div></div>
+<div class="box"><h2>Why: Potter demand <span style="color:#7fc06a">+68</span></h2><table>
+<tr><td>Shortage: pots (households want 40, have 9)</td><td class="p">+30</td></tr>
+<tr><td>Surplus inputs: clay 212 idle</td><td class="p">+18</td></tr>
+<tr><td>Local price: 3.2 shekels/pot (▲ from 2.1)</td><td class="p">+14</td></tr>
+<tr><td>Household wealth: modest</td><td class="p">+8</td></tr>
+<tr><td>Existing shops: 1 pottery</td><td class="m">−6</td></tr>
+<tr><td>Tax rate on trade: 15%</td><td class="m">−4</td></tr>
+<tr><td>Zone availability: 3 free lots in Market Ward</td><td class="p">+8</td></tr>
+<tr class="tot"><td>Total</td><td class="p">+68</td></tr></table>
+<h2 style="margin-top:12px">Laborers ready to rise</h2>
+<div class="cand"><b>Ahmose</b><span>savings 46 rations · 4 shk · clay hauling ★★★</span></div>
+<div class="cand"><b>Tiye</b><span>savings 31 rations · 2 shk · clay hauling ★★</span></div>
+<div class="cand"><b>Nebet</b><span>savings 22 rations · 0 shk · digging ★</span></div></div>
+<div class="box"><div class="notice">📜 <b>Ahmose wants to open a pottery</b><br><span style="color:#b8a888;font-size:12px">Market Ward, lot 4 · pays 80% from own savings</span><br><br>
+<span class="btn ok">✔ Approve</span><span class="btn no">✖ Deny</span></div>
+<h2>Build now (forced)</h2>
+<div class="cost"><span>Base royal cost</span><s>60 shk + 40 brick</s></div>
+<div class="cost"><span>Demand discount (+68)</span><span style="color:#7fc06a">−25%</span></div>
+<div class="cost"><b>You pay</b><b style="color:#f0c674">45 shk + 30 brick</b></div>
+<div class="cost"><span>If a citizen builds it</span><span style="color:#7fc06a">≈ 6 shk tax-free grant</span></div>
+<span class="btn gold">⚒ Build Pottery Now · 45 shk</span>
+<p style="font-size:11px;color:#9b8a6c">Opens at once and removes no laborer from savings, but costs ~7× what waiting does.</p></div></div>
+<div class="laws"><b style="color:#c99a52">LAWS</b>
+<span>Auto-approve requests <span class="tog"></span></span>
+<span class="seg">Rations: <span>Lean</span><span class="on">Standard</span><span>Generous</span></span>
+<span class="seg">Trade tax: <span>5%</span><span>10%</span><span class="on">15%</span><span>25%</span></span></div></div>
+<script>
+const d=[["Potter",68,"▲"],["Weaver",42,"▲"],["Smith",55,"▬"],["Baker",20,"▼"],["Brewer",-25,"▼"],["Carpenter",33,"▲"],["Merchant",48,"▲"],["Jeweler",0,"🔒",1],["Perfumer",0,"🔒",1],["Scribe",0,"🔒",1]];
+const B=document.getElementById('bars'),L=document.getElementById('lbl');
+d.forEach(([n,v,a,lk],i)=>{const c=v>40?"#5fa04a":v>0?"#c9902f":"#b8402a";const h=lk?18:Math.max(6,Math.abs(v)+10);
+B.innerHTML+=`<div class="b ${lk?'lock':''} ${i==0?'sel':''}"><div class="t" style="color:${lk?'#888':c}">${a}</div><div style="font:10px sans-serif;color:#9b8a6c">${lk?'':v}</div><div class="f" style="height:${h}%;background:linear-gradient(${c},${c}66)"></div></div>`;
+L.innerHTML+=`<div>${n}</div>`});
+</script></body></html>
