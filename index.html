@@ -490,7 +490,7 @@ function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderA
 }
 // ================= WORLD (hi-res iso, 64x32 tiles) =================
 const vc=$('vc');let vx=vc.getContext('2d');let placing=null,ghost=null;
-const NEWSZ=(window.__SZ||400),MSZ=(()=>{try{if(localStorage.getItem('bnbNewGame'))return NEWSZ;const d=localStorage.getItem(KEY)||localStorage.getItem(OLDKEY);if(d){const s=JSON.parse(d);if(s&&s.res)return s.mw||256}}catch(e){}return NEWSZ})();const MW=MSZ,MH=MSZ,TS=32,OX=0,OY=0,WW=MW*TS,WH=MH*TS;
+const NEWSZ=(window.__SZ||(/Android|iPhone|iPad/i.test(navigator.userAgent)?400:1000)),MSZ=(()=>{try{if(localStorage.getItem('bnbNewGame'))return NEWSZ;const d=localStorage.getItem(KEY)||localStorage.getItem(OLDKEY);if(d){const s=JSON.parse(d);if(s&&s.res)return s.mw||256}}catch(e){}return NEWSZ})();const MW=MSZ,MH=MSZ,TS=32,OX=0,OY=0,WW=MW*TS,WH=MH*TS;
 const isoP=(gx,gy)=>({x:gx*TS,y:gy*TS});
 const hsh=(a,b,c=0)=>{let h=(a*374761393+b*668265263+c*1442695041)|0;h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296};
 function mk(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.imageSmoothingEnabled=false;return[c,g]}
@@ -2169,13 +2169,13 @@ let CLIFF=null;
 function terrainX(seed){CLIFF=new Uint8Array(MW*MH);if(MW<=256)return;const W=MW,H=MH,rnd=(a,b)=>hsh(seed*7+a,b,77),sx=START.x,sy=START.y,setT=(x,y,t)=>{if(x>=0&&y>=0&&x<W&&y<H)TER[y*W+x]=t};
  const nearStart=(x,y,r)=>Math.hypot(x-sx,y-sy)<r;
  // two wide rivers: one east-west (north or south of start), one north-south (east or west of start)
- for(let r=0;r<2;r++){const hz=r===0,L=hz?W:H,side=rnd(r,1)<.5?-1:1,base=(hz?sy:sx)+side*(46+rnd(r,2)*40),wd=6+Math.floor(rnd(r,3)*3),ph=rnd(r,4)*6.28,nf=2+Math.floor(rnd(r,5)*2),fords=[];
+ const nRiv=Math.max(2,Math.round(2*W/400));for(let r=0;r<nRiv;r++){const hz=r%2===0,L=hz?W:H,side=rnd(r,1)<.5?-1:1,base=(hz?sy:sx)+side*(46+rnd(r,2)*(r<2?40:Math.max(40,(hz?H:W)*.45-46))),wd=6+Math.floor(rnd(r,3)*3),ph=rnd(r,4)*6.28,nf=2+Math.floor(rnd(r,5)*2),fords=[];
   for(let k=0;k<nf;k++)fords.push(Math.floor(L*(k+.5+(rnd(r,10+k)-.5)*.5)/nf));
   for(let u=0;u<L;u++){const c=base+14*Math.sin(u/37+ph)+7*Math.sin(u/13+ph*2)+5*(vnoise(u,r*50,24,seed+9)-.5)*2,ford=fords.some(f=>Math.abs(u-f)<=1);
    for(let v=Math.floor(c-wd/2-2);v<=Math.ceil(c+wd/2+2);v++){const x=hz?u:v,y=hz?v:u;if(x<0||y<0||x>=W||y>=H||nearStart(x,y,24))continue;const d=Math.abs(v-c);
     if(d<=wd/2)setT(x,y,ford?T_SAND:T_WATER);else if(d<=wd/2+1.6&&TER[y*W+x]!==T_WATER)setT(x,y,T_SAND)}}}
  // ridges with cliff faces; ramps every ~16 tiles
- const nr=10+Math.floor(rnd(9,1)*4);for(let r=0;r<nr;r++){let a=rnd(r,20)*6.28,dd=36+rnd(r,21)*80,x=sx+Math.cos(a)*dd,y=sy+Math.sin(a)*dd,h=rnd(r,22)*6.28;const len=60+Math.floor(rnd(r,23)*80),nx=()=>-Math.sin(h),ny=()=>Math.cos(h);
+ const nr=Math.round((10+Math.floor(rnd(9,1)*4))*(W*H)/(400*400));for(let r=0;r<nr;r++){let a=rnd(r,20)*6.28,dd=36+rnd(r,21)*(r<14?80:W*.5),x=sx+Math.cos(a)*dd,y=sy+Math.sin(a)*dd,h=rnd(r,22)*6.28;const len=60+Math.floor(rnd(r,23)*80),nx=()=>-Math.sin(h),ny=()=>Math.cos(h);
   for(let k=0;k<len;k++){h+=(vnoise(k,r*30,9,seed+33)-.5)*.5;x+=Math.cos(h);y+=Math.sin(h);const ramp=(k%16)<3&&k>2;
    for(let w=-1;w<=0;w++){const X=Math.round(x+nx()*w),Y=Math.round(y+ny()*w);if(X<1||Y<1||X>=W-1||Y>=H-1||nearStart(X,Y,20))continue;const i=Y*W+X;if(TER[i]===T_WATER)continue;if(ramp){TER[i]=T_HILL;CLIFF[i]=0}else{TER[i]=T_ROCK;CLIFF[i]=1}}
    for(let w=1;w<=7;w++){const X=Math.round(x+nx()*w),Y=Math.round(y+ny()*w);if(X<0||Y<0||X>=W||Y>=H||nearStart(X,Y,20))continue;const i=Y*W+X;if(!CLIFF[i]&&TER[i]!==T_WATER&&TER[i]!==T_ROCK&&w<=7-2*hsh(X,Y,5))TER[i]=T_HILL}}}}
