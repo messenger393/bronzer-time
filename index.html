@@ -787,8 +787,7 @@ function farmPlants(g,F,st,dry,sw,now){const P=F.pl;g.lineCap='round';
   for(const[x,y,h,k]of P){const hh=H*k,wv=sw?Math.sin(now/850+x*.18+y*.07)*sw*hh*.22:0,tx=x+wv+(h-.5)*.8,ty=y-hh;if(pass){g.moveTo(x,y);g.quadraticCurveTo(x+wv*.4,y-hh*.6,tx,ty)}else{g.moveTo(x-.6,y);g.lineTo(x-.6+wv*.5-1,y-hh*.55);g.moveTo(x+.6,y);g.lineTo(x+.6+wv*.5+1,y-hh*.5)}}g.stroke()}
  if(st>=.45){g.fillStyle=ripe?'rgb('+(220|0)+','+(190-(1-ripe)*40|0)+',90)':'#8ab84a';for(const[x,y,h,k]of P){const hh=H*k,wv=sw?Math.sin(now/850+x*.18+y*.07)*sw*hh*.22:0;g.beginPath();g.ellipse(x+wv+(h-.5)*.8,y-hh-.6,.55,1.25,(h-.5)*.6+wv*.15,0,6.283);g.fill()}}}
 function farmDraw(b,X,Y,s,v,now,z){const F=farmBase(b,s,v),st=farmStage(b),dry=v==='dry';vx.drawImage(F.c,X,Y,F.W,F.W);
- if(z>=.75){vx.save();vx.translate(X,Y);farmPlants(vx,F,st,dry,1,now);vx.restore();return}
- const sk=(st*20|0)+(dry?'d':'');let c=F.st[sk];if(!c){F.st={};const[cc,g]=mk(F.W*2,F.W*2);g.scale(2,2);farmPlants(g,F,st,dry,0,0);c=F.st[sk]=cc}vx.drawImage(c,X,Y,F.W,F.W)}
+ const sw=z>=.75,R=sw?Math.min(3,Math.max(2,Math.ceil(z*PXR))):2,fi=sw?((now/850/6.2832*8)|0)%8:0,ss=(st*40|0)+(dry?'d':''),sk=ss+'|'+R+'|'+fi;if(F.ss!==ss){F.st={};F.ss=ss}let c=F.st[sk];if(!c){const[cc,g]=mk(F.W*R,F.W*R);g.scale(R,R);farmPlants(g,F,st,dry,sw?1:0,fi*850*6.2832/8);c=F.st[sk]=cc}vx.drawImage(c,X,Y,F.W,F.W)}
 // extra ground detail: soil specks, pebbles, clover on flat ground; cracks + strata on rock (drawn once per cached chunk)
 function TDET(g,r,gx,gy,lx0,ly0,dry){const H=k=>hsh(gx,gy,k);
  if(r===R_SOIL||r===R_RICH||r===R_FOREST||r===R_GRAVEL){const n=2+(H(101)*4|0);for(let k=0;k<n;k++){const x=lx0+2+hsh(gx,gy,110+k)*28,y=ly0+2+hsh(gx,gy,130+k)*28,t=hsh(gx,gy,150+k),sz=.7+t*1.3;
