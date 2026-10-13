@@ -594,9 +594,20 @@ let agents=[],critters=[],parts=[],clouds=[],birds=[],pops=[],bubble=null,roster
 function blds(t){const o=[];S.bl.forEach((b,i)=>{if(!t||b.t===t)o.push({b,i,gx:b.x,gy:b.y,s:bsz(b.t)})});return o}
 function pick(a){return a[Math.floor(Math.random()*a.length)]}
 function nearSpots(types,max){const c=S.center,o=[];for(let r=1;r<18&&o.length<max;r++)for(let y=c.y-r;y<=c.y+r;y++)for(let x=c.x-r;x<=c.x+r;x++){if(Math.max(Math.abs(x-c.x),Math.abs(y-c.y))!==r)continue;if(types.includes(ter(x,y))){for(const[dx,dy]of[[0,1],[1,0],[0,-1],[-1,0]])if(walkC(x+dx,y+dy)&&ter(x+dx,y+dy)!==T_FOREST&&ter(x+dx,y+dy)!==T_WATER){o.push({x:x+dx+.5,y:y+dy+.5});break}}}return o}
-const PC=new Map();
+const PC=new Map();const FF=new Map(),FFN=new Map(),FFR=110,FFMAX=96;let ffNow=0;
+function ffBuild(gx,gy){const x0=Math.max(0,gx-FFR),y0=Math.max(0,gy-FFR),x1=Math.min(MW-1,gx+FFR),y1=Math.min(MH-1,gy+FFR),w=x1-x0+1,h=y1-y0+1,N=w*h,par=new Int32Array(N).fill(-2),G=new Float64Array(N).fill(1e9);
+ const hp=[],hv=[];const push=(n,f)=>{hp.push(n);hv.push(f);let i=hp.length-1;while(i>0){const q=(i-1)>>1;if(hv[q]<=hv[i])break;[hp[q],hp[i]]=[hp[i],hp[q]];[hv[q],hv[i]]=[hv[i],hv[q]];i=q}};
+ const pop=()=>{const t=hp[0],ln=hp.pop(),lv=hv.pop();if(hp.length){hp[0]=ln;hv[0]=lv;let i=0;for(;;){const a=2*i+1,b=a+1;let m=i;if(a<hp.length&&hv[a]<hv[m])m=a;if(b<hp.length&&hv[b]<hv[m])m=b;if(m===i)break;[hp[m],hp[i]]=[hp[i],hp[m]];[hv[m],hv[i]]=[hv[i],hv[m]];i=m}}return t};
+ const g0=(gy-y0)*w+gx-x0;par[g0]=-1;G[g0]=0;push(g0,0);const gc=walkC(gx,gy)||1;
+ while(hp.length){const f=hv[0],n=pop();if(f>G[n])continue;const lx=n%w,ly=(n/w)|0,X0=lx+x0,Y0=ly+y0;const cn=n===g0?gc:walkC(X0,Y0);
+  for(let d=0;d<4;d++){const dx=d===0?1:d===1?-1:0,dy=d===2?1:d===3?-1:0,lx2=lx+dx,ly2=ly+dy;if(lx2<0||ly2<0||lx2>=w||ly2>=h)continue;const m=ly2*w+lx2;const c=walkC(X0+dx,Y0+dy);if(!c)continue;const ng=G[n]+(c+cn)*.5;if(ng<G[m]){G[m]=ng;par[m]=n;push(m,ng)}}}
+ return{x0,y0,w,h,par,t:ffNow}}
+function ffPath(F,sx,sy){sx|=0;sy|=0;const lx=sx-F.x0,ly=sy-F.y0;if(lx<0||ly<0||lx>=F.w||ly>=F.h)return undefined;let n=ly*F.w+lx;if(F.par[n]===-2)return undefined;const out=[];while(n!==-1&&out.length<600){out.push({x:n%F.w+F.x0+.5,y:((n/F.w)|0)+F.y0+.5});n=F.par[n]}return out}
+function ffGet(gx,gy){const k=gy*MW+gx;let F=FF.get(k);if(F)return F;const c=(FFN.get(k)||0)+1;FFN.set(k,c);if(c<3)return null;if(FF.size>=FFMAX){FF.delete(FF.keys().next().value)}F=ffBuild(gx,gy);FF.set(k,F);return F}
+function ffAge(hard){if(hard){FF.clear();FFN.clear();return}for(const[k,F]of FF)if(ffNow-F.t>20)FF.delete(k);if(FFN.size>4000)FFN.clear()}
+
 function walkSnap(to){const tx=to.x|0,ty=to.y|0;if(walkC(tx,ty))return to;let best=null,bd=1e9;for(let r=1;r<=4&&!best;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r||!walkC(tx+dx,ty+dy))continue;const d=Math.hypot(tx+dx+.5-to.x,ty+dy+.5-to.y);if(d<bd){bd=d;best={x:tx+dx+.5+(to.x%1-.5)*.3,y:ty+dy+.5+(to.y%1-.5)*.3}}}return best||to}
-function pathTo(a,to){to=walkSnap(to);const k=(a.x|0)+','+(a.y|0)+'>'+(to.x|0)+','+(to.y|0);let p=PC.get(k);if(p===undefined){p=astar(a.x,a.y,to.x,to.y);if(PC.size>500)PC.clear();PC.set(k,p)}if(!p)return[];const r=p.map(q=>({x:q.x,y:q.y}));r.push({x:to.x,y:to.y});return r}
+function pathTo(a,to){to=walkSnap(to);const k=(a.x|0)+','+(a.y|0)+'>'+(to.x|0)+','+(to.y|0);let p=PC.get(k);if(p===undefined){const F=ffGet(to.x|0,to.y|0);if(F)p=ffPath(F,a.x,a.y);if(p===undefined||p===null&&!F)p=astar(a.x,a.y,to.x,to.y);if(p===undefined)p=null;if(PC.size>6000)PC.clear();PC.set(k,p)}if(!p)return[];const r=p.map(q=>({x:q.x,y:q.y}));r.push({x:to.x,y:to.y});return r}
 function syncRoster(){const pop=S.pop,sig=JSON.stringify([S.jobs,pop,bgSig,armyN()]);if(sig===rosterSig)return;rosterSig=sig;spotCache={forest:nearSpots([T_FOREST],20),water:nearSpots([T_WATER],12)};
  const sc=Math.min(1,MAXW/Math.max(1,pop)),want=[];for(const j in S.jobs){const n=Math.round((S.jobs[j]||0)*sc);for(let k=0;k<n;k++)want.push(j+'#'+k)}
  const idle=Math.round(Math.max(0,pop-employed())*sc);for(let k=0;k<idle;k++)want.push('idle#'+k);for(let k=0;k<Math.min(12,armyN());k++)want.push('soldier#'+k);for(let k=0;k<Math.min(6,Math.floor(pop/6));k++)want.push('kid#'+k);
@@ -660,7 +671,7 @@ window.addEventListener('contextmenu',e=>{const t=e.target;if(t&&(t.tagName==='I
 window.addEventListener('resize',fitCanvas);
 
 function ghostAt(t){if(!placing||placing==='__move')return t;const s=bsz(placing);return{gx:t.gx-(s>>1),gy:t.gy-(s>>1)}}
-function worldChanged(){rebuildOcc();calcRT();ov64=null;computeRoads();buildProps();chunkSig++;overview=null;mmBase=null;PC.clear();bgSig=''}
+function worldChanged(){rebuildOcc();calcRT();ov64=null;computeRoads();buildProps();chunkSig++;overview=null;mmBase=null;PC.clear();ffAge(1);bgSig=''}
 function moveCamp(gx,gy){if(S.tier>0)return;const ok=[];for(let y=gy-2;y<=gy+2;y++)for(let x=gx-2;x<=gx+2;x++){const t=ter(x,y);if(t===T_GRASS||t===T_HILL)ok.push(1)}if(ok.length<18){log('Too rough to camp there — pick open ground.');return}
  const old=S.bl.slice();S.center={x:gx,y:gy};S.bl=[];rebuildOcc();for(const b of old){const dx=b.x-old[0].x,dy=b.y-old[0].y;S.bl.push({t:b.t,l:b.l,x:gx+dx,y:gy+dy});rebuildOcc();if(placeErr(b.t,gx+dx,gy+dy,true)!=='Tile taken'&&placeErr(b.t,gx+dx,gy+dy,true)){S.bl.pop();rebuildOcc();if(!autoPlace(b.t,b.l,true))log('Left a '+BLD[b.t].n+' behind.')}}
  worldChanged();burst(gx+.5,gy+.5,'#e8d8a8',30);log('The tribe packs up and moves camp.');centerOn(gx,gy);save();renderView()}
@@ -1194,7 +1205,7 @@ function aniSpr(k,fr){const key=k+fr;if(ASPR[key])return ASPR[key];const A=ANI[k
 function critDraw(c,now){const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1,A=ANI[c.k]||ANI.deer;const mv=c.tx!=null&&Math.hypot((c.tx||0)-c.x,(c.ty||0)-c.y)>.03;const fr=mv?Math.floor(now/140+(c.x*7|0))%4:(c.graze?4:0),bob=mv?Math.abs(Math.sin(now/140*Math.PI/2))*.8:0;
  ell(vx,X+1,Y+1.5,A.w*.95,A.h*.55,'rgba(20,14,8,.25)');vx.save();vx.translate(X,Y-bob);if(f<0)vx.scale(-1,1);vx.drawImage(aniSpr(c.k,fr),-24,-26,48,36);vx.restore()}
 let vign=null;
-function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;last=now;camStep(rdt);if(spd){vframe.tt=(vframe.tt||0)+dt;if(vframe.tt>.5){vframe.tt=0;trafficStep()}vframe.pc=(vframe.pc||0)+dt;if(vframe.pc>6){vframe.pc=0;PC.clear()}}
+function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;last=now;camStep(rdt);if(spd){vframe.tt=(vframe.tt||0)+dt;if(vframe.tt>.5){vframe.tt=0;trafficStep()}vframe.pc=(vframe.pc||0)+dt;if(vframe.pc>6){vframe.pc=0;PC.clear();ffNow+=6;ffAge(0)}}
  const dsig=!!evOn('drought')+'';if(dsig!==vframe.ds){vframe.ds=dsig;chunkSig++;ov64=null}if(!RT)calcRT();if(!bgSig){bgSig='b'+Math.random();rosterSig='';calcDistricts()}syncRoster();
  vx.setTransform(PXR,0,0,PXR,0,0);vx.fillStyle='#2e4a60';vx.fillRect(0,0,VW,VH);let sx=0,sy=0;if(vis.shake>0){vis.shake-=dt;sx=(Math.random()-.5)*8;sy=(Math.random()-.5)*6}
  const z=cam.z,TF=()=>vx.setTransform(z*PXR,0,0,z*PXR,Math.round((-cam.x+sx)*z*PXR),Math.round((-cam.y+sy)*z*PXR));TF();vx.imageSmoothingEnabled=true;
@@ -1280,7 +1291,7 @@ function paintStart(p){const t=toTile(toWorld(p));drag.st=t;drag.cur=t;drag.last
 function paintMove(p){const t=toTile(toWorld(p));if(t.gx===drag.cur.gx&&t.gy===drag.cur.gy)return;drag.cur=t;if(roadShape==='free'){lineTiles(drag.last,t,(x,y)=>brushTiles(x,y,paintTile));drag.last=t;roadsChanged(true)}}
 function paintEnd(p){if(roadShape!=='free'&&drag.st)shapeTiles(drag.st,drag.cur,paintTile);roadsChanged(false);if(paintAt.err){log(paintAt.err);paintAt.err=null}if(paintAt.n)paintAt.n=0;save();renderTop()}
 function paintCancel(){if(drag)drag.st=null}
-function roadsChanged(light){recomputeConn();calcRoadCap();PC.clear();ov64=null;mmBase=null;if(!light)buildProps()}
+function roadsChanged(light){recomputeConn();calcRoadCap();PC.clear();ffAge(1);ov64=null;mmBase=null;if(!light)buildProps()}
 function upgradeRoads(){const L=roadMax();let n=0;for(let i=0;i<MW*MH;i++)if(roadSet[i]&&roadSet[i]<L)n++;return n}
 // ---------- traffic ----------
 let TR=new Float32Array(MW*MH),LOAD=new Float32Array(MW*MH),RCAP=new Float32Array(MW*MH),congest=null;
