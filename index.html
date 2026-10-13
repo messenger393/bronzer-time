@@ -1052,7 +1052,7 @@ function toPawn(o){const eld=o.age==='old',fem=o.sex==='f',kid=o.kid||o.age==='k
  const h=PHAT[o.hat];if(h){P.hat=Object.assign({c:o.hat==='helm'||o.hat==='helmet'?(o.hmc||'#c8a040'):o.hat==='nemes'?'#f0e4b0':o.hat==='boar'?'#f0e8d0':(o.hc||'#c04a2c'),t:o.hat==='nemes'?(o.hc||'#2f5f98'):o.hat==='tall'||o.hat==='fez'||o.hat==='polos'?'#d8a838':null},h);if(o.hat==='helmet'||o.hat==='helm')P.hat.crest=o.crest||'#c04a2c';if(h.k==='hood'){P.hat={k:'veil',c:o.t2||lighten(T,-.3)}}if(h.k==='straw')P.hat={k:'cap',c:'#e2c464',t:'#a8822c'}}
  P.kohl=o.civ==='egypt';P.ear=!!o.ear;P.shield=o.shield;return P}
 function pawnSpr(o,dir,sc,fr){const k='W'+[o.sk,o.hs,o.t,o.t2,o.hat,o.hair,o.kid,o.sick,o.shield,o.apron,o.robe,o.hc,o.g,o.sex,o.age,o.bd,o.beard,o.pat,o.pc,o.sash,o.jw,o.cls,o.civ,o.hmc,o.crest,dir,sc].join();if(PSPR[k])return PSPR[k];return PSPR[k]=pawnSprB(o,dir,sc)}
-function pawnSprRaw(o,dir){return pawnSprB(o,dir,2)}
+function pawnSprRaw(o,dir,lod){const c=pawnSprB(o,dir,2);if(!lod)return c;const[h,g]=mk(24,32);g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(c,0,0,24,32);return h}
 function pawnSprB(o,dir,sc){
  const[c,g]=mk(24*sc,32*sc);g.imageSmoothingEnabled=true;g.scale(sc,sc);const P=toPawn(o),kid=o.kid||o.age==='kid';
  g.translate(12,20.6);if(kid){g.translate(0,5);g.scale(.74,.74)}if(o.age==='old')g.translate(0,.5);
@@ -1064,9 +1064,9 @@ function pawnSprB(o,dir,sc){
 let PSPRn=0;
 // pawn sprite cache: LRU (no wholesale clears), per-frame build budget avoids warm-up spikes
 const PAT={map:new Map(),cap:/Android|iPhone|iPad/i.test(navigator.userAgent)?1500:9000,bud:0,fb:new Map()};
-function pawnSprA(o,dir){let bk=o._pk;if(!bk)bk=o._pk=[o.sk,o.hs,o.t,o.t2,o.hat,o.hair,o.kid,o.sick,o.shield,o.apron,o.robe,o.hc,o.g,o.sex,o.age,o.bd,o.beard,o.pat,o.pc,o.sash,o.jw,o.cls,o.civ,o.hmc,o.crest].join();const k=bk+'|'+dir;let e=PAT.map.get(k);if(e){if(PAT.map.size>PAT.cap*.9){PAT.map.delete(k);PAT.map.set(k,e)}return e}
- if(PAT.bud<=0){const fk=(o.kid?'k':'a')+dir+(o.t||'');let f=PAT.fb.get(fk);if(f)return f;if(PAT.fb.size<96){f=pawnSprRaw(o,dir);PAT.fb.set(fk,f);return f}for(const v of PAT.fb.values())return v}
- PAT.bud--;e=pawnSprRaw(o,dir);PAT.map.set(k,e);if(PAT.map.size>PAT.cap)PAT.map.delete(PAT.map.keys().next().value);return e}
+function pawnSprA(o,dir,lod){let bk=o._pk;if(!bk)bk=o._pk=[o.sk,o.hs,o.t,o.t2,o.hat,o.hair,o.kid,o.sick,o.shield,o.apron,o.robe,o.hc,o.g,o.sex,o.age,o.bd,o.beard,o.pat,o.pc,o.sash,o.jw,o.cls,o.civ,o.hmc,o.crest].join();const k=bk+'|'+dir+(lod?'h':'');let e=PAT.map.get(k);if(e){if(PAT.map.size>PAT.cap*.9){PAT.map.delete(k);PAT.map.set(k,e)}return e}
+ if(PAT.bud<=0){const fk=(o.kid?'k':'a')+dir+(o.t||'');let f=PAT.fb.get(fk);if(f)return f;if(PAT.fb.size<96){f=pawnSprRaw(o,dir,lod);PAT.fb.set(fk,f);return f}for(const v of PAT.fb.values())return v}
+ PAT.bud--;e=pawnSprRaw(o,dir,lod);PAT.map.set(k,e);if(PAT.map.size>PAT.cap)PAT.map.delete(PAT.map.keys().next().value);return e}
 function shadowSpr(){if(!shadowSpr.c){const[c,g]=mk(28,12);ell(g,14,6,13,5.6,'rgba(20,14,8,.28)');shadowSpr.c=c}return shadowSpr.c}
 // pawn tool/weapon sprite at hand, rotated toward target; ang in screen radians
 function pawnTool(k,X,Y,ang,swing,push,sz){vx.save();vx.translate(X+Math.cos(ang)*(4+(push||0)),Y+Math.sin(ang)*(3+(push||0)));vx.rotate(ang+(swing||0));PWN.toolSprite(vx,k,sz||20);vx.restore()}
@@ -1177,7 +1177,7 @@ function _drawAgent0(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({}
  const toolK=a.hvk&&a.state==='work'&&!moving?a.hvTool:a.bsite&&a.state==='work'&&!moving?(a.bclr?'pick':'hammer'):a.state==='work'&&!moving?({woodcutter:'axe',quarrier:'pick',coppermin:'pick',tinmin:'pick',smith:'hammer',farmer:a.work&&a.work.b&&a.work.b.t==='farm'&&farmStage(a.work.b)>=.6?'sickle':'hoe',herder:'club',hunter:'spear'})[a.role]:(a.role==='soldier'||a.role==='hunter')?'spear':null;
  const tAng=toolK==='spear'&&!(a.state==='work'&&!moving)?-Math.PI/2+fl*.25:(d===1?Math.PI/2+.5:d===3?-Math.PI/2:face),tSw=a.state==='work'&&!moving&&toolK!=='spear'?fl*swingA*(d===0||d===2?-1:1):0,tPush=toolK==='spear'&&a.state==='work'&&!moving?PWN.swing(cyc,[[0,0],[.3,-2,'io'],[.45,5,'in'],[.6,5],[1,0]]):0;
  const drawTool=()=>{if(toolK)pawnTool(toolK,hx,hy,tAng,tSw,tPush,20)};
- vx.drawImage(shadowSpr(),X-7,Y-2,14,6);if(toolK&&d===3)drawTool();vx.drawImage(pawnSprA(o,d),X-12,Y-29-jump-bob,24,32);
+ vx.drawImage(shadowSpr(),X-7,Y-2,14,6);if(toolK&&d===3)drawTool();vx.drawImage(pawnSprA(o,d,cam.z*PXR<=1.05?1:0),X-12,Y-29-jump-bob,24,32);
  if(toolK&&d!==3)drawTool();
  if(a.state==='work'&&!moving){const w=(now/900+(a.idx||0)*.37)%1;if(toolK&&toolK!=='spear'&&w>.56&&w<.6)burst2(hx+Math.cos(tAng)*14,hy+Math.sin(tAng)*10+4,a.role==='woodcutter'?PB.wood[5]:a.role==='farmer'?(PB.soil?PB.soil[4]:'#8a6a40'):'#d8d0c0');
   if(a.role==='fisher'){ln(vx,hx,hy,hx+fl*14,hy-10,'#7a5232',1.2);ln(vx,hx+fl*14,hy-10,hx+fl*16,hy+6+Math.sin(now/300)*2,'rgba(240,230,210,.8)',.6)}
