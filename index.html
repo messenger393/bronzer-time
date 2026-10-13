@@ -548,7 +548,7 @@ function toCanvas(e){const r=vc.getBoundingClientRect();return{x:(e.clientX-r.le
 function toWorld(p){return{x:cam.x+p.x/cam.z,y:cam.y+p.y/cam.z}}
 const ptrs=new Map();let drag=null,pinch=null;
 vc.addEventListener('pointerdown',e=>{vc.setPointerCapture&&vc.setPointerCapture(e.pointerId);const p=toCanvas(e);ptrs.set(e.pointerId,p);cam.vx=cam.vy=0;
- if(ptrs.size===1){drag={s:p,cx:cam.x,cy:cam.y,moved:false,lp:p,lt:performance.now(),vx:0,vy:0};if(roadMode()&&e.button!==2){drag.paint=1;paintStart(p)}}
+ if(ptrs.size===1){drag={s:p,cx:cam.x,cy:cam.y,moved:false,lp:p,lt:performance.now(),vx:0,vy:0};if(e.pointerType==='mouse'&&e.button===2)drag.rc=1;if(roadMode()&&e.button!==2){drag.paint=1;paintStart(p)}}
  else{const[a,b]=[...ptrs.values()];if(drag&&drag.paint)paintCancel();pinch={d:Math.max(10,Math.hypot(a.x-b.x,a.y-b.y)),z:cam.z,mx:(a.x+b.x)/2,my:(a.y+b.y)/2};drag=null}});
 vc.addEventListener('pointermove',e=>{const p=toCanvas(e);if(!ptrs.has(e.pointerId)){if(placing&&e.pointerType==='mouse')ghost=ghostAt(toTile(toWorld(p)));return}ptrs.set(e.pointerId,p);
  if(pinch&&ptrs.size>=2){const[a,b]=[...ptrs.values()];const mx=(a.x+b.x)/2,my=(a.y+b.y)/2,nz=Math.max(zMin(),Math.min(ZMAX,pinch.z*Math.hypot(a.x-b.x,a.y-b.y)/pinch.d));cam.x-=(mx-pinch.mx)/cam.z;cam.y-=(my-pinch.my)/cam.z;pinch.mx=mx;pinch.my=my;cam.tz=nz;cam.ax=mx;cam.ay=my;applyZoom(nz);return}
@@ -556,10 +556,10 @@ vc.addEventListener('pointermove',e=>{const p=toCanvas(e);if(!ptrs.has(e.pointer
  if(drag){const dx=p.x-drag.s.x,dy=p.y-drag.s.y;if(Math.abs(dx)+Math.abs(dy)>7)drag.moved=true;if(drag.moved){const now=performance.now(),dtm=Math.max(1,now-drag.lt);const ivx=-(p.x-drag.lp.x)/cam.z/dtm*1000,ivy=-(p.y-drag.lp.y)/cam.z/dtm*1000;drag.vx=drag.vx*.6+ivx*.4;drag.vy=drag.vy*.6+ivy*.4;drag.lp=p;drag.lt=now;cam.x=drag.cx-dx/cam.z;cam.y=drag.cy-dy/cam.z;clampCam()}}});
 vc.addEventListener('pointerup',e=>{const p=toCanvas(e);ptrs.delete(e.pointerId);if(pinch){if(ptrs.size<1)pinch=null;drag=null;return}if(drag&&drag.paint){paintEnd(p);drag=null;return}
  if(drag&&drag.moved&&performance.now()-drag.lt<90){cam.vx=Math.max(-3000,Math.min(3000,drag.vx));cam.vy=Math.max(-3000,Math.min(3000,drag.vy))}
- if(drag&&!drag.moved)tapWorld(toWorld(p),e.pointerType);drag=null});
+ if(drag&&!drag.moved){if(drag.rc){if(placing)pCancel();drag=null;return}tapWorld(toWorld(p),e.pointerType)}drag=null});
 vc.addEventListener('pointercancel',e=>{ptrs.delete(e.pointerId);if(drag&&drag.paint)paintCancel();drag=null;pinch=null});
 vc.addEventListener('wheel',e=>{e.preventDefault();const p=toCanvas(e);const d=e.deltaMode===1?e.deltaY*16:e.deltaY;zoomAt(cam.tz*Math.exp(-d*(e.ctrlKey?.01:.0018)),p.x,p.y)},{passive:false});
-vc.addEventListener('contextmenu',e=>{e.preventDefault();if(placing)pCancel()});
+window.addEventListener('contextmenu',e=>{const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'))return;e.preventDefault();if(placing&&(t===vc||t.closest&&!t.closest('#pm')))pCancel()},true);
 window.addEventListener('resize',fitCanvas);
 
 function ghostAt(t){if(!placing||placing==='__move')return t;const s=bsz(placing);return{gx:t.gx-(s>>1),gy:t.gy-(s>>1)}}
@@ -1792,7 +1792,7 @@ const _bvStep1=bvStep;bvStep=function(){const fi=BV.fi,na=BV.arrows.length,rt=Ob
 (function(){const b=document.createElement('button');b.id='aubtn';b.title='Sound';const P=document.createElement('div');P.id='aupan';const upd=()=>b.textContent=AU.muted?'🔇':'🔊';
  P.innerHTML='<label><b>Sound</b><input type="checkbox" id="aumute"> mute</label>'+['master','music','sfx'].map(k=>'<label>'+k[0].toUpperCase()+k.slice(1)+' <input type="range" min="0" max="1" step="0.05" data-k="'+k+'"></label>').join('');
  b.onclick=e=>{e.stopPropagation();AU.init();P.style.display=P.style.display==='block'?'none':'block';P.querySelectorAll('input[type=range]').forEach(r=>r.value=AU.vol[r.dataset.k]);P.querySelector('#aumute').checked=AU.muted};
- P.addEventListener('input',e=>{const r=e.target;if(r.dataset.k){AU.vol[r.dataset.k]=+r.value}else AU.muted=r.checked;AU.apply();upd()});document.body.appendChild(b);document.body.appendChild(P);try{const sv=JSON.parse(localStorage.getItem('bnbAudio')||'null');if(sv)AU.muted=sv.muted}catch(e){}upd()})();
+ P.addEventListener('input',e=>{const r=e.target;if(r.dataset.k){AU.vol[r.dataset.k]=+r.value}else AU.muted=r.checked;AU.apply();upd()});try{const sv=JSON.parse(localStorage.getItem('bnbAudio')||'null');if(sv)AU.muted=sv.muted}catch(e){}upd()})();
 
 // ================= DYNAMIC WORLD: provinces, zones of control, AI nations =================
 const WMW=256,WMH=150,TRIBEC=['#8a7a5a','#6a7a4a','#7a5a4a','#5a6a6a','#8a6a3a','#6a5a7a'];
@@ -2633,7 +2633,7 @@ function pmRender(){const B=$('pmb'),v=PM.view;B.innerHTML='';const H=t=>{const 
   const ck=(lab,get,set)=>{const l=document.createElement('label');l.className='st';l.innerHTML='<span></span>';l.firstChild.textContent=lab;const i=document.createElement('input');i.type='checkbox';i.checked=get();i.onchange=()=>set(i.checked);l.appendChild(i);B.appendChild(l)};
   const pct=v=>Math.round(v*100)+'%',av=(k,v)=>{AU.vol[k]=v;GFX[k]=v;if(AU.ctx)AU.apply();else localStorage.setItem('bnbAudio',JSON.stringify({vol:AU.vol,muted:AU.muted}));gfxSave()};
   const sub=t=>{const h=document.createElement('div');h.style.cssText='margin:10px 0 2px;font-weight:600;color:#f0d8a0;font-variant:small-caps';h.textContent=t;B.appendChild(h)};
-  sub('Audio');sl('Master volume',()=>AU.vol.master,v=>av('master',v),0,1,.05,pct);sl('Music volume',()=>AU.vol.music,v=>av('music',v),0,1,.05,pct);sl('Sound effects',()=>AU.vol.sfx,v=>av('sfx',v),0,1,.05,pct);
+  sub('Audio');ck('Mute all sound',()=>AU.muted,v=>{AU.muted=v;if(AU.ctx)AU.apply();else localStorage.setItem('bnbAudio',JSON.stringify({vol:AU.vol,muted:AU.muted}))});sl('Master volume',()=>AU.vol.master,v=>av('master',v),0,1,.05,pct);sl('Music volume',()=>AU.vol.music,v=>av('music',v),0,1,.05,pct);sl('Sound effects',()=>AU.vol.sfx,v=>av('sfx',v),0,1,.05,pct);
   sub('Graphics');{const l=document.createElement('label');l.className='st';l.innerHTML='<span>Graphics quality</span>';const s2=document.createElement('select');for(const[k,n]of[['low','Low (fastest)'],['med','Medium'],['high','High']]){const o=document.createElement('option');o.value=k;o.textContent=n;s2.appendChild(o)}s2.value=GFX.q;s2.onchange=()=>{GFX.q=s2.value;gfxSave()};l.appendChild(s2);B.appendChild(l)}
   ck('Particles (smoke, sparks, dust)',()=>GFX.parts,v=>{GFX.parts=v;gfxSave()});
   sub('Controls');ck('Edge scrolling (mouse at screen edge pans)',()=>GFX.edge,v=>{GFX.edge=v;gfxSave()});sl('Pan speed',()=>GFX.pan,v=>{GFX.pan=v;gfxSave()},.4,2.5,.1,v=>v.toFixed(1)+'×');
