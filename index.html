@@ -111,7 +111,7 @@ campfire:{n:'Campfire',cost:{wood:5},tier:0,max:1,d:'Heart of the camp'},
 stockpile:{n:'Stockpile Zone',cost:{wood:5},tier:0,sz:2,d:'2x2 storage zone: +100 storage'},
 garden:{n:'Garden',cost:{wood:5,food:5},tier:1,sz:2,d:'Fenced flower garden: +2 desirability nearby'},
 tree:{n:'Shade Tree',cost:{wood:2,food:4},tier:1,d:'Planted tree: +1 desirability'},
-farm:{n:'Farm',cost:{wood:20},job:'farmer',tier:1,sz:2,d:'2x2 wheat field, +2 farmer jobs/lvl'}, bakery:{n:'Bakery',cost:{wood:30,stone:20},job:'baker',tier:1,sz:2,d:'Bakers turn delivered wheat sheaves into bread (x1.4 food value)'}, brewery:{n:'Brewery',cost:{wood:35,stone:15},job:'brewer',tier:1,sz:2,d:'Brewers turn wheat into beer: +happiness while beer is in stock'}, storehouse:{n:'Storehouse',cost:{wood:30,stone:10},tier:1,sz:2,d:'Haulers deliver goods here: +150 storage/lvl'}, thresh:{n:'Threshing Floor',cost:{wood:5,stone:15},tier:1,d:'Packed floor where sheaves are threshed: farms +8% food each (max +30% with sheds)'}, shed:{n:'Farm Shed',cost:{wood:20},tier:1,d:'Tool and seed store: farms +5% food each (max +30% with floors)'},
+farm:{n:'Farm',cost:{wood:20},job:'farmer',tier:1,sz:2,d:'2x2 wheat field, +2 farmer jobs/lvl'}, gatherhut:{n:"Gatherer's Hut",cost:{wood:25},job:'harvester',tier:0,d:'Harvesters carry out your harvest orders (trees, bushes, stone) 3x faster than idle villagers'}, bakery:{n:'Bakery',cost:{wood:30,stone:20},job:'baker',tier:1,sz:2,d:'Bakers turn delivered wheat sheaves into bread (x1.4 food value)'}, brewery:{n:'Brewery',cost:{wood:35,stone:15},job:'brewer',tier:1,sz:2,d:'Brewers turn wheat into beer: +happiness while beer is in stock'}, storehouse:{n:'Storehouse',cost:{wood:30,stone:10},tier:1,sz:2,d:'Haulers deliver goods here: +150 storage/lvl'}, thresh:{n:'Threshing Floor',cost:{wood:5,stone:15},tier:1,d:'Packed floor where sheaves are threshed: farms +8% food each (max +30% with sheds)'}, shed:{n:'Farm Shed',cost:{wood:20},tier:1,d:'Tool and seed store: farms +5% food each (max +30% with floors)'},
 house:{n:'House',cost:{wood:25,stone:5},tier:1,sz:2,d:'+5 housing/lvl; multi-story at Lv4+'},
 quarry:{n:'Quarry',cost:{wood:30},job:'quarrier',tier:1,sz:2,d:'+2 quarrier jobs/lvl (near rock)'},
 barracks:{n:'Barracks',cost:{wood:50,stone:20},tier:1,sz:2,d:'Train troops; +6 army cap/lvl'},
@@ -129,7 +129,7 @@ bridge:{n:'Wooden Bridge',cost:{wood:6},tier:1,d:'Cost per span. Tap a river: sp
 sbridge:{n:'Stone Bridge',cost:{stone:14,wood:2},tier:2,d:'Cost per span. Crosses any depth, even deep rivers'},
 dock:{n:'Dock',cost:{wood:40},tier:1,sz:2,d:'2x2 on the shoreline. Reed boats ferry villagers over deep water nearby, enable boat crossings & flank landings. Egyptians/Minoans get ships at City tier'},
 statue:{n:'Statue',cost:{stone:60,bronze:10},tier:3,d:'Bronze statue: +4 desirability nearby'}};
-const JOBS={gatherer:['Gatherer','food',0.6],hunter:['Hunter','food',1.1],merchant:['Merchant',null,0],hauler:['Hauler',null,0],baker:['Baker',null,0],brewer:['Brewer',null,0],farmer:['Farmer','food',1.0],woodcutter:['Woodcutter','wood',0.8],quarrier:['Quarrier','stone',0.5],coppermin:['Copper Miner','copper',0.4],tinmin:['Tin Miner','tin',0.3],smith:['Smith','bronze',0.3],scribe:['Scribe',null,0],herder:['Herder','food',1.4],fisher:['Fisher','food',1.2]};
+const JOBS={gatherer:['Gatherer','food',0.6],hunter:['Hunter','food',1.1],merchant:['Merchant',null,0],hauler:['Hauler',null,0],harvester:['Harvester',null,0],baker:['Baker',null,0],brewer:['Brewer',null,0],farmer:['Farmer','food',1.0],woodcutter:['Woodcutter','wood',0.8],quarrier:['Quarrier','stone',0.5],coppermin:['Copper Miner','copper',0.4],tinmin:['Tin Miner','tin',0.3],smith:['Smith','bronze',0.3],scribe:['Scribe',null,0],herder:['Herder','food',1.4],fisher:['Fisher','food',1.2]};
 const TECH={
 bronze:{n:'Bronze Working',cost:{copper:30,stone:40},d:'Unlocks Smelter & bronze'},
 irrigation:{n:'Irrigation',cost:{wood:80,stone:60},d:'Farms +50%'},
@@ -412,6 +412,11 @@ function siteDraw(b,sp,X,Y,s,now){const c=b.cp,W=s*32,ph=sitePhase(b),bp=Math.mi
   if(bp<1){const sy=Y+W-h;for(let x=X+2;x<X+W;x+=Math.max(8,W/5)){ln(vx,x,sy-6,x,Y+W,'#8a6238',1.2)}ln(vx,X+1,sy-5,X+W-1,sy-5,'#8a6238',1);ln(vx,X+1,sy-2,X+W-1,sy-2,'rgba(138,98,56,.7)',.8)}}
  const bw=Math.min(40,W),bx=X+W/2-bw/2,by=Y-7;rr(vx,bx-1,by-1,bw+2,5,2,'rgba(20,14,8,.75)');rr(vx,bx,by,bw*c.p,3,1.5,ph===0?'#c8a060':ph===1?'#a0b8d0':'#8ad060');
  vx.font='bold 6px sans-serif';vx.fillStyle='#fff6dc';vx.textAlign='center';vx.fillText(['Clearing','Hauling materials','Building'][ph]+' '+Math.round(c.p*100)+'%',X+W/2,by-2);vx.textAlign='left'}
+// ---- harvest orders: Gatherer's Hut harvesters (fast) and idle villagers (slow) ----
+function harvestThink(a,rate){if(a.state==='deliver'&&a.load)return haulThink(a);if(!S.hv)return false;
+ if(a.hvk&&a.state==='work'){const k=a.hvk;a.hvk=null;const am=rnAmt(k);if(am>0){const t=Math.min(am,rate*(1+(S.tech.bronzetools?.3:0)));rnSet(k,am-t);(window.HVS=window.HVS||{})[a.role]=(HVS[a.role]||0)+t;if(rnAmt(k)<=0)delete S.hv[k];RN.cand={};const r=RND[k[0]].r,i=+k.slice(1),x=i%MW,y=(i/MW)|0,dst=nearStore(x,y,r);a.load={r,n:t};a.carry=ITM[r].carry;if(dst){go(a,doorOf(dst),'deliver');a.dst=bid(dst)}else{go(a,hubT(),'deliver');a.dst=null}popup(x+.5,y,'+'+Math.round(t)+' '+r,'#e8d8a8');return true}}
+ let best=null,bd=1e9;for(const k in S.hv){if(!RND[k[0]])continue;if(rnAmt(k)<=0){delete S.hv[k];continue}const i=+k.slice(1),x=i%MW,y=(i/MW)|0;const tk=agents.some(o=>o!==a&&o.hvk===k);const d=Math.abs(x-a.x)+Math.abs(y-a.y)+(tk?12:0);if(d<bd){bd=d;best=k}}
+ if(!best)return false;const i=+best.slice(1),x=i%MW,y=(i/MW)|0;a.hvk=best;a.hvTool=best[0]==='t'?'axe':best[0]==='b'?'sickle':'pick';go(a,{x:x+.5+(a.x<x?-.6:.6),y:y+.7},'towork');return true}
 function stkTot(k){const o=S.stk&&S.stk[k];if(!o)return 0;let t=0;for(const r in o)t+=o[r];return t}
 function nearStore(x,y,r){let best=null,bd=1e9;for(const b of S.bl){if(!STORES[b.t])continue;if(r==='food'&&b.t==='storehouse'&&S.bl.some(q=>q.t==='granary'))continue;const d=Math.abs(b.x-x)+Math.abs(b.y-y);if(d<bd){bd=d;best=b}}return best}
 function haulThink(a){S.stk=S.stk||{};const sc=Math.min(1,MAXW/Math.max(1,S.pop));
@@ -521,7 +526,7 @@ const SPR={};
 // ---- buildings (hi-res sprites, multi-tile) ----
 const bsz=t=>(BLD[t]&&BLD[t].sz)||1;
 // realistic proportions: buildings at true scale vs ~0.65-tile people (art drawn at design size then scaled)
-const NSZ={storehouse:6,bakery:6,brewery:6,thresh:3,shed:3,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:7,lodge:6,lumber:6,quarry:6,barracks:8,granary:7,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:2};
+const NSZ={gatherhut:4,storehouse:6,bakery:6,brewery:6,thresh:3,shed:3,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:7,lodge:6,lumber:6,quarry:6,barracks:8,granary:7,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:2};
 const BCOSTX={house:1.4,barracks:1.4,granary:1.4,temple:1.4,palace:1.3,market:1.3,smelter:1.3,lodge:1.2,lumber:1.2};
 for(const k in NSZ)if(BLD[k]){BLD[k].osz=BLD[k].sz||1;BLD[k].sz=NSZ[k];if(BCOSTX[k])for(const r in BLD[k].cost)BLD[k].cost[r]=Math.round(BLD[k].cost[r]*BCOSTX[k])}
 // ---- placement, occupancy, A*, roads ----
@@ -561,8 +566,8 @@ function critSpr(k,f){const key=k+f;if(CSPR[key])return CSPR[key];const[c,g]=mk(
  outline(c);return CSPR[key]=c}
 // ---- life sim ----
 const MAXW=60;
-const JOBB={hauler:null,baker:'bakery',brewer:'brewery',farmer:'farm',woodcutter:'lumber',quarrier:'quarry',coppermin:'copper',tinmin:'tin',smith:'smelter',herder:'farm',fisher:null,scribe:'temple',merchant:'market',gatherer:null,hunter:'lodge'};
-const CARRY={baker:'sack',brewer:'sack',farmer:'sack',herder:'sack',fisher:'fish',woodcutter:'log',quarrier:'stone',coppermin:'cu',tinmin:'sn',smith:'ingot',gatherer:'sack',hunter:'meat',merchant:'sack'};
+const JOBB={harvester:'gatherhut',hauler:null,baker:'bakery',brewer:'brewery',farmer:'farm',woodcutter:'lumber',quarrier:'quarry',coppermin:'copper',tinmin:'tin',smith:'smelter',herder:'farm',fisher:null,scribe:'temple',merchant:'market',gatherer:null,hunter:'lodge'};
+const CARRY={harvester:'log',baker:'sack',brewer:'sack',farmer:'sack',herder:'sack',fisher:'fish',woodcutter:'log',quarrier:'stone',coppermin:'cu',tinmin:'sn',smith:'ingot',gatherer:'sack',hunter:'meat',merchant:'sack'};
 let agents=[],critters=[],parts=[],clouds=[],birds=[],pops=[],bubble=null,rosterSig='',bgSig='',vis={migr:[],raid:0,caravan:0,shake:0,party:0},spotCache=null;
 function blds(t){const o=[];S.bl.forEach((b,i)=>{if(!t||b.t===t)o.push({b,i,gx:b.x,gy:b.y,s:bsz(b.t)})});return o}
 function pick(a){return a[Math.floor(Math.random()*a.length)]}
@@ -593,6 +598,7 @@ function think(a){const h=hubT(),n=night();if(a.carry==='sack'&&a.state==='home'
  if(!n&&a.role!=='soldier'&&a.role!=='hauler'&&a.state==='home'&&Math.random()<.25){const st=S.bl.filter(b=>b.t==='market'||b.t==='storehouse'||b.t==='granary');if(st.length){const B=st[(a.idx||0)%st.length];go(a,doorOf(B),'fetch');a.carry='sack';a.fetchHome=1;return}}
  if(a.state==='fetch'&&a.fetchHome){a.fetchHome=0;go(a,a.home,'home');a.carry='sack';a.t=3;return}
  if(!n&&a.role!=='soldier'&&a.state!=='water'&&a.state!=='carry'&&a.state!=='work'&&Math.random()<.06){const W=blds('well');if(W.length){const B=W[(a.idx||0)%W.length].b,d=doorOf(B);go(a,{x:d.x+(Math.random()-.5)*.5,y:d.y+(Math.random()-.5)*.3},'water');return}}
+ if(!n&&(a.role==='harvester'||(a.role==='idle'&&(a.idx%3===1)))&&harvestThink(a,a.role==='harvester'?6:2))return;
  if((a.role==='hauler'||a.role==='idle'||a.role==='builder')&&!n&&buildThink(a))return;
  if((a.role==='hauler'||(a.role==='idle'&&(a.idx%2===0)))&&!n&&haulThink(a))return;
  if(a.role==='idle'){if(n&&Math.random()<.6){go(a,a.home,'home');return}const g=Math.floor(a.idx/2),side=a.idx%2;const tg={x:h.x-2.5+(g*1.7)%5+side*.45,y:h.y+.2+(g*.9)%2.5};go(a,tg,evOn('festival')||vis.party>0?'dance':'chat');a.t=4+Math.random()*4;return}
@@ -814,7 +820,8 @@ function _bsprA(t,l,v){l=Math.min(l||1,5);const key='B'+t+l+(v||'')+(S&&S.tier>=
   else{for(let i=0;i<6+l*2;i++){const x=6+(i%4)*14,y=6+((i/4)|0)*13;if(y>W-6)break;[()=>{for(let k=0;k<3;k++)rr(g,x-6,y-4+k*3,12,3,1.5,'#8a6038',OUTL,.5)},()=>{rr(g,x-5,y-5,10,10,1,'#a8a294',OUTL,.6);ln(g,x-5,y,x+5,y,'#767066',.6)},()=>sack(g,x,y),()=>jar(g,x,y,3.4)][i%4]()}}
   g.fillStyle='rgba('+zc+',.16)';g.fillRect(0,0,W,W);g.setLineDash([3,2]);g.strokeStyle='rgba('+zc+',.9)';g.lineWidth=1;g.strokeRect(.5,.5,W-1,W-1);g.setLineDash([])}
  else if(t==='house'){m.walled=true;X_RICH=l>=3;floorF(g,0,0,W,W,'civ');X_RICH=0;walls(g,0,0,W,W,wm);X_legacy(g,'house',W,K,m,l,key)}
- else if(t==='bakery'){m.walled=true;floorF(g,0,0,W,W,'earth');walls(g,0,0,W,W,wm);X_legacy(g,'kiln',W,K,m,l,key)}
+ else if(t==='gatherhut'){m.walled=true;floorF(g,0,0,W,W,'earth');walls(g,0,0,W,W,wm);X_legacy(g,'lodge',W,K,m,l,key)}
+  else if(t==='bakery'){m.walled=true;floorF(g,0,0,W,W,'earth');walls(g,0,0,W,W,wm);X_legacy(g,'kiln',W,K,m,l,key)}
   else if(t==='brewery'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'silo',W,K,m,l,key)}
   else if(t==='storehouse'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'silo',W,K,m,l,key)}
   else if(t==='granary'){m.walled=true;floorF(g,0,0,W,W,'plank');walls(g,0,0,W,W,wm);X_legacy(g,'silo',W,K,m,l,key)}
@@ -1111,7 +1118,7 @@ function drawAgent(a,p,moving,now){if(a.state==='home'&&a.inB&&!moving&&!(a.rout
 function _drawAgent0(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({},a.o,{sick:1}):a.o,d=a.dir==null?1:a.dir;const gl=moving?Math.abs(Math.sin((a.ft||0)*Math.PI))*1.6:Math.sin(now/700+(a.idx||0))*.25,jump=a.state==='dance'&&Math.floor(now/200+a.idx)%2?3:0,bob=gl;
  const fl=d===2?-1:1,face=d===0?0:d===2?Math.PI:d===3?-Math.PI/2:Math.PI/2,hx=X+(d===1?5:d===3?-5:fl*4),hy=Y-10-bob,cyc=(now/900+(a.idx||0)*.37)%1;
  const swingA=PWN.swing(cyc,[[0,.2],[.45,-1.5,'io'],[.58,.35,'in'],[.7,.2],[1,.2]]);
- const toolK=a.bsite&&a.state==='work'&&!moving?(a.bclr?'pick':'hammer'):a.state==='work'&&!moving?({woodcutter:'axe',quarrier:'pick',coppermin:'pick',tinmin:'pick',smith:'hammer',farmer:a.work&&a.work.b&&a.work.b.t==='farm'&&farmStage(a.work.b)>=.6?'sickle':'hoe',herder:'club',hunter:'spear'})[a.role]:(a.role==='soldier'||a.role==='hunter')?'spear':null;
+ const toolK=a.hvk&&a.state==='work'&&!moving?a.hvTool:a.bsite&&a.state==='work'&&!moving?(a.bclr?'pick':'hammer'):a.state==='work'&&!moving?({woodcutter:'axe',quarrier:'pick',coppermin:'pick',tinmin:'pick',smith:'hammer',farmer:a.work&&a.work.b&&a.work.b.t==='farm'&&farmStage(a.work.b)>=.6?'sickle':'hoe',herder:'club',hunter:'spear'})[a.role]:(a.role==='soldier'||a.role==='hunter')?'spear':null;
  const tAng=toolK==='spear'&&!(a.state==='work'&&!moving)?-Math.PI/2+fl*.25:(d===1?Math.PI/2+.5:d===3?-Math.PI/2:face),tSw=a.state==='work'&&!moving&&toolK!=='spear'?fl*swingA*(d===0||d===2?-1:1):0,tPush=toolK==='spear'&&a.state==='work'&&!moving?PWN.swing(cyc,[[0,0],[.3,-2,'io'],[.45,5,'in'],[.6,5],[1,0]]):0;
  const drawTool=()=>{if(toolK)pawnTool(toolK,hx,hy,tAng,tSw,tPush,20)};
  ell(vx,X,Y+1,6.5,2.8,'rgba(20,14,8,.28)');if(toolK&&d===3)drawTool();vx.drawImage(pawnSpr(o,d,2),X-12,Y-29-jump-bob,24,32);
@@ -1293,7 +1300,7 @@ let spd=1,TI=null;function setSpeed(s){spd=s;clearInterval(TI);if(s)TI=setInterv
 // drawer
 function openTab(t){const D=$('drawer');if(cur===t&&D.classList.contains('open')){D.classList.remove('open');document.body.classList.remove('dopen');document.querySelectorAll('#tabs button[data-t]').forEach(x=>x.classList.remove('sel'));return}cur=t;D.classList.add('open');document.body.classList.add('dopen');document.querySelectorAll('#tabs button[data-t]').forEach(x=>x.classList.toggle('sel',x.dataset.t===t));$('dtitle').textContent={build:'Architect',jobs:'Work',army:'Military',tech:'Research',map:'World',log:'History',help:'Guide'}[t];renderView()}
 // architect
-const CATS=[['housing','Housing','house',['tent','house']],['prod','Production','prod',['farm','thresh','shed','bakery','brewery','lumber','lodge','quarry','copper','tin','smelter']],['store','Storage','store',['stockpile','storehouse','granary','market']],['mil','Military','mil',['barracks','wall','gate']],['civic','Civic','civic',['campfire','well','temple','palace','garden','tree','statue']],['water','Water','road',['bridge','sbridge','dock']],['roads','Roads/Zones','road',[]]];
+const CATS=[['housing','Housing','house',['tent','house']],['prod','Production','prod',['gatherhut','farm','thresh','shed','bakery','brewery','lumber','lodge','quarry','copper','tin','smelter']],['store','Storage','store',['stockpile','storehouse','granary','market']],['mil','Military','mil',['barracks','wall','gate']],['civic','Civic','civic',['campfire','well','temple','palace','garden','tree','statue']],['water','Water','road',['bridge','sbridge','dock']],['roads','Roads/Zones','road',[]]];
 let acat='housing';
 function costHTML(c){return Object.keys(c).filter(r=>c[r]).map(r=>'<span class="cst'+(S.res[r]<c[r]?' no':'')+'"><i class="ri ri-'+r+'"></i>'+c[r]+'</span>').join(' ')||'<span class="cst">free</span>'}
 function riCSS(){const st=document.createElement('style');st.textContent=RES.map(r=>'.ri-'+r+'{background-image:url('+ICO(r,14).toDataURL()+')}').join('');document.head.appendChild(st)}
