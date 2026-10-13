@@ -808,7 +808,7 @@ function TDET(g,r,gx,gy,lx0,ly0,dry){const H=k=>hsh(gx,gy,k);
 let LOW=null,LOWsig=-1,LOWdone=null;const LP=8;
 function lowEnsure(){if(LOW&&LOWsig===chunkSig)return;if(!ov64)buildOverview();if(!LOW){LOW=mk(MW*LP,MH*LP);let src=ov64;for(let f=2;f<=LP;f*=2){const[c,g]=f===LP?LOW:mk(MW*f,MH*f);g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.filter=f===2?'blur(0.6px)':'none';g.drawImage(src,0,0,MW*f,MH*f);g.filter='none';src=c}}LOWsig=chunkSig;LOWdone=new Uint8Array((MW/CS)*(MH/CS))}
 function lowPut(cx,cy,ch){lowEnsure();const g=LOW[1],L=CS*LP;g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(ch.c,cx*L,cy*L,L,L);LOWdone[cy*(MW/CS)+cx]=1}
-function getChunk(cx,cy){const k=cx+','+cy;let ch=CH[k];if(!ch||ch.sig!==chunkSig){ch=renderChunk(cx,cy);ch.sig=chunkSig;CH[k]=ch;lowEnsure();lowPut(cx,cy,ch)}return ch}
+function getChunk(cx,cy){const k=cx+','+cy;let ch=CH[k];if(ch&&ch.sig!==chunkSig&&getChunk.bud<=0)return ch;if(!ch||ch.sig!==chunkSig){if(ch)getChunk.bud--;ch=renderChunk(cx,cy);ch.sig=chunkSig;CH[k]=ch;lowEnsure();lowPut(cx,cy,ch)}return ch}
 function lowFill(c0,c1,r0,r1,t0){lowEnsure();const N=MW/CS;for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){if(performance.now()-t0>6)return;if(LOWdone[cy*N+cx])continue;const k=cx+','+cy,ch=CH[k];if(ch&&ch.sig===chunkSig)lowPut(cx,cy,ch);else{const n=renderChunk(cx,cy);n.sig=chunkSig;lowPut(cx,cy,n)}}}
 function dirtyTile(gx,gy){for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const k=Math.floor((gx+dx)/CS)+','+Math.floor((gy+dy)/CS);if(CH[k])CH[k].sig=-1}}
 function buildOverview(){const[c,g]=mk(MW,MH);const img=g.createImageData(MW,MH),o=[0,0,0];for(let i=0;i<MW*MH;i++){const r=RT[i];tcol(r,.6,.5,.5,0,0,o);let R=o[0],G=o[1],B=o[2];if(r===R_FOREST){R*=.6;G*=.75;B*=.6}if(roadSet[i]){R=160;G=134;B=96}img.data.set([R,G,B,255],i*4)}g.putImageData(img,0,0);ov64=c}
@@ -1217,7 +1217,7 @@ function aniSpr(k,fr){const key=k+fr;if(ASPR[key])return ASPR[key];const A=ANI[k
 function critDraw(c,now){const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1,A=ANI[c.k]||ANI.deer;const mv=c.tx!=null&&Math.hypot((c.tx||0)-c.x,(c.ty||0)-c.y)>.03;const fr=mv?Math.floor(now/140+(c.x*7|0))%4:(c.graze?4:0),bob=mv?Math.abs(Math.sin(now/140*Math.PI/2))*.8:0;
  ell(vx,X+1,Y+1.5,A.w*.95,A.h*.55,'rgba(20,14,8,.25)');vx.save();vx.translate(X,Y-bob);if(f<0)vx.scale(-1,1);vx.drawImage(aniSpr(c.k,fr),-24,-26,48,36);vx.restore()}
 let vign=null;
-function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;last=now;camStep(rdt);AXF++;PAT.bud=48;farmDraw.bud=2;if(spd){vframe.tt=(vframe.tt||0)+dt;if(vframe.tt>.5){vframe.tt=0;trafficStep()}vframe.pc=(vframe.pc||0)+dt;if(vframe.pc>6){vframe.pc=0;PC.clear();ffNow+=6;ffAge(0)}}
+function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;last=now;camStep(rdt);AXF++;getChunk.bud=3;PAT.bud=48;farmDraw.bud=2;if(spd){vframe.tt=(vframe.tt||0)+dt;if(vframe.tt>.5){vframe.tt=0;trafficStep()}vframe.pc=(vframe.pc||0)+dt;if(vframe.pc>6){vframe.pc=0;PC.clear();ffNow+=6;ffAge(0)}}
  const dsig=!!evOn('drought')+'';if(dsig!==vframe.ds){vframe.ds=dsig;chunkSig++;ov64=null}if(!RT)calcRT();if(!bgSig){bgSig='b'+Math.random();rosterSig='';calcDistricts()}syncRoster();
  vx.setTransform(PXR,0,0,PXR,0,0);vx.fillStyle='#2e4a60';vx.fillRect(0,0,VW,VH);let sx=0,sy=0;if(vis.shake>0){vis.shake-=dt;sx=(Math.random()-.5)*8;sy=(Math.random()-.5)*6}
  const z=cam.z,TF=()=>vx.setTransform(z*PXR,0,0,z*PXR,Math.round((-cam.x+sx)*z*PXR),Math.round((-cam.y+sy)*z*PXR));TF();vx.imageSmoothingEnabled=true;
