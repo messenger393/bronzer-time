@@ -328,12 +328,12 @@ function flagB(x,X,Y){x.fillStyle=PB.wood[1];x.fillRect(X,Y-10,1,12);x.fillStyle
 const HOME={x:120,y:75};
 let S;
 function fresh(){const c={x:START.x,y:START.y};
-return{res:{food:40,wood:30,stone:0,copper:0,tin:0,bronze:0},seed:7,center:c,bl:[{t:'campfire',l:1,x:c.x,y:c.y},{t:'tent',l:1,x:c.x-2,y:c.y-1},{t:'tent',l:1,x:c.x+2,y:c.y-1}],pop:4,jobs:{gatherer:3},companies:[],cid:0,v:5,scouted:{},general:{name:'Hattu',lvl:1,xp:0},formation:'line',ev:{act:[],next:200},tech:{},tier:0,won:[],bonus:{},extraJobs:{},growT:0,t:0,log:[]}}
+return{mw:MW,res:{food:40,wood:30,stone:0,copper:0,tin:0,bronze:0},seed:7,center:c,bl:[{t:'campfire',l:1,x:c.x,y:c.y},{t:'tent',l:1,x:c.x-2,y:c.y-1},{t:'tent',l:1,x:c.x+2,y:c.y-1}],pop:4,jobs:{gatherer:3},companies:[],cid:0,v:5,scouted:{},general:{name:'Hattu',lvl:1,xp:0},formation:'line',ev:{act:[],next:200},tech:{},tier:0,won:[],bonus:{},extraJobs:{},growT:0,t:0,log:[]}}
 function load(){try{S=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem(OLDKEY))}catch(e){S=null}if(!S||!S.res)S=fresh();migrate()}
 function migrate3(){S.seed=S.seed||7;genWorld(S.seed);S.center={x:START.x,y:START.y};const old=S.grid||[];S.bl=[];S.tier=(S.tier||0)+1;rebuildOcc();
  old.forEach((b,i)=>{if(!b)return;const gx=i%12,gy=Math.floor(i/12),x=S.center.x-15+gx*3,y=S.center.y-10+gy*3;if(!placeErr(b.t,x,y,true)){S.bl.push({t:b.t,l:b.l,x,y});rebuildOcc()}else autoPlace(b.t,b.l,true)});
  if(!S.bl.length)S.bl.push({t:'house',l:1,x:S.center.x,y:S.center.y});delete S.grid;S.ev.act=(S.ev.act||[]).filter(e=>e.id!=='fire');S.v=3}
-function migrate(){if(S.res&&!S.itemsV){S.itemsV=1;S.stk={};if((S.tier||0)>=1&&S.bl&&S.bl.length&&!S.bl.some(b=>b.t==='storehouse'))S.needStore=1}(S.bl||[]).forEach(b=>{if(b.t==='tent'||b.t==='farm'){delete b.fv}});if((S.v||1)<2){S.companies=[];S.cid=0;const map={spear:'spear',archer:'archer',chariot:'lchariot'};
+function migrate(){if(S.res&&!S.mw)S.mw=256;if(S.res&&!S.itemsV){S.itemsV=1;S.stk={};if((S.tier||0)>=1&&S.bl&&S.bl.length&&!S.bl.some(b=>b.t==='storehouse'))S.needStore=1}(S.bl||[]).forEach(b=>{if(b.t==='tent'||b.t==='farm'){delete b.fv}});if((S.v||1)<2){S.companies=[];S.cid=0;const map={spear:'spear',archer:'archer',chariot:'lchariot'};
  for(const k in (S.army||{})){let n=S.army[k];while(n>0){const m=Math.min(CMAX,n);n-=m;S.cid++;S.companies.push({id:S.cid,name:NICK[(S.cid-1)%NICK.length],type:map[k],men:m,xp:10,armor:0,slot:defSlot(map[k])})}}
  delete S.army;S.scouted={};S.general={name:'Hattu',lvl:1,xp:0};S.formation='line';S.v=2}
  S.scouted=S.scouted||{};S.ev=S.ev||{act:[],next:200};for(const[k,v]of[['extraJobs',{}],['bonus',{}],['tech',{}],['won',[]],['jobs',{}],['companies',[]],['log',[]],['general',{name:'Hattu',lvl:1,xp:0}]])if(!S[k])S[k]=v;if((S.v||2)<3)migrate3();if(S.v<4)migrate4();if(S.v<5)migrate5();S.companies=S.companies||[];S.general=S.general||{name:'Hattu',lvl:1,xp:0}}
@@ -490,7 +490,7 @@ function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderA
 }
 // ================= WORLD (hi-res iso, 64x32 tiles) =================
 const vc=$('vc');let vx=vc.getContext('2d');let placing=null,ghost=null;
-const MW=256,MH=256,TS=32,OX=0,OY=0,WW=MW*TS,WH=MH*TS;
+const NEWSZ=400,MSZ=(()=>{try{if(localStorage.getItem('bnbNewGame'))return NEWSZ;const d=localStorage.getItem(KEY)||localStorage.getItem(OLDKEY);if(d){const s=JSON.parse(d);if(s&&s.res)return s.mw||256}}catch(e){}return NEWSZ})();const MW=MSZ,MH=MSZ,TS=32,OX=0,OY=0,WW=MW*TS,WH=MH*TS;
 const isoP=(gx,gy)=>({x:gx*TS,y:gy*TS});
 const hsh=(a,b,c=0)=>{let h=(a*374761393+b*668265263+c*1442695041)|0;h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296};
 function mk(w,h){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');g.imageSmoothingEnabled=false;return[c,g]}
@@ -525,7 +525,7 @@ function winR(g,cx,cy,hw,off,yUp,w=3,h=4){let o;for(let k=0;k<w;k++){const x=cx+
 function winL(g,cx,cy,hw,off,yUp,w=3,h=4){let o;for(let k=0;k<w;k++){const x=cx-hw+off+k,b=leftFaceY(cx,cy,hw,x);for(let y=0;y<h;y++)pp(g,x,b-yUp-y,y===0?PB.wood[2]:'#1c100a');pp(g,x,b-yUp-h,PB.wood[3]);if(k===1)o={x,y:b-yUp-h/2}}return o}
 function flag(g,x,y,h,col){for(let k=0;k<h;k++){pp(g,x,y-k,PB.wood[2]);pp(g,x+1,y-k,PB.wood[1])}for(let a=0;a<10;a++)for(let b=0;b<6;b++)pp(g,x+2+a,y-h+2+b+(a>5?1:0)+(a>8?1:0),b===0?col[5]:b<3?col[3]:col[2]);pp(g,x+5,y-h+4,PB.gold[4]);pp(g,x+6,y-h+4,PB.gold[4]);pp(g,x,y-h,PB.gold[5]);pp(g,x+1,y-h,PB.gold[4])}
 // ---- terrain ----
-const T_GRASS=0,T_WATER=1,T_SAND=2,T_FOREST=3,T_HILL=4,T_ROCK=5,T_CU=6,T_SN=7;let TER=null;const START={x:128,y:120};
+const T_GRASS=0,T_WATER=1,T_SAND=2,T_FOREST=3,T_HILL=4,T_ROCK=5,T_CU=6,T_SN=7;let TER=null;const START={x:MW>>1,y:Math.round(MH*.47)};
 function vnoise(x,y,sc,seed){const X=Math.floor(x/sc),Y=Math.floor(y/sc),fx=x/sc-X,fy=y/sc-Y,s=t=>t*t*(3-2*t);const a=hsh(X,Y,seed),b=hsh(X+1,Y,seed),c=hsh(X,Y+1,seed),d=hsh(X+1,Y+1,seed);return a+(b-a)*s(fx)+(c-a)*s(fy)+(a-b-c+d)*s(fx)*s(fy)}
 const ter=(x,y)=>x<0||y<0||x>=MW||y>=MH?T_WATER:TER[y*MW+x];
 function genWorld(seed){TER=new Uint8Array(MW*MH);const I=(x,y)=>y*MW+x,inb=(x,y)=>x>=0&&y>=0&&x<MW&&y<MH;
@@ -560,7 +560,7 @@ const STORES={stockpile:1,granary:1,market:1,storehouse:1};
 function logi(x,y,s){const cx=x+s/2,cy=y+s/2;const h=hubT();let d=Math.abs(cx-h.x)+Math.abs(cy-h.y);for(const b of S.bl)if(STORES[b.t]){const z=bsz(b.t);d=Math.min(d,Math.abs(cx-b.x-z/2)+Math.abs(cy-b.y-z/2))}d=Math.max(0,d-s/2);const sec=d*2/1.6;const eff=Math.max(.3,Math.min(1,1/(1+Math.max(0,d-20)/30)));return{d:Math.round(d),sec:Math.round(sec),eff}}
 function effCol(e){return e>=.9?'#9fe07a':e>=.65?'#e8d070':'#ff9070'}
 function jobEff(j){let n=0,a=0;for(const b of S.bl)if(BLD[b.t].job===j){a+=logi(b.x,b.y,bsz(b.t)).eff;n++}return n?a/n:1}
-function placeErrBase(t,x,y,ignoreNear){const s=bsz(t),R=RAD[S.tier],FM=CURFP&&CURFP.t===t?fpMask(t,CURFP):null;for(let yy=y;yy<y+s;yy++)for(let xx=x;xx<x+s;xx++){if(FM&&!FM[(yy-y)*s+xx-x])continue;if(xx<0||yy<0||xx>=MW||yy>=MH)return'Off the map';const tt=ter(xx,yy);if(tt===T_WATER||(tt===T_SAND&&[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>ter(xx+a,yy+b)===T_WATER)))return'Not on water or shore';if(tt===T_FOREST)return'Forest in the way';if(occ[yy*MW+xx])return'Tile taken'}
+function placeErrBase(t,x,y,ignoreNear){const s=bsz(t),R=RAD[S.tier],FM=CURFP&&CURFP.t===t?fpMask(t,CURFP):null;for(let yy=y;yy<y+s;yy++)for(let xx=x;xx<x+s;xx++){if(FM&&!FM[(yy-y)*s+xx-x])continue;if(xx<0||yy<0||xx>=MW||yy>=MH)return'Off the map';const tt=ter(xx,yy);if(tt===T_WATER||(tt===T_SAND&&[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>ter(xx+a,yy+b)===T_WATER)))return'Not on water or shore';if(tt===T_FOREST)return'Forest in the way';if(CLIFF&&CLIFF[yy*MW+xx])return'Cliff in the way';if(occ[yy*MW+xx])return'Tile taken'}
  const N=NEAR[t];if(N&&!ignoreNear&&!nearT(x,y,s,N[0],N[1]))return'Must be near '+N[2];if(BLD[t].max&&cnt2(t)>=BLD[t].max)return'Only one allowed';return''}
 const cnt2=t=>S.bl.filter(b=>b.t===t).length;
 const AG=new Float32Array(MW*MH),AP=new Int32Array(MW*MH),AS=new Int32Array(MW*MH);let astamp=1;
@@ -744,7 +744,7 @@ function renderChunk(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);con
    const k=(ly+(gy-cy*CS)*32)*W*4+(lx+(gx-cx*CS)*32)*4;d[k]=R*m;d[k+1]=G*m;d[k+2]=B*m;d[k+3]=255;
    if(wat>.08&&wat<.6&&h>.18){const fa=Math.max(0,1-Math.abs(wat-.3)*4.2)*(.55+.45*Math.sin((X+Y)*.35+n2*9));if(!fimg){fimg=g.createImageData(W,W);fd=fimg.data}fd[k]=236;fd[k+1]=244;fd[k+2]=240;fd[k+3]=Math.max(0,fa)*215}
    else if(wat>.99&&hsh(X>>1,Y>>1,71)<.006){if(!fimg){fimg=g.createImageData(W,W);fd=fimg.data}fd[k]=200;fd[k+1]=228;fd[k+2]=240;fd[k+3]=150}}}
- g.putImageData(img,0,0);
+ g.putImageData(img,0,0);if(CLIFF)for(let gy=cy*CS;gy<cy*CS+CS;gy++)for(let gx=cx*CS;gx<cx*CS+CS;gx++){if(!CLIFF[gy*MW+gx])continue;const px=(gx-cx*CS)*32,py=(gy-cy*CS)*32;g.fillStyle='#5a4c40';g.fillRect(px,py,32,32);g.fillStyle='#7a6a58';g.fillRect(px,py,32,12);const s2=gy+1<MH&&!CLIFF[(gy+1)*MW+gx];g.fillStyle='#3a3029';for(let k=0;k<4;k++)g.fillRect(px+3+k*8+(hsh(gx,gy,k)*3|0),py+12,2,s2?20:16);if(s2){g.fillStyle='rgba(20,14,8,.35)';g.fillRect(px,py+32-4,32,4)}}
  // painterly grass tufts / pebbles / reeds
  for(let gy=cy*CS;gy<cy*CS+CS;gy++)for(let gx=cx*CS;gx<cx*CS+CS;gx++){const gi=gy*MW+gx,r=RT[gi];if(occ[gi]||roadSet[gi])continue;{let nb=0;for(const[dx,dy]of NBD){const o=occ[(gy+dy)*MW+gx+dx];if(o&&S.bl[o-1]&&!FLATB[S.bl[o-1].t]&&!APX[S.bl[o-1].t])nb=1}if(nb&&hsh(gx,gy,44)<.8)continue}const lx0=(gx-cx*CS)*32,ly0=(gy-cy*CS)*32;
   if(r<=R_FOREST){const n=3+(hsh(gx,gy,3)*5|0);for(let k=0;k<n;k++){const x=lx0+3+hsh(gx,gy,k*3+1)*26,y=ly0+4+hsh(gx,gy,k*3+2)*25,gr=r===R_MARSH?[78,104,60]:dry?[150,130,70]:[84+hsh(k,gx)*30,118+hsh(k,gy)*24,52];
@@ -1092,7 +1092,7 @@ function autoRoadFor(b){if(S.tier<1||S.autoRoad===false||NOROAD[b.t]||touchesRoa
  for(let i=0;i<MW*MH;i++)if(roadSet[i]&&!occ[i]){const x=i%MW,y=(i/MW)|0,dd=Math.abs(x+.5-d.x)+Math.abs(y+.5-d.y);if(dd<bd){bd=dd;tg={x:x+.5,y:y+.5}}}
  if(!tg){const hb=hubB();if(!hb||hb===b){const i=Math.floor(d.y)*MW+Math.floor(d.x);if(!occ[i]){roadSet[i]=1;return 1}return 0}tg=hb.t==='campfire'?{x:hb.x+.5,y:hb.y+1.5}:doorOf(hb)}
  const p=astar(d.x,d.y,tg.x,tg.y);if(!p)return 0;let n=0;p.forEach(q=>{const i=Math.floor(q.y)*MW+Math.floor(q.x);if(!occ[i]&&!roadSet[i]&&TER[i]!==T_WATER){roadSet[i]=1;n++}});return n}
-function walkC(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const i=y*MW+x,t=TER[i];if(t===T_WATER)return 0;const o=occ[i];if(o){const b=S.bl[o-1];if(!b||!(b.t==='gate'||b.t==='campfire'||FLATB[b.t]||b.t==='garden'))return 0;if(b.t!=='gate')return 2.5}const r=roadSet[i];return r?[0,.55,.45,.35][r]*(1+Math.max(0,LOAD[i]-.7)*1.5):t===T_FOREST?5:t>=T_HILL?2.2:1.6}
+function walkC(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const i=y*MW+x,t=TER[i];if(t===T_WATER||(CLIFF&&CLIFF[i]))return 0;const o=occ[i];if(o){const b=S.bl[o-1];if(!b||!(b.t==='gate'||b.t==='campfire'||FLATB[b.t]||b.t==='garden'))return 0;if(b.t!=='gate')return 2.5}const r=roadSet[i];return r?[0,.55,.45,.35][r]*(1+Math.max(0,LOAD[i]-.7)*1.5):t===T_FOREST?5:t>=T_HILL?2.2:1.6}
 function placeErr(t,x,y,ignoreNear){const e=placeErrBase(t,x,y,ignoreNear);if(e)return e;if(t!=='gate'){const s=bsz(t),FM=CURFP&&CURFP.t===t?fpMask(t,CURFP):null;for(let yy=y;yy<y+s;yy++)for(let xx=x;xx<x+s;xx++)if((!FM||FM[(yy-y)*s+xx-x])&&roadSet[yy*MW+xx])return'Road in the way'}return''}
 function autoPlace(t,l,ignoreNear,cx0,cy0){const sv=CURFP;if(FP[t]){const n=FP[t].length;CURFP={t,v:Math.floor(Math.random()*n),r:Math.floor(Math.random()*4),m:Math.random()<.5?1:0}}try{return _autoPlace(t,l,ignoreNear,cx0,cy0)}finally{CURFP=sv}}
 function _autoPlace(t,l,ignoreNear,cx0,cy0){const c={x:cx0??S.center.x,y:cy0??S.center.y},s=bsz(t),R=RAD[S.tier]+1;let best=null,bs=-1e9;
@@ -1865,7 +1865,7 @@ $('dclose').onclick=()=>{$('drawer').classList.remove('open');document.body.clas
 document.querySelectorAll('#speed button').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.s));$('heatb').appendChild(ICO('heat',18));$('heatb').onclick=()=>{S.heat=!S.heat;$('heatb').classList.toggle('sel',S.heat)};$('beautb').onclick=()=>{S.beau=!S.beau;$('beautb').classList.toggle('sel',S.beau);if(S.beau&&!BEAU)calcBeauty()};
 window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'){e.preventDefault();setSpeed(spd?0:1)}else if(e.key>='1'&&e.key<='3')setSpeed(+e.key);else if(placing&&FP[placing]&&/^[rRfFvV]$/.test(e.key)){fpCycle(e.key.toLowerCase()==='f'?'m':e.key.toLowerCase())}else if(e.key==='Escape'){placing=null;ghost=null;sel=null;showInsp()}});
 $('start').onclick=()=>{$('title').style.display='none';if(!S.civ)pickCiv()};
-$('reset').onclick=()=>{if(confirm('Start a new game?')){S=fresh();migrate();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv()}};
+$('reset').onclick=()=>{if(confirm('Start a new game?')){if(MW!==NEWSZ){localStorage.setItem('bnbNewGame','1');location.reload();return}S=fresh();migrate();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv()}};
 function uiSkin(){const mkF=(pal,inner,sz)=>{const[c,g]=mk(sz*3,sz*3);const P=(x,y,w,h,col)=>{g.fillStyle=col;g.fillRect(x,y,w,h)};const W=sz*3;
   P(0,0,W,W,pal[0]);P(1,1,W-2,W-2,pal[3]);P(2,2,W-3,W-3,pal[1]);P(2,2,W-4,W-4,pal[2]);const b=sz>6?4:3;P(b,b,W-2*b,W-2*b,pal[0]);P(b+1,b+1,W-2*b-2,W-2*b-2,inner);
   if(sz>6){for(const[x,y]of[[1,1],[W-5,1],[1,W-5],[W-5,W-5]]){P(x,y,4,4,pal[0]);P(x+1,y+1,2,2,PB.gold[3])}}else{P(b+1,W-b-2,W-2*b-2,1,'rgba(0,0,0,.2)');P(b+1,b+1,W-2*b-2,1,'rgba(255,255,255,.35)')}return'url('+c.toDataURL()+')'};
@@ -2138,9 +2138,24 @@ function genWorld2(seed){const W=MW,H=MH,N=W*H,B=Object.assign({h:.65,f:.66},cX(
  for(let y=START.y-10;y<=START.y+10;y++)for(let x=START.x-10;x<=START.x+10;x++){const d=Math.hypot(x-START.x,(y-START.y)*1.1)+2.5*GNZ(x/3,y/3,sd+61);const t=TER[y*W+x];if(d<8&&t!==T_WATER&&t!==T_SAND)TER[y*W+x]=T_GRASS}
  const blob=(cx,cy,r,t)=>{for(let y=cy-r-2;y<=cy+r+2;y++)for(let x=cx-r-2;x<=cx+r+2;x++){if(x<0||y<0||x>=W||y>=H)continue;const i=y*W+x;if(TER[i]===T_WATER||TER[i]===T_SAND)continue;const d=Math.hypot(x-cx,y-cy)+1.4*GNZ(x/2.2,y/2.2,sd+t*13);if(d<=r+.3)TER[i]=(t===T_FOREST||hsh(x,y,t)<.75)?t:T_HILL;else if(t===T_FOREST&&d<r+1.6&&hsh(x,y,sd+t)<.25)TER[i]=T_FOREST}};
  blob(START.x-7,START.y-2,3,T_FOREST);blob(START.x+5,START.y-9,3,T_FOREST);blob(START.x+10,START.y+1,2,T_ROCK);blob(START.x-6,START.y-11,2,T_CU);blob(START.x+17,START.y-12,2,T_SN);blob(START.x-15,START.y+5,4,T_FOREST)}
-const _genWorld1=genWorld;genWorld=function(seed){if(!(S&&S.gen>=2))return _genWorld1(seed);const k='g2:'+seed+':'+(S.civ||'')+':1';
- try{const c=JSON.parse(localStorage.getItem('bronzeAndBloodTer')||'null');if(c&&c.k===k){const bin=atob(c.d),T=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)T[i]=bin.charCodeAt(i);if(T.length===MW*MH){TER=T;return}}}catch(e){}
- genWorld2(seed);try{let s='';for(let i=0;i<TER.length;i+=8192)s+=String.fromCharCode.apply(null,TER.subarray(i,i+8192));localStorage.setItem('bronzeAndBloodTer',JSON.stringify({k,d:btoa(s)}))}catch(e){}};
+
+let CLIFF=null;
+function terrainX(seed){CLIFF=new Uint8Array(MW*MH);if(MW<=256)return;const W=MW,H=MH,rnd=(a,b)=>hsh(seed*7+a,b,77),sx=START.x,sy=START.y,setT=(x,y,t)=>{if(x>=0&&y>=0&&x<W&&y<H)TER[y*W+x]=t};
+ const nearStart=(x,y,r)=>Math.hypot(x-sx,y-sy)<r;
+ // two wide rivers: one east-west (north or south of start), one north-south (east or west of start)
+ for(let r=0;r<2;r++){const hz=r===0,L=hz?W:H,side=rnd(r,1)<.5?-1:1,base=(hz?sy:sx)+side*(46+rnd(r,2)*40),wd=6+Math.floor(rnd(r,3)*3),ph=rnd(r,4)*6.28,nf=2+Math.floor(rnd(r,5)*2),fords=[];
+  for(let k=0;k<nf;k++)fords.push(Math.floor(L*(k+.5+(rnd(r,10+k)-.5)*.5)/nf));
+  for(let u=0;u<L;u++){const c=base+14*Math.sin(u/37+ph)+7*Math.sin(u/13+ph*2)+5*(vnoise(u,r*50,24,seed+9)-.5)*2,ford=fords.some(f=>Math.abs(u-f)<=1);
+   for(let v=Math.floor(c-wd/2-2);v<=Math.ceil(c+wd/2+2);v++){const x=hz?u:v,y=hz?v:u;if(x<0||y<0||x>=W||y>=H||nearStart(x,y,24))continue;const d=Math.abs(v-c);
+    if(d<=wd/2)setT(x,y,ford?T_SAND:T_WATER);else if(d<=wd/2+1.6&&TER[y*W+x]!==T_WATER)setT(x,y,T_SAND)}}}
+ // ridges with cliff faces; ramps every ~16 tiles
+ const nr=10+Math.floor(rnd(9,1)*4);for(let r=0;r<nr;r++){let a=rnd(r,20)*6.28,dd=36+rnd(r,21)*80,x=sx+Math.cos(a)*dd,y=sy+Math.sin(a)*dd,h=rnd(r,22)*6.28;const len=60+Math.floor(rnd(r,23)*80),nx=()=>-Math.sin(h),ny=()=>Math.cos(h);
+  for(let k=0;k<len;k++){h+=(vnoise(k,r*30,9,seed+33)-.5)*.5;x+=Math.cos(h);y+=Math.sin(h);const ramp=(k%16)<3&&k>2;
+   for(let w=-1;w<=0;w++){const X=Math.round(x+nx()*w),Y=Math.round(y+ny()*w);if(X<1||Y<1||X>=W-1||Y>=H-1||nearStart(X,Y,20))continue;const i=Y*W+X;if(TER[i]===T_WATER)continue;if(ramp){TER[i]=T_HILL;CLIFF[i]=0}else{TER[i]=T_ROCK;CLIFF[i]=1}}
+   for(let w=1;w<=7;w++){const X=Math.round(x+nx()*w),Y=Math.round(y+ny()*w);if(X<0||Y<0||X>=W||Y>=H||nearStart(X,Y,20))continue;const i=Y*W+X;if(!CLIFF[i]&&TER[i]!==T_WATER&&TER[i]!==T_ROCK&&w<=7-2*hsh(X,Y,5))TER[i]=T_HILL}}}}
+const _genWorld1=genWorld;genWorld=function(seed){if(!(S&&S.gen>=2)){_genWorld1(seed);CLIFF=new Uint8Array(MW*MH);return}const k='g2:'+seed+':'+(S.civ||'')+':1';
+ try{const c=JSON.parse(localStorage.getItem('bronzeAndBloodTer')||'null');if(c&&c.k===k){const bin=atob(c.d),T=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)T[i]=bin.charCodeAt(i);if(T.length===MW*MH){TER=T;terrainX(seed);return}}}catch(e){}
+ genWorld2(seed);try{let s='';for(let i=0;i<TER.length;i+=8192)s+=String.fromCharCode.apply(null,TER.subarray(i,i+8192));localStorage.setItem('bronzeAndBloodTer',JSON.stringify({k,d:btoa(s)}))}catch(e){}terrainX(seed)};
 const _fresh1=fresh;fresh=function(){const s=_fresh1();s.gen=2;s.seed=1+Math.floor(Math.random()*999983);return s};
 
 // ---- world map v2 ----
@@ -2790,7 +2805,7 @@ function slotWrite(name,id){if(roadSet&&roadSet.length===MW*MH&&computeRoads.S==
  try{localStorage.setItem('bnbSlot_'+id,data)}catch(e){alert('Could not save: storage is full. Delete an old slot and try again.');return false}
  const meta={id,name:name||'Save',date:Date.now(),day:Math.floor(S.t/DAYLEN+1),tier:(TIERS[S.tier]||{}).n||'',civ:S.civ||''};const i=L.findIndex(q=>q.id===id);if(i>=0)L[i]=meta;else L.unshift(meta);localStorage.setItem(SLOTIDX,JSON.stringify(L));log('Game saved: '+meta.name);return true}
 function slotDelete(id){localStorage.removeItem('bnbSlot_'+id);localStorage.setItem(SLOTIDX,JSON.stringify(slotList().filter(q=>q.id!==id)))}
-function slotLoad(id){const d=localStorage.getItem('bnbSlot_'+id);if(!d){alert('That save could not be found.');return false}let n;try{n=JSON.parse(d)}catch(e){alert('That save is damaged.');return false}
+function slotLoad(id){const d=localStorage.getItem('bnbSlot_'+id);if(!d){alert('That save could not be found.');return false}let n;try{n=JSON.parse(d)}catch(e){alert('That save is damaged.');return false}if((n.mw||256)!==MW){localStorage.setItem(KEY,d);location.reload();return true}
  BV=null;sel=null;placing=null;ghost=null;toolOpen(null);S=n;migrate();genWorld(S.seed||7);worldChanged();fbMigrate();cam.z=cam.tz=1;centerOn(S.center.x+1,S.center.y+1);save();renderTop();renderView();renderLog();showInsp();const m=slotList().find(q=>q.id===id);log('Loaded '+(m?m.name:'save')+'.');return true}
 function fmtDate(t){const d=new Date(t);return d.toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'})}
 (function(){const d=document.createElement('div');d.id='pm';d.innerHTML='<div class="panel glass" id="pmb"></div>';document.body.appendChild(d);d.addEventListener('pointerdown',e=>{if(e.target===d&&PM.view==='main')pmClose()})})();
@@ -3038,4 +3053,6 @@ dmTick=function(){if(!S.dm||!S.hv)fbMigrate();const ids=Object.keys(S.dm||{});ag
  const at=crew.filter(a=>a.dmAt&&!a.route.length).length;S.dm[id].crew=crew.length;S.dm[id].at=at;if(!at)return;S.dm[id].p+=at;if(Math.random()<.6)burst(b.x+s*Math.random(),b.y+s*Math.random(),'#c8b088',5);if(Math.random()<.3)AU.sfx&&AU.sfx('chop');
  const need=4+s*s*1.5+(b.l||1)*2;if(S.dm[id].p>=need){const r=dmRefund(b);for(const k in r)S.res[k]=(S.res[k]||0)+r[k];S.bl.splice(S.bl.indexOf(b),1);delete S.dm[id];crew.forEach(a=>{a.dmT=null;a.dmAt=0;a.dmSp=null;a.t=0});burst(b.x+s/2,b.y+s/2,'#d8c8a0',30);sel=null;showInsp();worldChanged();log('Deconstructed '+BLD[b.t].n+' — refunded '+(cstr(r)||'nothing')+'.');save();renderTop();renderView()}};
 
+
+setTimeout(()=>{if(localStorage.getItem('bnbNewGame')){localStorage.removeItem('bnbNewGame');S=fresh();migrate();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv()}},0);
 </script></body></html>
