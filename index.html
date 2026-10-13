@@ -1815,7 +1815,7 @@ function wmCalc(init){const W=S.wm,P=W.prov;WADJ=null;wmAdj(P[0]);const field={}
  for(const p of P){const tgt={};for(const n in field){const v=field[n].get(p.id);if(v)tgt[n]=v}
   for(const n of new Set([...Object.keys(tgt),...Object.keys(p.ctl)])){const cur=p.ctl[n]||0,t=Math.min(100,tgt[n]||0);let v=init?t:cur+(t-cur)*.3+(Math.random()-.5)*3*(1-wmShare(p,n));if(v<1)delete p.ctl[n];else p.ctl[n]=v}
   const s=Object.entries(p.ctl).sort((a,b)=>b[1]-a[1]);if(!s.length||s[0][1]<6){if(p.own&&!p.home){p.own=null}continue}
-  if(p.own!==s[0][0]&&(!p.own||!p.ctl[p.own]||s[0][1]>(p.ctl[p.own]||0)*1.25)&&!p.home){const old=p.own;p.own=s[0][0];p.gar=Math.max(2,Math.round(p.gar*.4));if(!init)wmOwnChange(p,old)}}}
+  if(p.own!==s[0][0]&&(!p.own||!p.ctl[p.own]||s[0][1]>(p.ctl[p.own]||0)*(p.own==='P'&&wmGrace()?3:1.25))&&!p.home){const old=p.own;p.own=s[0][0];p.gar=Math.max(2,Math.round(p.gar*.4));if(!init)wmOwnChange(p,old)}}}
 const TERR_DEC={hills:1.25,desert:1.35,marsh:1.2,forest:1.1,plains:1,river:1.15,walls:1};
 function wmShare(p,n){let t=0;for(const k in p.ctl)t+=p.ctl[k];return t?(p.ctl[n]||0)/t:0}
 function wmAuth(p){return p.own?wmShare(p,p.own)*Math.min(1,(p.ctl[p.own]||0)/60):0}
@@ -1829,13 +1829,13 @@ function wmTick(){const W=S.wm,P=W.prov;W.tk++;const ai=Object.keys(W.nat).filte
   if(p.own!=='P'&&W.nat[p.own])W.nat[p.own].str=Math.min(400,(W.nat[p.own].str||0)+1+2*a);
   if(!p.home&&!p.cap&&a<.35&&Math.random()<.012){const t='t'+(W.tn++);W.nat[t]={n:p.n+' rebels',col:TRIBEC[W.tn%TRIBEC.length],str:5,alive:true,tribe:1,civ:ai[0]||'canaan'};const old=p.own;p.ctl[t]=(p.ctl[old]||20)*1.4;p.gar=Math.max(p.gar,8);log('🔥 '+p.n+' rises in rebellion against '+wmNat(old).n+'!')}}
  for(const a of ai)for(const b of ai){if(a>=b)continue;const k=a+'|'+b,w=W.wars.includes(k);if(!w&&Math.random()<.025&&wmBorders(a,b)){W.wars.push(k);log('⚔ The '+W.nat[a].n+' declare war on the '+W.nat[b].n+'!')}else if(w&&Math.random()<.05){W.wars=W.wars.filter(x=>x!==k);log('🕊 The '+W.nat[a].n+' and '+W.nat[b].n+' make peace.')}}
- for(const a of ai){const N=W.nat[a];if(W.rel[a]==='peace'&&Math.random()<.012&&wmBorders(a,'P')&&N.str>60){W.rel[a]='war';log('⚔ The '+N.n+' declare war on us!')}else if(W.rel[a]==='war'&&Math.random()<.03&&N.str<armyN()*2){W.rel[a]='peace';log('🕊 The '+N.n+' sue for peace.')}
+ for(const a of ai){const N=W.nat[a];if(W.rel[a]==='peace'&&!wmGrace()&&Math.random()<.012&&wmBorders(a,'P')&&N.str>60){W.rel[a]='war';log('⚔ The '+N.n+' declare war on us!')}else if(W.rel[a]==='war'&&Math.random()<.03&&N.str<armyN()*2){W.rel[a]='peace';log('🕊 The '+N.n+' sue for peace.')}
   if(N.str<25)continue;const tg=[];for(const p of P)if(p.own===a)for(const q of wmAdj(p))if(q.own!==a&&(!q.own||wmAt(a,q.own)))tg.push([p,q]);if(!tg.length)continue;const[f,q]=tg[Math.floor(Math.random()*tg.length)];N.str-=20;
-  if(q.own==='P'){wmDefend(a,q);continue}const atk=15+N.str*.15+f.gar*.6,def=q.gar*1.3+q.fort*12+wmAuth(q)*20;if(atk*(0.6+Math.random()*.8)>def){q.ctl[a]=(q.ctl[a]||0)+40;if(q.own)q.ctl[q.own]=(q.ctl[q.own]||0)*.55;q.gar=Math.max(1,q.gar-6)}else{f.gar=Math.max(1,f.gar-5);N.str-=10}}
+  if(q.own==='P'){if(wmGrace()){N.str+=20;continue}wmDefend(a,q);continue}const atk=15+N.str*.15+f.gar*.6,def=q.gar*1.3+q.fort*12+wmAuth(q)*20;if(atk*(0.6+Math.random()*.8)>def){q.ctl[a]=(q.ctl[a]||0)+40;if(q.own)q.ctl[q.own]=(q.ctl[q.own]||0)*.55;q.gar=Math.max(1,q.gar-6)}else{f.gar=Math.max(1,f.gar-5);N.str-=10}}
  wmCalc();renderMapIfOpen()}
 function wmDefend(a,q){const N=S.wm.nat[a];const ar=[['spear',Math.ceil(6+N.str*.05)],['archer',Math.ceil(4+N.str*.03)],['axeman',Math.ceil(3+N.str*.02)]];
  const go=S.companies.filter(c=>c.slot!=='reserve'&&c.men>0);log('⚔ The '+N.n+' invade '+q.n+'!');
- if(!go.length||BV||$('title').style.display!=='none'){const w=q.gar*1.4+q.fort*15>10+N.str*.12;if(w){q.ctl.P=(q.ctl.P||0)+15;log('Our garrison at '+q.n+' holds.')}else{q.ctl[a]=(q.ctl[a]||0)+45;q.ctl.P=(q.ctl.P||0)*.5;q.gar=Math.max(1,q.gar-6);log('The garrison of '+q.n+' is overrun!');if(q.home)for(const r in S.res)S.res[r]=Math.floor(S.res[r]*.8)}return}
+ if(!go.length||BV||PM.on||(prep&&$('modal').style.display==='flex')||$('title').style.display!=='none'){const w=q.gar*1.4+q.fort*15>10+N.str*.12;if(w){q.ctl.P=(q.ctl.P||0)+15;log('Our garrison at '+q.n+' holds.')}else{q.ctl[a]=(q.ctl[a]||0)+45;q.ctl.P=(q.ctl.P||0)*.5;q.gar=Math.max(1,q.gar-6);log('The garrison of '+q.n+' is overrun!');if(q.home)for(const r in S.res)S.res[r]=Math.floor(S.res[r]*.8)}return}
  const X=CIVX[a]||{},E=ar.map(([t,m],k)=>{const tt=(X.sw&&X.sw[t])||t;return{id:'e'+k,name:N.n.replace(/s$/,'')+' '+UNIT[tt].n,type:tt,men:Math.min(10,m),armor:0,xp:20,slot:defSlot(tt),civ:a}});
  const res=simBattle(go,E,{terrain:q.terr==='walls'?'plains':q.terr,fa:S.formation||'line',fd:'wedge',moraleA:20+(q.fort*10),moraleD:0,genA:S.general.lvl});
  res.G.filter(g=>g.side===0).forEach(g=>{const c=S.companies.find(c=>c.id===g.id);if(c){c.men=g.men;c.xp+=res.win?10:4}});S.companies=S.companies.filter(c=>c.men>0);
@@ -1889,6 +1889,7 @@ function wmCheckCiv(){if(S.wm&&S.civ&&S.wm.nat[S.civ]&&!S.wm.nat[S.civ].tribe){c
 const _rv2=renderView;renderView=function(){wmCheckCiv();_rv2();if(cur==='map'&&S.wm){const V=$('view');V.innerHTML='';wmRenderTab(V)}};
 const _own2=ownersFor;ownersFor=function(me){const base=_own2(me);if(!S||!S.wm)return base;return REG.map((r,i)=>{const p=S.wm.prov.find(p=>p.reg===i);if(!p||!p.own||p.own==='P')return base[i%base.length]||'canaan';const N=S.wm.nat[p.own];return N?N.civ||p.own:base[i%base.length]})};
 const _enemy2=enemyOf;enemyOf=function(i){const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(p&&REG[i]){const g=wmDefN(p);const base=REG[i].army.length?REG[i].army:[['spear',5],['archer',3],['axeman',2]];const tot=base.reduce((a,x)=>a+x[1],0);REG[i]._a=REG[i]._a||base.map(x=>x.slice());let left=g;REG[i].army=REG[i]._a.map((x,k,A)=>{const y=x.slice();y[1]=k===A.length-1?left:Math.min(left,Math.round(x[1]*g/tot));left-=y[1];return y}).filter(y=>y[1]>0);if(!REG[i].army.length)REG[i].army=[['spear',1]]}return _enemy2(i)};
+function wmGrace(){return S.t<DAYLEN*8}
 function wmDefN(p){return Math.max(1,Math.round(p.gar+(p.fort||0)*4))}
 const _ri2=routeInfo;routeInfo=function(i){const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(!p)return _ri2(i);const from=S.wm.prov.filter(q=>q.own==='P'&&wmAdj(q).includes(p)).sort((a,b)=>Math.hypot(a.x-p.x,a.y-p.y)-Math.hypot(b.x-p.x,b.y-p.y))[0];const hx=HOME.x,hy=HOME.y;
  if(from){HOME.x=from.x;HOME.y=from.y}let r;try{r=_ri2(i)}finally{HOME.x=hx;HOME.y=hy}if(!from&&p.own!=='P'){r.blocked=true;r.cr.push({rv:'Frontier',how:'blocked',key:'-',P:[p.x,p.y]})}return r};
