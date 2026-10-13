@@ -587,7 +587,7 @@ function critSpr(k,f){const key=k+f;if(CSPR[key])return CSPR[key];const[c,g]=mk(
  else{P(3,8,16,7,'#a8683a');P(3,13,16,2,'#7a4a24');P(5,9,6,3,'#c8885a');P(17,2,5,8,'#a8683a');P(18,0,1,3,'#6a4220');P(21,0,1,3,'#6a4220');P(17,-1,1,2,'#6a4220');P(20,4,1,1,'#24140c');P(4+(f?2:0),15,2,7,'#5e3a1c');P(8,15,2,7,'#5e3a1c');P(13,15,2,7,'#5e3a1c');P(16-(f?2:0),15,2,7,'#5e3a1c');P(2,8,2,2,'#f2e4c4')}
  outline(c);return CSPR[key]=c}
 // ---- life sim ----
-const MAXW=60;
+let MAXW=60;
 const JOBB={harvester:'gatherhut',hauler:null,baker:'bakery',brewer:'brewery',farmer:'farm',woodcutter:'lumber',quarrier:'quarry',coppermin:'copper',tinmin:'tin',smith:'smelter',herder:'farm',fisher:null,scribe:'temple',merchant:'market',gatherer:null,hunter:'lodge'};
 const CARRY={harvester:'log',baker:'sack',brewer:'sack',farmer:'sack',herder:'sack',fisher:'fish',woodcutter:'log',quarrier:'stone',coppermin:'cu',tinmin:'sn',smith:'ingot',gatherer:'sack',hunter:'meat',merchant:'sack'};
 let agents=[],critters=[],parts=[],clouds=[],birds=[],pops=[],bubble=null,rosterSig='',bgSig='',vis={migr:[],raid:0,caravan:0,shake:0,party:0},spotCache=null;
