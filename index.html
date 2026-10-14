@@ -134,6 +134,7 @@ holding:{n:'Imperial Holding',cost:{wood:60,stone:40},tier:1,sz:3,max:1,d:'Your 
 stead:{n:'Serf Stead',cost:{},tier:0,sz:2,hide:1,d:'A serf family farmhouse with fields laid out to suit the land'},
 craft:{n:'Town House',cost:{},tier:0,sz:2,hide:1,d:'A crafter household, or a chartered merchant house'}};
 /*ECO START*/
+function qlog(m){S.log.unshift(m);S.log.length=Math.min(S.log.length,30);renderLog.last=m;renderLog()}
 // ===== Trading update: stead economy loop (tithe, Holding, crafters, merchants, spoilage). No regional trade/caravans yet. =====
 // Design source: concepts/econsim-report.md (validated in the simulator). One "tithe year" = ECO_YD game days (no seasons yet).
 const ECO_YD=6,ECO_K=10;
@@ -209,13 +210,13 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;
   for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoil+=l*EIT[g].v}}
   const fr=.000025*k/(1+cnt('granary')*.5+cnt('storehouse')*.2);const fl=S.res.food*fr;S.res.food-=fl;led.spoil+=fl*EIT.grain.v}
  // auto-grant steads to idle families
- if(E.autoStead&&S.t%(DAYLEN/3|0)<k&&S.pop-employed()>=4&&S.tier>=1){if(foundStead(3,'idle'))log('A stead was granted to an idle family. They will farm it and bring the tithe each year.')}
+ if(E.autoStead&&S.t%(DAYLEN/3|0)<k&&S.pop-employed()>=4&&S.tier>=1){if(foundStead(3,'idle'))qlog('A stead was granted to an idle family. They will farm it and bring the tithe each year.')}
  if(E._wc){E._wc=0;worldChanged()}
  E.yt+=k;if(E.yt>=yearLen()){E.yt=0;ecoYear()}
  if(E._qv&&E._qv.length){for(let j=0;j<2&&E._qv.length;j++)ecoSpawnVis(E._qv.shift())}}
 function townCrowd(){const E=S.eco,n=E.cr.length+E.mh.length,cap=Math.max(6,(cnt('palace')?24:12)+cnt('market')*4+cnt('storehouse')*2+cnt('barracks')*2+S.tier*6);E._tcap=cap;return n>cap*.85?Math.max(.5,1-(n/cap-.85)):1}
 function ecoSync(){const E=S.eco,K=new Set(),C=new Set();for(const b of S.bl){if(b.t==='stead')K.add(b.x+','+b.y);else if(b.t==='craft')C.add(b.x+','+b.y)}
- const ns=E.steads.filter(s=>K.has(s.x+','+s.y));if(ns.length!==E.steads.length){E.steads=ns;ECOF=null;log('A stead was lost; the family moved back to town.')}
+ const ns=E.steads.filter(s=>K.has(s.x+','+s.y));if(ns.length!==E.steads.length){E.steads=ns;ECOF=null;qlog('A stead was lost; the family moved back to town.')}
  const nc=E.cr.filter(c=>C.has(c.x+','+c.y)),nm=E.mh.filter(c=>C.has(c.x+','+c.y));if(nc.length!==E.cr.length||nm.length!==E.mh.length){E.cr=nc;E.mh=nm}
  while(employed()>S.pop&&E.steads.some(s=>s.n>1)){const s=E.steads.filter(s=>s.n>1).sort((a,b)=>b.n-a.n)[0];s.n--}fixJobs();while(employed()>S.pop&&E.cr.length){const c=E.cr.pop();ecoRemoveB(c)}while(employed()>S.pop&&E.steads.length>0&&serfN()>0){const s=E.steads.pop();const i=S.bl.findIndex(b=>b.t==='stead'&&b.x===s.x&&b.y===s.y);if(i>=0)S.bl.splice(i,1);ECOF=null;E._wc=1}}
 function ecoMainItem(s){if(s.main!=='auto'&&LAND[s.land].out[s.main])return s.main;let b='grain',bv=-1;const L=LAND[s.land].out,H=S.eco.hold;for(const g in L){const v=L[g]*EIT[g].v*(EIT[g].food?1.6:1)/(1+(H[g]||0)/4000);if(v>bv){bv=v;b=g}}return b}
@@ -240,7 +241,7 @@ function ecoYear(){const E=S.eco,led=E.led,T=E.tithe/100,hb=holdB(),hd=hb?doorOf
  // risers: one per craft per year from the best-qualified stead
  E.riseY={};for(const c in CRAFT){const cand=E.steads.filter(s=>s.n>=5&&s.sv>=20&&(s.sk[c]||0)>=3&&s.hap>35).sort((a,b)=>(b.sk[c]+b.sv/20)-(a.sk[c]+a.sv/20))[0];if(!cand)continue;
   const t=ecoTown();if(!t)break;const b={t:'craft',l:1,x:t.X,y:t.Y};S.bl.push(b);rebuildOcc();try{autoRoadFor(b)}catch(e){}E._wc=1;
-  cand.n--;const ag=cand.sv*.5;cand.sv-=ag;E.cr.push({id:++E.sid,c,n:2,sk:Math.min(5,cand.sk[c]),ag,stk:0,x:t.X,y:t.Y,hun:0,ref:0,from:cand.id});cand.sk[c]=1;S.pop++;led.risers++;E.riseY[c]=1;log('A skilled '+CRAFT[c].n.toLowerCase()+' left a stead and set up a household in town.')}
+  cand.n--;const ag=cand.sv*.5;cand.sv-=ag;E.cr.push({id:++E.sid,c,n:2,sk:Math.min(5,cand.sk[c]),ag,stk:0,x:t.X,y:t.Y,hun:0,ref:0,from:cand.id});cand.sk[c]=1;S.pop++;led.risers++;E.riseY[c]=1;qlog('A skilled '+CRAFT[c].n.toLowerCase()+' left a stead and set up a household in town.')}
  // town markets: serfs and crafters buy crafted goods; crown patronage at a premium
  let demand=0;for(const s of E.steads){const sp=s.sv*.25;demand+=sp;s.sv-=sp}for(const c of E.cr)c.sk=Math.min(9,c.sk+.25);
  let supV=0;for(const c of E.cr)supV+=c.stk*EIT[CRAFT[c.c].g].v;
@@ -262,9 +263,9 @@ function ecoYear(){const E=S.eco,led=E.led,T=E.tithe/100,hb=holdB(),hd=hb?doorOf
   if(E.mtax>30&&Math.random()<(E.mtax-30)/80){m.gone=1}}
  E.mh=E.mh.filter(m=>{if(!m.gone)return true;S.pop=Math.max(1,S.pop-m.n);ecoRemoveB(m);led.left++;log('A merchant house left the region over the merchant tax, taking its silver.');return false});
  // markets are built by the people
- if(E.mh.length&&cnt('market')<Math.ceil(E.mh.length/2)&&S.tier>=1){const hb2=holdB();if(autoPlace('market',1,true,hb2?hb2.x+1:undefined,hb2?hb2.y+1:undefined)){E._wc=1;log('The merchant houses built a market.')}}
+ if(E.mh.length&&cnt('market')<Math.ceil(E.mh.length/2)&&S.tier>=1){const hb2=holdB();if(autoPlace('market',1,true,hb2?hb2.x+1:undefined,hb2?hb2.y+1:undefined)){E._wc=1;qlog('The merchant houses built a market.')}}
  // landless families arrive and ask for land (prosperity draws migrants)
- const H=S.hap||50;if(E.autoStead&&H>35&&E.tithe<=32){const k2=Math.min(6,1+Math.floor(E.steads.length/8));let a=0;for(let i=0;i<k2;i++)if(Math.random()<(H-25)/50&&foundStead(3+(Math.random()<.4?1:0),'mig')){a++;const s=E.steads[E.steads.length-1];S.pop+=s.n;led.arrived+=s.n}if(a)log(a+' landless famil'+(a>1?'ies':'y')+' arrived and received steads.')}
+ const H=S.hap||50;if(E.autoStead&&H>35&&E.tithe<=32){const k2=Math.min(6,1+Math.floor(E.steads.length/8));let a=0;for(let i=0;i<k2;i++)if(Math.random()<(H-25)/50&&foundStead(3+(Math.random()<.4?1:0),'mig')){a++;const s=E.steads[E.steads.length-1];S.pop+=s.n;led.arrived+=s.n}if(a)qlog(a+' landless famil'+(a>1?'ies':'y')+' arrived and received steads.')}
  // mercenaries are paid in silver once a year
  for(const c of S.companies)if(c.merc){const due=c.men*1.5;if(E.silver>=due){E.silver-=due;led.sOut+=due}else{c.men=Math.floor(c.men/2);log('Unpaid mercenaries deserted ('+c.name+').')}}S.companies=S.companies.filter(c=>c.men>0);E._sol=soldN();
  const rec={yr:E.yr,tithe:Math.round(led.tithe),spoil:Math.round(led.spoil),silver:Math.round(E.silver),hold:Math.round(holdVal()),steads:E.steads.length,serfs:serfN(),cr:E.cr.length,mh:E.mh.length,pop:S.pop,hap:Math.round(S.hap||50)};E.hist.push(rec);if(E.hist.length>20)E.hist.shift();
@@ -274,9 +275,9 @@ function ecoRemoveB(c){const i=S.bl.findIndex(b=>b.t==='craft'&&b.x===c.x&&b.y==
 function ecoTown(){const a=S.bl.find(b=>b.t==='palace')||holdB()||S.bl.find(b=>b.t==='barracks')||hubB();const sv=CURFP;CURFP=null;try{const c={x:a?a.x+1:S.center.x,y:a?a.y+1:S.center.y},R=RAD[S.tier]+1;let best=null,bs=-1e9;
  const anchors=S.bl.filter(b=>b.t==='palace'||b.t==='holding'||b.t==='barracks'||b.t==='storehouse'||b.t==='granary'||b.t==='market'||b.t==='craft');
  for(let k=0;k<220;k++){const X=c.x+Math.round((Math.random()-.5)*2*R),Y=c.y+Math.round((Math.random()-.5)*2*R);if(placeErr('craft',X,Y,true))continue;if(!gapOk(X,Y,2))continue;let dm=1e9;for(const b of anchors)dm=Math.min(dm,Math.abs(b.x-X)+Math.abs(b.y-Y));const sc=-dm*1.2-Math.hypot(X-c.x,Y-c.y)*.3+Math.random()*2+(touchXY(X,Y,2)?3:0);if(sc>bs){bs=sc;best={X,Y}}}return best}finally{CURFP=sv}}
-function grantCharter(id){const E=S.eco,i=E.cr.findIndex(c=>c.id===id);E.pet=E.pet.filter(x=>x!==id);if(i<0)return;if(E.mh.length>=E.charters){log('No charters left — raise the charter limit on the Taxes page.');return}const c=E.cr.splice(i,1)[0];
- E.mh.push({id:c.id,n:3,ag:c.ag,x:c.x,y:c.y,from:c.c});S.pop++;const b=S.bl.find(b=>b.t==='craft'&&b.x===c.x&&b.y===c.y);if(b){b.l=3;b.mh=1}E.led.merch++;E._wc=1;log('Charter granted: the '+CRAFT[c.c].n.toLowerCase()+' household became a merchant house.')}
-function refuseCharter(id){const E=S.eco,c=E.cr.find(c=>c.id===id);E.pet=E.pet.filter(x=>x!==id);if(c){c.ref=1;log('Charter refused. The household is resentful (−15% output) and may leave.')}}
+function grantCharter(id){const E=S.eco,i=E.cr.findIndex(c=>c.id===id);E.pet=E.pet.filter(x=>x!==id);if(i<0)return;if(E.mh.length>=E.charters){qlog('No charters left — raise the charter limit on the Taxes page.');return}const c=E.cr.splice(i,1)[0];
+ E.mh.push({id:c.id,n:3,ag:c.ag,x:c.x,y:c.y,from:c.c});S.pop++;const b=S.bl.find(b=>b.t==='craft'&&b.x===c.x&&b.y===c.y);if(b){b.l=3;b.mh=1}E.led.merch++;E._wc=1;qlog('Charter granted: the '+CRAFT[c.c].n.toLowerCase()+' household became a merchant house.')}
+function refuseCharter(id){const E=S.eco,c=E.cr.find(c=>c.id===id);E.pet=E.pet.filter(x=>x!==id);if(c){c.ref=1;qlog('Charter refused. The household is resentful (−15% output) and may leave.')}}
 function ecoTopTxt(){if(!S.eco||!holdB())return'';const d=Math.ceil((yearLen()-S.eco.yt)/DAYLEN);return' · Yr '+S.eco.yr+' · Tithe in '+d+'d'}
 function ecoProd(p){if(!S.eco)return;const mf=mineF();p.copper*=mf;p.tin*=mf;if(p.wood>0)p.wood*=1+Math.min(.3,crN('carpenter')*.03)}
 function ecoHap(add){if(!S.eco)return;const E=S.eco;add('Tithe '+E.tithe+'%',Math.max(-26,Math.min(6,(20-E.tithe)*.65)));if(!holdB())return;
@@ -292,9 +293,9 @@ const ECOBUY={
  store:{n:'Holding storehouses',d:'Imperial upgrade: +15k storage, slower spoilage',s:()=>80*(S.eco.storL+1),ok:()=>S.eco.storL<4,f:()=>{S.eco.storL++;return 1}},
  temple:{n:'Fancier temple',d:'Upgrade your temple one level',s:120,ok:()=>S.bl.some(b=>b.t==='temple'&&b.l<5),f:()=>{const b=S.bl.find(b=>b.t==='temple'&&b.l<5);b.l++;return 1}},
  palace:{n:'Grander palace',d:'Upgrade your palace one level',s:250,ok:()=>S.bl.some(b=>b.t==='palace'&&b.l<5),f:()=>{const b=S.bl.find(b=>b.t==='palace'&&b.l<5);b.l++;return 1}}};
-function ecoBuy(k){const B=ECOBUY[k],E=S.eco,c=typeof B.s==='function'?B.s():B.s;if(E.silver<c||(B.ok&&!B.ok()))return;const r=B.f();if(r===false){log('No room for '+B.n.toLowerCase()+'.');return}E.silver-=c;E.led.sOut+=c;worldChanged();log(B.n+' paid with '+c+' silver.')}
+function ecoBuy(k){const B=ECOBUY[k],E=S.eco,c=typeof B.s==='function'?B.s():B.s;if(E.silver<c||(B.ok&&!B.ok()))return;const r=B.f();if(r===false){qlog('No room for '+B.n.toLowerCase()+'.');return}E.silver-=c;E.led.sOut+=c;worldChanged();qlog(B.n+' paid with '+c+' silver.')}
 function mineCost(){return Math.round(150*Math.pow(S.eco.mineL+1,1.4))}
-function ecoMineUp(){const E=S.eco,c=mineCost();if(E.mineL>=3||holdVal()<c)return;let due=c;for(const g of ECOWAGE){if(due<=0)break;const h=E.hold[g]||0,u=Math.min(h,due/EIT[g].v);E.hold[g]=h-u;due-=u*EIT[g].v}E.mineL++;log('Royal mines upgraded to level '+E.mineL+' (+'+E.mineL*25+'% copper & tin), paid from the tithe stores.')}
+function ecoMineUp(){const E=S.eco,c=mineCost();if(E.mineL>=3||holdVal()<c)return;let due=c;for(const g of ECOWAGE){if(due<=0)break;const h=E.hold[g]||0,u=Math.min(h,due/EIT[g].v);E.hold[g]=h-u;due-=u*EIT[g].v}E.mineL++;qlog('Royal mines upgraded to level '+E.mineL+' (+'+E.mineL*25+'% copper & tin), paid from the tithe stores.')}
 // ---- tithe carriers (visual only; deliveries are tracked in S.eco.car so saves are safe) ----
 const ECOV=[];function ecoSpawnVis(q){if(typeof astar!=='function')return;const p=astar(q.x,q.y,q.tx,q.ty);if(!p||!p.length)return;for(let i=0;i<q.n;i++)ECOV.push({x:q.x+i*.3,y:q.y,route:p.map(o=>({x:o.x,y:o.y})),o:OUTFIT.farmer,dir:0,ft:i*3,idx:i,carry:'grain',don:i===0?q.don:0,role:'farmer'})}
 function ecoVis(D,dt,z,inV,now){for(let j=ECOV.length-1;j>=0;j--){const m=ECOV[j];if(!m.route.length){ECOV.splice(j,1);continue}const p=m.route[0],dx=p.x-m.x,dy=p.y-m.y,d=Math.hypot(dx,dy),sp=.9*dt*(m.don?1.1:1);m.dir=dirOf(dx,dy);m.ft+=dt*7;if(d<=sp){m.x=p.x;m.y=p.y;m.route.shift()}else{m.x+=dx/d*sp;m.y+=dy/d*sp}
@@ -1053,6 +1054,10 @@ function lowDraw(){const n=Math.ceil(MW/LPG),m=Math.ceil(MH/LPG),pw=LPG*TS,x0=ca
 function lowPut(cx,cy,ch){lowEnsure();const tx=cx*CS,ty=cy*CS,px=tx/LPG|0,py=ty/LPG|0,g=lowPage(px,py).g,L=CS*LP;g.imageSmoothingEnabled=true;g.imageSmoothingQuality='high';g.drawImage(ch.c,(tx-px*LPG)*LP,(ty-py*LPG)*LP,L,L);LOWdone[cy*(MW/CS)+cx]=1}
 function getChunk(cx,cy){const k=cx+','+cy;let ch=CH[k];if(ch&&ch.sig!==chunkSig&&getChunk.bud<=0)return ch;if(!ch||ch.sig!==chunkSig){if(ch)getChunk.bud--;ch=renderChunk(cx,cy);ch.sig=chunkSig;CH[k]=ch;lowEnsure();lowPut(cx,cy,ch)}return ch}
 function lowFill(c0,c1,r0,r1,t0){lowEnsure();const N=MW/CS;for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){if(performance.now()-t0>6)return;if(LOWdone[cy*N+cx])continue;const k=cx+','+cy,ch=CH[k];if(ch&&ch.sig===chunkSig)lowPut(cx,cy,ch);else{const n=renderChunk(cx,cy);n.sig=chunkSig;lowPut(cx,cy,n)}}}
+// Prefill low-res pages with real chunk detail: visible area first, then a ring around it, then the rest of the map in the background.
+// Before this, pages started as a blurred overview (dark forests, no texture) and were only filled at far zoom, so chunks popping in/out showed mismatched patches = flicker.
+function lowPrefill(c0,c1,r0,r1,z,now){const N=MW/CS,M=MH/CS,t0=performance.now(),far=z<.3,bud=far?6:3;if(far)lowFillB(c0,c1,r0,r1,t0,bud);const w=c1-c0+1,h=r1-r0+1;for(let k=1;k<=3;k++){if(performance.now()-t0>bud)return;lowFillB(Math.max(0,c0-w*k),Math.min(N-1,c1+w*k),Math.max(0,r0-h*k),Math.min(M-1,r1+h*k),t0,bud)}if(performance.now()-t0<bud*.5){lowPrefill.r=((lowPrefill.r||0)+1)%M;lowFillB(0,N-1,lowPrefill.r,lowPrefill.r,t0,bud)}}
+function lowFillB(c0,c1,r0,r1,t0,bud){lowEnsure();const N=MW/CS;for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){if(LOWdone[cy*N+cx])continue;if(performance.now()-t0>bud)return;const ch=CH[cx+','+cy];if(ch&&ch.sig===chunkSig)lowPut(cx,cy,ch);else{const n=renderChunk(cx,cy);n.sig=chunkSig;lowPut(cx,cy,n)}}}
 function dirtyTile(gx,gy){for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const k=Math.floor((gx+dx)/CS)+','+Math.floor((gy+dy)/CS);if(CH[k])CH[k].sig=-1}}
 function buildOverview(){const[c,g]=mk(MW,MH);const img=g.createImageData(MW,MH),o=[0,0,0];for(let i=0;i<MW*MH;i++){const r=RT[i];tcol(r,.6,.5,.5,0,0,o);let R=o[0],G=o[1],B=o[2];if(r===R_FOREST){R*=.6;G*=.75;B*=.6}if(roadSet[i]){R=160;G=134;B=96}img.data.set([R,G,B,255],i*4)}g.putImageData(img,0,0);ov64=c}
 // ---------- props (top-down) ----------
@@ -1468,7 +1473,7 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  lowEnsure();vx.fillStyle='#24384a';vx.fillRect(-WW,-WH,WW*3,WH*3);vx.imageSmoothingEnabled=true;vx.imageSmoothingQuality='high';lowDraw();let bud=3;const W=CS*TS,zp=z*PXR,X0=(-cam.x+sx)*zp,Y0=(-cam.y+sy)*zp;
  {vx.setTransform(1,0,0,1,0,0);const c0=Math.max(0,Math.floor(vl/W)),c1=Math.min(MW/CS-1,Math.floor(vr/W)),r0=Math.max(0,Math.floor(vt/W)),r1=Math.min(MH/CS-1,Math.floor(vb/W));
   for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const k=cx+','+cy;let ch=CH[k];if((!ch||ch.sig!==chunkSig)&&bud>0&&(bud===3||performance.now()-now<7)){bud--;ch=getChunk(cx,cy)}if(!ch||z<.3)continue;ch.used=now;const a=Math.round(X0+cx*W*zp),b=Math.round(Y0+cy*W*zp),w=Math.round(X0+(cx+1)*W*zp)-a,h=Math.round(Y0+(cy+1)*W*zp)-b;vx.imageSmoothingEnabled=z<1.5;vx.drawImage(chMip(ch,w),a,b,w,h);if(ch.f&&z>=.5){vx.globalAlpha=.45+.35*Math.sin(now/650+cx*1.7+cy);vx.drawImage(ch.f,a+Math.sin(now/1300)*zp*.8,b+((now/900|0)%2)*.6*zp,w,h);vx.globalAlpha=1}}
-  vx.imageSmoothingEnabled=true;const ks=Object.keys(CH),nv=(c1-c0+1)*(r1-r0+1),lim=Math.max(220,nv*2+20);if(ks.length>lim){ks.sort((p,q)=>(CH[p].used||0)-(CH[q].used||0));ks.slice(0,ks.length-lim+30).forEach(k=>{if(CH[k].used!==now)delete CH[k]})}if(z<.3)lowFill(c0,c1,r0,r1,now);else if((vframe.lf=(vframe.lf||0)+1)%20===0)lowFill(0,MW/CS-1,0,MH/CS-1,performance.now()-3);TF()}
+  vx.imageSmoothingEnabled=true;const ks=Object.keys(CH),nv=(c1-c0+1)*(r1-r0+1),lim=Math.max(220,nv*2+20);if(ks.length>lim){ks.sort((p,q)=>(CH[p].used||0)-(CH[q].used||0));ks.slice(0,ks.length-lim+30).forEach(k=>{if(CH[k].used!==now)delete CH[k]})}lowPrefill(c0,c1,r0,r1,z,now);TF()}
  const wt=now/1000;if(z>=.5){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){if(hsh(gx,gy,9)>.18||!isWat(RT[gy*MW+gx]))continue;const X=(gx+hsh(gx,gy,4))*TS,Y=(gy+hsh(gx,gy,5))*TS,ph=(wt*.9+hsh(gx,gy,3)*6)%3;if(ph<1.6){vx.globalAlpha=Math.sin(ph/1.6*Math.PI)*.5;ln(vx,X+ph*5,Y,X+ph*5+7,Y,'#d8eef6',1);vx.globalAlpha=1}}}
  const D=[],blist=blds(),flats=[];FPB.on=1;FPB.n=FX.mob?1:2;
  blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):bspr(b.t,b.l,v);
@@ -1599,7 +1604,9 @@ let spd=1,TI=null;function setSpeed(s){spd=s;clearInterval(TI);if(s)TI=setInterv
 // drawer
 function openTab(t){const D=$('drawer');if(cur===t&&D.classList.contains('open')){D.classList.remove('open');document.body.classList.remove('dopen');document.querySelectorAll('#tabs button[data-t]').forEach(x=>x.classList.remove('sel'));return}cur=t;D.classList.add('open');document.body.classList.add('dopen');document.querySelectorAll('#tabs button[data-t]').forEach(x=>x.classList.toggle('sel',x.dataset.t===t));$('dtitle').textContent={build:'Architect',jobs:'Work',army:'Military',tech:'Research',map:'World',log:'History',help:'Guide'}[t];renderView()}
 // architect
-const CATS=[['housing','Housing','house',['tent','house']],['prod','Production','prod',['gatherhut','farm','thresh','shed','bakery','brewery','lumber','lodge','quarry','copper','tin','smelter']],['store','Storage','store',['holding','stockpile','storehouse','granary','market']],['mil','Military','mil',['trainingcamp','spearschool','archery','slingfield','axehall','stables','barracks','wall','gate']],['civic','Civic','civic',['campfire','well','shrine','senet','plaza','tavern','temple','palace','garden','tree','statue']],['water','Water','road',['bridge','sbridge','dock']],['roads','Roads/Zones','road',[]]];
+// Architect menu. HIDE_BUILD keeps code/old placed buildings working but hides them from the build menu (remove an entry to bring it back).
+const HIDE_BUILD={market:'Markets are now built by merchant houses themselves (Trading update)',statue:'Duplicate of the Bronze Statue decor',well:'Its main effects (plague and fire) belong to random events, which are off; the crown builds fountains from the Taxes page'};
+const CATS=[['housing','Housing','house',['tent','house']],['food','Food','prod',['gatherhut','lodge','farm','thresh','shed','bakery','brewery']],['prod','Industry','prod',['lumber','quarry','copper','tin','smelter']],['store','Storage & Treasury','store',['holding','granary','storehouse','stockpile','market']],['mil','Military','mil',['trainingcamp','barracks','spearschool','archery','slingfield','axehall','stables','wall','gate']],['civic','Civic & Faith','civic',['campfire','tavern','senet','plaza','temple','palace','well','statue']],['water','Water','road',['bridge','sbridge','dock']],['roads','Roads/Zones','road',[]]];
 let acat='housing';
 function costHTML(c){return Object.keys(c).filter(r=>c[r]).map(r=>'<span class="cst'+(S.res[r]<c[r]?' no':'')+'"><i class="ri ri-'+r+'"></i>'+c[r]+'</span>').join(' ')||'<span class="cst">free</span>'}
 function riCSS(){const st=document.createElement('style');st.textContent=RES.map(r=>'.ri-'+r+'{background-image:url('+ICO(r,14).toDataURL()+')}').join('');document.head.appendChild(st)}
@@ -1611,7 +1618,7 @@ function renderArchitect(V){const nt=TIERS[S.tier+1];if(nt){const n=nt.need,ok=S
   g.innerHTML='<div><small>NEXT STAGE</small><b>'+nt.n+'</b><div class="sub">Pop '+S.pop+'/'+n.pop+' · Lands '+S.won.length+'/'+n.lands+(n.tech?' · '+TECH[n.tech].n+(S.tech[n.tech]?' ✓':''):'')+(n.bld?' · '+BLD[n.bld].n+(cnt(n.bld)?' ✓':''):'')+'</div><div class="cc">'+costHTML(nt.cost)+'</div></div>';
   g.appendChild(btn('Advance',()=>{if(pay(nt.cost)){S.tier++;log('Your people are now a '+nt.n+'!');save();renderTop();renderView();celebrate()}},!ok||!can(nt.cost),'pri'));V.appendChild(g)}
  const ct=document.createElement('div');ct.className='cats';CATS.forEach(([id,n,ic])=>{const b=document.createElement('button');b.className='cat'+(acat===id?' sel':'');b.appendChild(ICO(ic,16));b.appendChild(document.createTextNode(n));b.onclick=()=>{acat=id;renderView()};ct.appendChild(b)});V.appendChild(ct);
- const C=CATS.find(c=>c[0]===acat);if(acat!=='roads'){const gr=document.createElement('div');gr.className='grid';C[3].forEach(k=>card(gr,k));V.appendChild(gr);return}
+ const C=CATS.find(c=>c[0]===acat);if(acat!=='roads'){const gr=document.createElement('div');gr.className='grid';C[3].filter(k=>!HIDE_BUILD[k]&&BLD[k]).forEach(k=>card(gr,k));V.appendChild(gr);return}
  const sec=(t)=>{const h=document.createElement('h4');h.textContent=t;V.appendChild(h)};const bar=()=>{const d=document.createElement('div');d.className='seg';V.appendChild(d);return d};
  if(S.tier<1){V.insertAdjacentHTML('beforeend','<p class="muted">Tribes wander without roads. Settle down to build paths.</p>');V.appendChild(btn('⛺ Move camp',()=>{placing='__move';ghost=null;log('Tap open ground to move the camp.')},0,placing==='__move'?'sel':''));return}
  sec('Surface');let b=bar();[[1,'Dirt path','free'],[2,'Packed road','1 stone'],[3,'Paved road','3 stone']].forEach(([l,n,c])=>{if(l<=roadMax())b.appendChild(btn(n+' · '+c,()=>{placing='__road';roadPick=l;ghost=null},0,placing==='__road'&&roadPick===l?'sel':''))});b.appendChild(btn('Remove',()=>{placing='__erase';ghost=null},0,placing==='__erase'?'sel':''));
@@ -2037,12 +2044,14 @@ function calcBeauty(){BEAU=new Float32Array(MW*MH);for(const b of S.bl){const D=
  for(let y=Math.floor(cy-R);y<=Math.ceil(cy+R);y++)for(let x=Math.floor(cx-R);x<=Math.ceil(cx+R);x++){if(x<0||y<0||x>=MW||y>=MH)continue;const d=Math.hypot(x-cx,y-cy);if(d>R+.5)continue;BEAU[y*MW+x]+=e[0]*(1-d/(R+1.5))}}}
 const _wc=worldChanged;worldChanged=function(){calcBeauty();return _wc.apply(this,arguments)};
 const _desir=desir;desir=function(i){const b=S.bl[i];return _desir(i)+(b?Math.round(beautyAt(b.x+1,b.y+1)/2):0)};
-{const C=['decor','Decor','civic',[]];Object.defineProperty(C,3,{get:()=>Object.keys(DEC).filter(k=>!DEC[k].civ||DEC[k].civ===(S.civ||'egypt')).sort((a,b)=>DEC[a].T-DEC[b].T)});CATS.splice(CATS.length-1,0,C)}
+{const C=['decor','Decor','civic',[]];Object.defineProperty(C,3,{get:()=>['garden','tree'].concat(Object.keys(DEC).filter(k=>!DEC[k].civ||DEC[k].civ===(S.civ||'egypt')).sort((a,b)=>DEC[a].T-DEC[b].T))});CATS.splice(CATS.length-1,0,C)}
 
 // ================= CITY EVENTS =================
 function evOn(id){return S&&S.ev&&S.ev.act.find(e=>e.id===id)}
 const EICON={plague:'☠',drought:'☀',harvest:'🌾',fire:'🔥',festival:'🎉',unrest:'✊',quake:'⚡',raiders:'⚔',immig:'👥',caravan:'🐫'};
 function plagueMit(){return 1/(1+cnt('well')*.4+cnt('temple')*.6+(S.tech.sanitation?1.5:0))}
+// Random city events are switched off for now (playtest feedback). Set RANDOM_EVENTS=true to bring them back; raids stay on as part of the threat model.
+const RANDOM_EVENTS=false,THREAT_EV={raiders:1};
 const EVT={
 plague:{n:'Plague!',w:()=>S.pop>8?1+S.tier*.5:0,dur:40,init:e=>{e.k=0;e.cap=Math.max(1,Math.ceil(S.pop*.15*plagueMit()*2));e.left=Math.round(25+30*plagueMit())},
  text:e=>'A fever spreads through the crowded houses. Density '+Math.round(S.pop/Math.max(1,housing())*100)+'%. Wells, a Temple and Sanitation slow it. Up to '+e.cap+' may die.',
@@ -2073,10 +2082,10 @@ function raidFight(e){const go=S.companies.filter(c=>c.men>0);const foe=[{id:'r0
  setTimeout(()=>{prep={i:-1};bvStart(res,-1,'canaan')},50)}
 function evMods(){let prod=1,farm=1,grow=1,up=1;for(const e of (S.ev?S.ev.act:[])){if(e.id==='plague'&&e.q)prod*=.75;if(e.id==='drought'){farm*=(S.tech.irrigation?.7:.4)+Math.min(.3,cnt('granary')*.1);if(e.ration){up*=.7;grow=0}}
  if(e.id==='harvest')farm*=1.6;if(e.id==='unrest')prod*=.8;if(e.id==='festival'){prod*=1.15;grow*=2}if(e.id==='fire'&&e.bb)prod*=.7}farm*=1+Math.min(.3,cnt('thresh')*.08+cnt('shed')*.05);return{prod,farm,grow,up}}
-function evTick(){const E=S.ev;E.act.forEach(e=>{e.left--;const D=EVT[e.id];D.tick&&D.tick(e)});E.act.filter(e=>e.left<=0).forEach(e=>{EVT[e.id].end&&EVT[e.id].end(e);log(EVT[e.id].n+' has ended.')});
+function evTick(){const E=S.ev;E.act.forEach(e=>{e.left--;const D=EVT[e.id];D.tick&&D.tick(e)});E.act.filter(e=>e.left<=0).forEach(e=>{EVT[e.id].end&&EVT[e.id].end(e);qlog(EVT[e.id].n+' has ended.')});
  const was=E.act.length;E.act=E.act.filter(e=>e.left>0);if(was!==E.act.length)bgSig='';
- if(S.t<150||$('modal').style.display==='flex')return;if(--E.next>0)return;E.next=Math.round(Math.max(240,330-S.tier*40)+Math.random()*200);
- const ids=Object.keys(EVT).filter(k=>!EVT[k].hidden&&!evOn(k));let tot=0;const ws=ids.map(k=>tot+=Math.max(0,EVT[k].w()));if(!tot)return;const r=Math.random()*tot,id=ids[ws.findIndex(w=>r<w)];fireEv(id)}
+ if(S.t<DAYLEN*4||$('modal').style.display==='flex')return;if(E.next>DAYLEN*3.2)E.next=DAYLEN*2;if(--E.next>0)return;E.next=Math.round(DAYLEN*(2+Math.random()));
+ const ids=Object.keys(EVT).filter(k=>!EVT[k].hidden&&!evOn(k)&&(RANDOM_EVENTS||THREAT_EV[k]));let tot=0;const ws=ids.map(k=>tot+=Math.max(0,EVT[k].w()));if(!tot)return;const r=Math.random()*tot,id=ids[ws.findIndex(w=>r<w)];fireEv(id)}
 function fireEv(id){const D=EVT[id],e={id,left:D.dur};D.init&&D.init(e);const M=$('modal'),B=$('mbody');B.innerHTML='';const c=document.createElement('canvas');c.width=320;c.height=160;c.style.cssText='width:min(320px,80vw);aspect-ratio:2/1;display:block;margin:0 auto 6px;border:2px solid #6a5434;border-radius:6px';B.appendChild(c);evArt(c.getContext('2d'),id);
  const h=document.createElement('h3');h.textContent=(EICON[id]||'')+' '+D.n;B.appendChild(h);const p=document.createElement('div');p.textContent=D.text(e);B.appendChild(p);
  (D.ch?D.ch(e):[['OK',()=>{}]]).forEach(([lbl,fn,dis])=>B.appendChild(btn(lbl,()=>{const r=fn();M.style.display='none';if(r!==false&&D.dur>0){S.ev.act.push(e);bgSig=''}if(!['raiders'].includes(id))vis.raid=0},dis)));
