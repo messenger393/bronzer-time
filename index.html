@@ -161,7 +161,7 @@ const ecoOn=()=>!!(S.eco&&holdB());
 const crN=c=>S.eco?S.eco.cr.filter(x=>x.c===c).length:0;
 const holdTot=()=>{let t=0;for(const g in S.eco.hold)t+=S.eco.hold[g];return t};
 const holdVal=()=>{let t=0;for(const g in S.eco.hold)t+=S.eco.hold[g]*EIT[g].v;return t};
-const holdCap=()=>(holdB()?(holdB().l-1)*10000:0)+20000+S.eco.storL*15000+cnt('granary')*2000+cnt('storehouse')*1500;
+const holdCap=()=>(holdB()?(holdB().l-1)*10000:0)+30000+S.eco.storL*15000+cnt('granary')*2000+cnt('storehouse')*1500;
 const spoilF=()=>(1/(1+.5*S.eco.storL+.1*cnt('granary')+.06*cnt('storehouse')))*(1-Math.min(.4,crN('potter')*.08));
 const mineF=()=>S.eco?(1+.25*S.eco.mineL)*(S.eco.unpaid?.65:1):1;
 const yearLen=()=>ECO_YD*DAYLEN;
@@ -211,8 +211,8 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
  {const C=cap();if(S.res.food<C*.7){let want=C*.7-S.res.food;for(const g of['bread','fish','dairy','grain']){const h=E.hold[g]||0,u=Math.min(h,want);if(u>0){E.hold[g]=h-u;S.res.food+=u;want-=u;S.ft=S.ft||{};S.ft[g]=(S.ft[g]||0)+u}}}
   if(S.res.wood<C*.5&&E.hold.timber>0){const u=Math.min(E.hold.timber,C*.5-S.res.wood);E.hold.timber-=u;S.res.wood+=u}}
  // spoilage everywhere (slowed by proper storage)
- {const sf=spoilF(),cp=holdCap(),tot=holdTot(),over=tot>cp?(tot-cp)/tot:0;for(const g in E.hold){const h=E.hold[g];if(h<=0){delete E.hold[g];continue}const r=EIT[g].rot*sf*k+over*.0006*k;if(r>0){const l=h*Math.min(.5,r);E.hold[g]=h-l;led.spoil+=l*EIT[g].v}}
-  for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoil+=l*EIT[g].v}}
+ {const sf=spoilF(),cp=holdCap(),tot=holdTot(),over=tot>cp?(tot-cp)/tot:0;for(const g in E.hold){const h=E.hold[g];if(h<=0){delete E.hold[g];continue}const r=EIT[g].rot*sf*k+over*.0003*k;if(r>0){const l=h*Math.min(.5,r);E.hold[g]=h-l;led.spoil+=l*EIT[g].v}}
+  for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoilM=(led.spoilM||0)+l*EIT[g].v}}
   const fr=.000025*k/(1+cnt('granary')*.5+cnt('storehouse')*.2);const fl=S.res.food*fr;S.res.food-=fl;led.spoil+=fl*EIT.grain.v}
  // auto-grant steads to idle families
  if(E.autoStead===2&&S.t%(DAYLEN/3|0)<k&&S.pop-employed()>=4&&S.tier>=1){if(foundStead(3,'idle'))qlog('A stead was granted to an idle family. They will farm it and bring the tithe each year.')}
@@ -602,7 +602,7 @@ function renderBudget(V){const E=S.eco;if(!E){V.textContent='No economy yet.';re
   const other=Math.max(0,L.sIn-L.mtax-L.sold);
   const tg=Object.keys(L.tg||{}).map(g=>['Tithe: '+EIT[g].n.toLowerCase(),(L.tg[g]||0)*EIT[g].v]);
   wrap.innerHTML=ledg('⛁ Silver',[['Merchant tax',L.mtax],['Surplus sales',L.sold],['Other (crown sales of food, ore)',other]],[['Mercenaries',L.sMerc||0],['Festivals',L.sFest||0],['Silver buildings',L.sBld||0],['Other',Math.max(0,L.sOut-(L.sMerc||0)-(L.sFest||0)-(L.sBld||0))]])+
-   ledg('🌾 Tithe goods (silver value)',tg.length?tg:[['Tithe',L.tithe]],[['Army wages',L.wArmy||0],['Royal miners',L.wMine||0],['Master builders',L.wBld||0],['Royal household',L.wHouse||0],['Drill',L.wDrill||0],['Crown crafter purchases',L.patron||0],['Spoilage',L.spoil]])+'<p class="small muted">Year '+E.yr+' · '+Math.round(fr*100)+'% through the year. Projected = year to date scaled to a full year.</p>'}
+   ledg('🌾 Tithe goods (silver value)',tg.length?tg:[['Tithe',L.tithe]],[['Army wages',L.wArmy||0],['Royal miners',L.wMine||0],['Master builders',L.wBld||0],['Royal household',L.wHouse||0],['Drill',L.wDrill||0],['Crown crafter purchases',L.patron||0],['Spoilage (Holding & city stores)',L.spoil]])+'<p class="small muted">Market stalls also lost '+fmtS(L.spoilM||0)+' of goods to rot this year (the merchants\' loss, not the crown\'s).</p><p class="small muted">Year '+E.yr+' · '+Math.round(fr*100)+'% through the year. Projected = year to date scaled to a full year.</p>'}
  else{const Hh=E.hist;if(!Hh.length){wrap.innerHTML='<p class="muted">History starts after the first Tithe Day.</p>';return}const W=300,HG=70,ch=(key,col,lab)=>{const vs=Hh.map(r=>r[key]||0),mx=Math.max(1,...vs.map(Math.abs)),y=v=>HG/2-v/mx*(HG/2-4);return '<div class="small">'+lab+'</div><svg width="100%" viewBox="0 0 '+W+' '+HG+'" class="taxsvg"><line x1="0" x2="'+W+'" y1="'+HG/2+'" y2="'+HG/2+'" stroke="#5a4a38"/>'+vs.map((v,i)=>{const bw=W/vs.length,h=Math.abs(y(v)-HG/2);return '<rect x="'+(i*bw+1).toFixed(1)+'" y="'+Math.min(y(v),HG/2).toFixed(1)+'" width="'+(bw-2).toFixed(1)+'" height="'+h.toFixed(1)+'" fill="'+(v>=0?col:'#d8402a')+'"/>'}).join('')+'</svg>'};
   wrap.innerHTML=ch('sNet','#d8b850','Silver net per year')+ch('gNet','#9fc070','Tithe goods net per year (silver value)')+ch('pop','#8ab0e0','Population')+'<table class="htab"><tr><th>Year</th><th>Tithe</th><th>Spoiled</th><th>Silver net</th><th>Goods net</th><th>Pop</th></tr>'+Hh.slice().reverse().map(r=>'<tr><td>'+r.yr+'</td><td class="n">'+fmtS(r.tithe)+'</td><td class="n">'+fmtS(r.spoil)+'</td><td class="n">'+fmtS(r.sNet||0)+'</td><td class="n">'+fmtS(r.gNet||0)+'</td><td class="n">'+r.pop+'</td></tr>').join('')+'</table>'}}
 // ---- Administration ----
@@ -2013,6 +2013,7 @@ function alItem(A,key,cls,html,tip,onOpen,onX){let el=alEls.get(key);if(!el){el=
  el._tip=tip;el._x=onX;el.onclick=onOpen?()=>onOpen():null;const tx=el.firstChild;if(tx._h!==html){tx._h=html;tx.innerHTML=html}A.appendChild(el);return el}
 function renderAlerts(){const A=$('alerts');if(!A)return;const al=[];const idle=S.pop-employed();let openJobs=0;for(const j in JOBS)openJobs+=Math.max(0,jobCap(j)-(S.jobs[j]||0));if(idle>0&&openJobs>0)al.push(['idle','warn',idle+' idle colonists','Open jobs available — see Work.',()=>openTab('jobs')]);
  if(false){const un=S.bl.filter((b,i)=>!NOROAD[b.t]&&!CONN[i]).length;if(un)al.push(['noroad','warn',un+' building'+(un>1?'s':'')+' without road','They do nothing until connected.',()=>{const i=S.bl.findIndex((b,i)=>!NOROAD[b.t]&&!CONN[i]);if(i>=0){const b=S.bl[i];centerOn(b.x+1,b.y+1);sel={i};showInsp()}}])}
+ {const pn=S.fam?S.fam.L.filter(F=>F.st==='pend').length:0;if(pn)al.push(['pend'+pn,'info',pn+' new famil'+(pn>1?'ies':'y')+' waiting for land','A household split off and is camping in a tent. Grant them land (Construction → Zones → Land grant).',()=>openTab('fam')])}
  if(S.res.food<25&&S.rate&&S.rate.food<0)al.push(['food','bad','Food running out','Assign farmers or hunters.',()=>openTab('jobs')]);if(S.pop>=housing())al.push(['house','info','Need housing','Build houses or tents to grow.',()=>{acat='housing';openTab('build')}]);
  if(false&&congest)al.push(['cong','warn','Congested path near the '+congest.near,'Widen or upgrade it (load '+Math.round(congest.load*100)+'%).',()=>{centerOn(congest.x,congest.y);S.heat=true}]);
  (S.ev.act||[]).filter(e=>EVT[e.id]).forEach(e=>al.push(['ev:'+e.id,BADEV[e.id]?'bad':'info',EVT[e.id].n+' · '+e.left+'s','Ongoing event.',null]));
