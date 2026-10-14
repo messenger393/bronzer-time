@@ -192,8 +192,8 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
  if(S.t%60===0)ecoSync();
  // steads produce & eat (families use everything on their land except ore)
  if(S.t%DAYLEN<kr){for(const s of E.steads)steadClear(s);try{mzSettle()}catch(e){}}
- for(const s of E.steads){const kids=Math.floor(s.n*.35),w=Math.max(1,s.n-kids),aw=s.away>S.t?Math.min(w-.5,s.an):0,fr0=s.f.length/(8+w*5),fr=Math.min(1,fr0)+Math.min(.6,Math.max(0,fr0-1)*.4);// 0.17: fields beyond what the family can fully work still add yield (diminishing, up to +60%)
-  const lab=(w-aw)*hm*(.5+.5*fr)*k*seasF()*(s.skf||1)*(s.ow>0?.95:1)*(s.oven?.95:1),L=LAND[s.land].out;for(const g in L){const q=L[g]*lab*(g==='grain'||g==='flax'?EM.farm:1);s.st[g]=(s.st[g]||0)+q;s.prod+=q*EIT[g].v}steadBake(s,k);
+ for(const s of E.steads){const kids=Math.floor(s.n*.35),w=Math.max(1,s.n-kids),aw=s.away>S.t?Math.min(w-.5,s.an):0,wk=Math.min(s.f.length,(w-aw)*7+4),fm=1+Math.min(.3,.06*(s.fy||0));// 0.17: output = fields actually worked (each worker tends ~7) x field maturity (+6%/yr tilled, to +30%) x skill
+  const lab=Math.max(.5,wk/7)*fm*hm*k*seasF()*(s.skf||1)*(s.ow>0?.95:1)*(s.oven?.95:1),L=LAND[s.land].out;for(const g in L){const q=L[g]*lab*(g==='grain'||g==='flax'?EM.farm:1);s.st[g]=(s.st[g]||0)+q;s.prod+=q*EIT[g].v}steadBake(s,k);
   let need=s.n*.4*k;for(const g of ECOFOOD){const h=s.st[g]||0,fv=g==='bread'?1.25:1,u=Math.min(h,need*(g==='grain'||g==='bread'?1:.5)/fv);s.st[g]=h-u;need-=u*fv}if(need>0){const h=s.st.grain||0,u=Math.min(h,need);s.st.grain=h-u;need-=u}if(need>.01){for(const src of [E.mkt,E.hold])for(const g of ['bread','grain','fish','dairy']){if(need<=.01)break;const h=src[g]||0,u=Math.min(h,need);if(u>0){src[g]=h-u;need-=u;const pz=u*EIT[g].v*(src===E.mkt?1:.8);s.sv=Math.max(0,(s.sv||0)-pz);if(src===E.hold){E.silver+=pz*.5}}}}if(need>.01)s.hun+=need;
   for(const g of['wool','flax','timber','clay'])if(s.st[g])s.st[g]-=Math.min(s.st[g],s.n*.025*k);
   for(const g in s.st){const r=EIT[g].rot;if(r)s.st[g]*=1-r*1.4*k}}
@@ -387,7 +387,7 @@ function builderRise(){const E=S.eco;if(!E||!S.fam)return;const nb=bldN();if((S.
  const b={t:'craft',l:1,x:t.X,y:t.Y};S.bl.push(b);rebuildOcc();E._wc=1;E.cr.push({id:++E.sid,c:'builder',n:2,sk:3,ag:0,stk:0,x:t.X,y:t.Y,hun:0,ref:0,from:null,fromFam:F.id});S.pop++;S.bxp=0;log('A skilled labourer of the '+F.sn+' family set up as a master builder in town — first of their name.')}
 function steadBake(s,k){if(!s.oven){if((s.sv||0)>=12&&s.n>=3){s.oven=1;s.sv-=12;s._ob=1}else return 0}const g=s.st.grain||0,want=Math.min(g,s.n*.12*k);if(want<=0)return 0;s.st.grain=g-want;s.st.bread=(s.st.bread||0)+want*BAKE_HOME;s.sk.baker=Math.min(6,(s.sk.baker||1)+want*.0004);return want}
 const FAM_M=['Hattu','Ilu','Tarhun','Arnu','Kiru','Zidan','Abi','Puhi','Nanu','Masu','Tudha','Urhi','Ammu','Pithan','Labar','Hanni','Kuzi','Ehli','Shalla','Talmi','Zuzu','Mursi','Ashur','Enlu','Kanzu','Dudu'],FAM_F=['Ashme','Tawa','Nikal','Henti','Kali','Mala','Ziti','Puduh','Tati','Ishta','Nunna','Ammi','Hepa','Danu','Siri','Lela','Ninsa','Belti','Kubi','Arsa','Geme','Hala'],FAM_S=['Arinna','Zalpa','Kussar','Hurma','Tawin','Ankuwa','Lawazan','Kanes','Hakpis','Samuha','Tapik','Nerik','Ussa','Pala','Kizzu','Halpa','Emar','Ugar','Alalah','Mittan','Kumanni','Isuwa','Tarsa','Ilansa','Hupis','Zippa','Amka','Sallu','Tegar','Washu'];
-const FAM_SPLIT=7,FAM_CROWD=10;
+const FAM_SPLIT=12,FAM_CROWD=10;
 const FAM_ST={pend:'Waiting for land',stead:'Stead',craft:'Crafter household',merch:'Merchant house'};
 function famR(a){return a[(Math.random()*a.length)|0]}
 function famName(){const used=new Set((S.fam?S.fam.L:[]).map(f=>f.sn));const fr=FAM_S.filter(s=>!used.has(s));if(fr.length)return famR(fr);return famR(FAM_S)+'-'+famR(['ili','uwa','anda','ash','iya'])}
@@ -411,7 +411,7 @@ function skYear(){if(!S.fam)return;const E=S.eco;const sd={};if(E)E.steads.forEa
   for(const m of F.m){skInit(m);if(m.a<10)continue;const am=ambMul(m.amb),wk=m.a>=14&&m.a<62?1:.4;
    for(const k in m.sk){const use=u[k]?1:.25,g=(u[k]?4:1)*am*wk*(1-m.sk[k]/115)*(.6+.8*Math.random())*use;m.sk[k]=Math.min(100,Math.max(1,m.sk[k]+g))}
    for(const a in ADVSK){const base=ADVSK[a][0];if(m.adv[a])m.adv[a]=Math.min(100,m.adv[a]+(u[base]?2.5:.8)*am*(.5+Math.random()));else if((m.yp||0)>=1&&m.sk[base]>=ADV_TH&&m.a>=16&&Math.random()<ADV_P*am)m.adv[a]=1}m.yp=(m.yp||0)+1}
-  if(s){F.yf=(F.yf||0)+1;s.skf=steadSkF(s);const fb=famBest(F);{const mq=.3+.4*(fb.b.cook||10)/100+.3*(s.oven?.85:.7);s.mq=mq;s.hap=Math.max(0,Math.min(100,(s.hap||50)+(mq-.6)*10))}// 0.17: home cooking nudges stead mood (about -1..+3 a year)
+  if(s){F.yf=(F.yf||0)+1;s.fy=(s.fy||0)+1;s.skf=steadSkF(s);const fb=famBest(F);{const mq=.3+.4*(fb.b.cook||10)/100+.3*(s.oven?.85:.7);s.mq=mq;s.hap=Math.max(0,Math.min(100,(s.hap||50)+(mq-.6)*10))}// 0.17: home cooking nudges stead mood (about -1..+3 a year)
    for(const c in CRAFT){if(CRAFT[c].build)continue;if(fb.adv[c])s.sk[c]=Math.max(s.sk[c]||0,3+fb.adv[c]/12)}}}}
 // best candidate member of a stead family for a craft (needs the advanced skill); weight = skill x ambition
 function riseCand(s,c){const F=famOf(s);if(!F)return null;let best=null,bw=0;for(const m of F.m){if(m.r==='head'||m.a<16||m.a>55||!m.adv||!m.adv[c])continue;const w=m.adv[c]*ambMul(m.amb);if(w>bw){bw=w;best=m}}return best?{F,m:best,w:bw}:null}
