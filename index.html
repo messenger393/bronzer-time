@@ -214,7 +214,9 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
   if(S.res.wood<C*.5&&E.hold.timber>0){const u=Math.min(E.hold.timber,C*.5-S.res.wood);E.hold.timber-=u;S.res.wood+=u}}
  // spoilage everywhere (slowed by proper storage)
  {const sf=spoilF(),cp=holdCap(),tot=holdTot(),over=tot>cp?(tot-cp)/tot:0;for(const g in E.hold){const h=E.hold[g];if(h<=0){delete E.hold[g];continue}const r=EIT[g].rot*sf*k+over*.0003*k;if(r>0){const l=h*Math.min(.5,r);E.hold[g]=h-l;led.spoil+=l*EIT[g].v}}
-  for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoilM=(led.spoilM||0)+l*EIT[g].v}}
+  // 0.17: the Hall steward sells surplus to passing traders (40% of value) once the hold passes 80% of capacity, instead of letting the overflow rot
+   {const cp2=holdCap()*.8,t2=holdTot();if(t2>cp2){const f=Math.min(.5,(t2-cp2)/t2*.02*k);for(const g in E.hold){if(EIT[g].food&&E.hold[g]<S.pop*4)continue;const q=E.hold[g]*f;E.hold[g]-=q;const sv=q*EIT[g].v*.4;E.silver+=sv;led.sIn=(led.sIn||0)+sv;led.stew=(led.stew||0)+sv}}}
+   for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoilM=(led.spoilM||0)+l*EIT[g].v}}
   const fr=.000025*k/(1+cnt('granary')*.5+cnt('storehouse')*.2);const fl=S.res.food*fr;S.res.food-=fl;led.spoil+=fl*EIT.grain.v}
  // auto-grant steads to idle families
  if(E.autoStead===2&&S.t%(DAYLEN/3|0)<kr&&S.pop-employed()>=4&&S.tier>=1){if(foundStead(3,'idle'))qlog('A stead was granted to an idle family. They will farm it and bring the tithe each year.')}
@@ -255,7 +257,7 @@ function ecoYear(){const E=S.eco,led=E.led,T=E.tithe/100,hb=holdB(),hd=hb?doorOf
   s.hun=0;s.prod=0}
  // risers: one per craft per year from the best-qualified stead
  E.riseY={};E.rp=E.rp||[];for(const c in CRAFT){if(CRAFT[c].build)continue;// 0.17: the candidate is a specific pawn with the advanced skill; weight = advanced skill x ambition, plus the family's savings; demand still gates via the petition + market
-  const cs=E.steads.filter(s=>s.n>=5&&s.sv>=20&&s.hap>35).map(s=>({s,r:riseCand(s,c)})).filter(o=>o.r).sort((a,b)=>(b.r.w+b.s.sv/20)-(a.r.w+a.s.sv/20));const o=cs[0];if(!o)continue;const cand=o.s;
+  const cs=E.steads.filter(s=>s.n>=4&&s.sv>=15&&s.hap>35).map(s=>({s,r:riseCand(s,c)})).filter(o=>o.r).sort((a,b)=>(b.r.w+b.s.sv/20)-(a.r.w+a.s.sv/20));const o=cs[0];if(!o)continue;const cand=o.s;
   if(!E.rp.some(p=>p.c===c&&p.s===cand.id)){E.rp.push({c,s:cand.id,m:o.r.m.i,yr:E.yr});qlog(o.r.m.n+' of the '+o.r.F.sn+' family, a skilled '+CRAFT[c].n.toLowerCase()+', asks to set up in town (Administration › Petitions).')}}
  E.riseY={};for(const c of []){const cand=null;
   const t=ecoTown();if(!t)break;const b={t:'craft',l:1,x:t.X,y:t.Y};S.bl.push(b);rebuildOcc();try{autoRoadFor(b)}catch(e){}E._wc=1;
@@ -384,7 +386,7 @@ function famName(){const used=new Set((S.fam?S.fam.L:[]).map(f=>f.sn));const fr=
 // ===== 0.17 skills: per-pawn basic skills (1-100), ambition (0-5), advanced skills unlocked from basics =====
 const BSK={farm:'Farming',lumber:'Lumbering',cook:'Cooking',mine:'Mining',craft:'Crafting',gather:'Gathering'};
 const ADVSK={carpenter:['lumber','Carpenter'],builder:['craft','Builder'],mason:['mine','Mason'],baker:['cook','Baker'],brewer:['cook','Brewer'],smith:['craft','Smith'],fisher:['gather','Fisher'],potter:['craft','Potter'],weaver:['craft','Weaver']};
-const ADV_TH=40,ADV_P=.15;// advanced skill: basic skill >= 40, then a yearly chance (x ambition)
+const ADV_TH=25,ADV_P=.3;// advanced skill: basic skill >= 25 and a year of practice, then a yearly chance (x ambition)
 const ambMul=L=>.85*(1+.15*(L||0));// ambition 0 "lazy" = 0.85x ... 5 = 1.49x
 function ambRoll(prev){const r=Math.random(),odds=[.15,.25,.25,.18,.12,.05];let a=0,acc=0;for(let i=0;i<6;i++){acc+=odds[i];if(r<acc){a=i;break}}if(prev==null)return a;// after rising: usually lower
  if(Math.random()<.67)return Math.max(0,Math.min(prev-1,Math.floor(Math.random()*prev)));return a}
@@ -400,7 +402,7 @@ function skYear(){if(!S.fam)return;const E=S.eco;const sd={};if(E)E.steads.forEa
  for(const F of S.fam.L){const s=F.st==='stead'?sd[F.l]:null,u=s?steadSkills(s):{cook:1,craft:1,gather:1};
   for(const m of F.m){skInit(m);if(m.a<10)continue;const am=ambMul(m.amb),wk=m.a>=14&&m.a<62?1:.4;
    for(const k in m.sk){const use=u[k]?1:.25,g=(u[k]?4:1)*am*wk*(1-m.sk[k]/115)*(.6+.8*Math.random())*use;m.sk[k]=Math.min(100,Math.max(1,m.sk[k]+g))}
-   for(const a in ADVSK){const base=ADVSK[a][0];if(m.adv[a])m.adv[a]=Math.min(100,m.adv[a]+(u[base]?2.5:.8)*am*(.5+Math.random()));else if(m.sk[base]>=ADV_TH&&m.a>=16&&Math.random()<ADV_P*am)m.adv[a]=1}}
+   for(const a in ADVSK){const base=ADVSK[a][0];if(m.adv[a])m.adv[a]=Math.min(100,m.adv[a]+(u[base]?2.5:.8)*am*(.5+Math.random()));else if((m.yp||0)>=1&&m.sk[base]>=ADV_TH&&m.a>=16&&Math.random()<ADV_P*am)m.adv[a]=1}m.yp=(m.yp||0)+1}
   if(s){s.skf=steadSkF(s);const fb=famBest(F);for(const c in CRAFT){if(CRAFT[c].build)continue;if(fb.adv[c])s.sk[c]=Math.max(s.sk[c]||0,3+fb.adv[c]/12)}}}}
 // best candidate member of a stead family for a craft (needs the advanced skill); weight = skill x ambition
 function riseCand(s,c){const F=famOf(s);if(!F)return null;let best=null,bw=0;for(const m of F.m){if(m.r==='head'||m.a<16||m.a>55||!m.adv||!m.adv[c])continue;const w=m.adv[c]*ambMul(m.amb);if(w>bw){bw=w;best=m}}return best?{F,m:best,w:bw}:null}
