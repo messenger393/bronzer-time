@@ -44,3 +44,11 @@ Sheet: shots/buildings-compare.png (top = before, bottom = after). Counts come f
 - Shrine BLD is 1x1 (hidden, deleted size) - shape defined but tiny. Garden, well, campfire, plaza, senet, walls, bridges keep their open/legacy art (no interior).
 - Old saves: enlarged buildings may overlap their neighbours visually (occupancy is recomputed, no crash).
 - Doors on some rotations sit at a gap between rooms rather than on a wall face.
+
+## Round 2 fixes (shortfalls, variants, interiors, perf)
+- Farmstead: sleeping outbuilding (2 beds + 8 pallets = 10 places; 14 only with children sharing). Barracks: 8 bunks = capacity 8.
+- Workplaces have work spots matching worker slots (granary still has none). Shrine 3x3. Doors snapped to exterior wall faces. Room outlines joined.
+- Grants: farmstead placed by mask, may clear forest / spill onto free adjacent land: 8/8 fit.
+- 61 variants (2-4 per type), all pass reachability (shots/building-variants.png).
+- Not redone: temple, palace, market layouts; garden, well, campfire, plaza, senet, walls, bridges. Enlarged buildings in old saves can visually overlap neighbours.
+- Perf (headless, ~65 bldgs/66 agents): near 28.6->25.8 fps (noise), mid z1 17.1->14.4 (unchanged hotspot: per-prop drawImage), far z0.3 21.2->60.
