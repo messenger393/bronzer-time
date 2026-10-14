@@ -193,7 +193,7 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
  // steads produce & eat (families use everything on their land except ore)
  if(S.t%DAYLEN<kr){for(const s of E.steads)steadClear(s);try{mzSettle()}catch(e){}}
  for(const s of E.steads){const kids=Math.floor(s.n*.35),w=Math.max(1,s.n-kids),aw=s.away>S.t?Math.min(w-.5,s.an):0,fr=Math.min(1,s.f.length/(8+w*5));
-  const lab=(w-aw)*hm*(.5+.5*fr)*k*seasF()*(s.ow>0?.95:1)*(s.oven?.95:1),L=LAND[s.land].out;for(const g in L){const q=L[g]*lab*(g==='grain'||g==='flax'?EM.farm:1);s.st[g]=(s.st[g]||0)+q;s.prod+=q*EIT[g].v}steadBake(s,k);
+  const lab=(w-aw)*hm*(.5+.5*fr)*k*seasF()*(s.skf||1)*(s.ow>0?.95:1)*(s.oven?.95:1),L=LAND[s.land].out;for(const g in L){const q=L[g]*lab*(g==='grain'||g==='flax'?EM.farm:1);s.st[g]=(s.st[g]||0)+q;s.prod+=q*EIT[g].v}steadBake(s,k);
   let need=s.n*.4*k;for(const g of ECOFOOD){const h=s.st[g]||0,fv=g==='bread'?1.25:1,u=Math.min(h,need*(g==='grain'||g==='bread'?1:.5)/fv);s.st[g]=h-u;need-=u*fv}if(need>0){const h=s.st.grain||0,u=Math.min(h,need);s.st.grain=h-u;need-=u}if(need>.01){for(const src of [E.mkt,E.hold])for(const g of ['bread','grain','fish','dairy']){if(need<=.01)break;const h=src[g]||0,u=Math.min(h,need);if(u>0){src[g]=h-u;need-=u;const pz=u*EIT[g].v*(src===E.mkt?1:.8);s.sv=Math.max(0,(s.sv||0)-pz);if(src===E.hold){E.silver+=pz*.5}}}}if(need>.01)s.hun+=need;
   for(const g of['wool','flax','timber','clay'])if(s.st[g])s.st[g]-=Math.min(s.st[g],s.n*.025*k);
   for(const g in s.st){const r=EIT[g].rot;if(r)s.st[g]*=1-r*1.4*k}}
@@ -379,7 +379,31 @@ const FAM_SPLIT=12,FAM_CROWD=10;
 const FAM_ST={pend:'Waiting for land',stead:'Stead',craft:'Crafter household',merch:'Merchant house'};
 function famR(a){return a[(Math.random()*a.length)|0]}
 function famName(){const used=new Set((S.fam?S.fam.L:[]).map(f=>f.sn));const fr=FAM_S.filter(s=>!used.has(s));if(fr.length)return famR(fr);return famR(FAM_S)+'-'+famR(['ili','uwa','anda','ash','iya'])}
-function famMem(F,sex,age,rel){const m={i:++S.fam.mid,n:famR(sex==='f'?FAM_F:FAM_M),s:sex,a:age,r:rel};F.m.push(m);return m}
+// ===== 0.17 skills: per-pawn basic skills (1-100), ambition (0-5), advanced skills unlocked from basics =====
+const BSK={farm:'Farming',lumber:'Lumbering',cook:'Cooking',mine:'Mining',craft:'Crafting',gather:'Gathering'};
+const ADVSK={carpenter:['lumber','Carpenter'],builder:['craft','Builder'],mason:['mine','Mason'],baker:['cook','Baker'],brewer:['cook','Brewer'],smith:['craft','Smith'],fisher:['gather','Fisher'],potter:['craft','Potter'],weaver:['craft','Weaver']};
+const ADV_TH=40,ADV_P=.15;// advanced skill: basic skill >= 40, then a yearly chance (x ambition)
+const ambMul=L=>.85*(1+.15*(L||0));// ambition 0 "lazy" = 0.85x ... 5 = 1.49x
+function ambRoll(prev){const r=Math.random(),odds=[.15,.25,.25,.18,.12,.05];let a=0,acc=0;for(let i=0;i<6;i++){acc+=odds[i];if(r<acc){a=i;break}}if(prev==null)return a;// after rising: usually lower
+ if(Math.random()<.67)return Math.max(0,Math.min(prev-1,Math.floor(Math.random()*prev)));return a}
+function skInit(m,cap){if(m.sk)return m;cap=cap||35;m.sk={};const lim=Math.max(1,Math.min(cap,m.a>=14?6+(m.a-14)*1.1:1+m.a*.3));for(const k in BSK)m.sk[k]=Math.max(1,Math.round(1+Math.random()*lim*(.4+.6*Math.random())));m.amb=ambRoll();m.adv={};return m}
+// which basic skills a stead's land works (by its output goods); cooking and crafting are used by every household
+const GSK={grain:'farm',flax:'farm',timber:'lumber',clay:'mine',copper:'mine',tin:'mine',fish:'gather',wool:'gather',dairy:'gather'};
+function steadSkills(s){const o={cook:1,craft:1};try{for(const g in LAND[s.land].out)if(GSK[g])o[GSK[g]]=1}catch(e){}return o}
+function famOf(s){return S.fam?S.fam.L.find(F=>F.st==='stead'&&F.l===s.id):null}
+function famBest(F){const b={},adv={};for(const m of F.m){skInit(m);for(const k in m.sk)b[k]=Math.max(b[k]||0,m.sk[k]);for(const k in m.adv||{})adv[k]=Math.max(adv[k]||0,m.adv[k])}return{b,adv}}
+// stead efficiency from its members' relevant skills: ~1.0 at starting skill, at most ~1.4 at 100 (soft, so a few pawns can't flood the market)
+function steadSkF(s){const F=famOf(s);if(!F||!F.m.length)return 1;const u=steadSkills(s);let t=0,n=0;for(const m of F.m){if(m.a<12)continue;skInit(m);for(const k in u){t+=m.sk[k];n++}}if(!n)return 1;const av=t/n;return .93+.47*Math.min(1,av/100)}
+function skYear(){if(!S.fam)return;const E=S.eco;const sd={};if(E)E.steads.forEach(s=>sd[s.id]=s);
+ for(const F of S.fam.L){const s=F.st==='stead'?sd[F.l]:null,u=s?steadSkills(s):{cook:1,craft:1,gather:1};
+  for(const m of F.m){skInit(m);if(m.a<10)continue;const am=ambMul(m.amb),wk=m.a>=14&&m.a<62?1:.4;
+   for(const k in m.sk){const use=u[k]?1:.25,g=(u[k]?4:1)*am*wk*(1-m.sk[k]/115)*(.6+.8*Math.random())*use;m.sk[k]=Math.min(100,Math.max(1,m.sk[k]+g))}
+   for(const a in ADVSK){const base=ADVSK[a][0];if(m.adv[a])m.adv[a]=Math.min(100,m.adv[a]+(u[base]?2.5:.8)*am*(.5+Math.random()));else if(m.sk[base]>=ADV_TH&&m.a>=16&&Math.random()<ADV_P*am)m.adv[a]=1}}
+  if(s){s.skf=steadSkF(s);const fb=famBest(F);for(const c in CRAFT){if(CRAFT[c].build)continue;if(fb.adv[c])s.sk[c]=Math.max(s.sk[c]||0,3+fb.adv[c]/12)}}}}
+// best candidate member of a stead family for a craft (needs the advanced skill); weight = skill x ambition
+function riseCand(s,c){const F=famOf(s);if(!F)return null;let best=null,bw=0;for(const m of F.m){if(m.r==='head'||m.a<16||m.a>55||!m.adv||!m.adv[c])continue;const w=m.adv[c]*ambMul(m.amb);if(w>bw){bw=w;best=m}}return best?{F,m:best,w:bw}:null}
+function skTxt(v){return Math.round(v)}
+function famMem(F,sex,age,rel){const m={i:++S.fam.mid,n:famR(sex==='f'?FAM_F:FAM_M),s:sex,a:age,r:rel};skInit(m);F.m.push(m);return m}
 function famMake(st,n,opt){opt=opt||{};const F={id:++S.fam.sid,sn:opt.sn||famName(),st,l:opt.l==null?null:opt.l,m:[],t0:S.t||0};if(opt.first)F.first=1;
  if(n>=1){const hs=Math.random()<.85?'m':'f';famMem(F,hs,24+(Math.random()*22|0),'head');n--;
   if(n>=1&&!opt.lone){famMem(F,hs==='m'?'f':'m',20+(Math.random()*20|0),'spouse');n--}
@@ -420,7 +444,7 @@ function famSplit(F,sd){const g=F.m.filter(m=>m.r!=='head'&&m.r!=='spouse'&&m.a>
  const ks=F.m.filter(m=>m.r==='child'&&m.a<12).slice(0,1+(Math.random()*2|0));for(const k of ks){F.m.splice(F.m.indexOf(k),1);N.m.push(k)}N.from=F.sn;N.split=1;
  const moved=1+ks.length,L=F.st==='stead'?sd[F.l]:null;if(L){L.n=Math.max(1,L.n-moved);const sh=(L.sv||0)*.25;L.sv-=sh;N.sv=sh}else{const sh=(F.sv||0)*.25;F.sv=(F.sv||0)-sh;N.sv=sh}S.pop+=1;// the new spouse marries in
  famFixHead(F);log('Family split: '+a.n+' of the '+F.sn+' family married '+sp.n+' and founded '+(first?'a new line, the '+N.sn+' family (first of their name)':'a branch, the '+N.sn+' family')+'. They pitch a tent and wait for a Land Grant.')}
-function famYear(){if(!S.fam)return;try{builderRise()}catch(e){console.warn(e)}for(const F of S.fam.L)for(const m of F.m){m.a++;if(m.r==='child'&&m.a>=16&&F.m.length>=6&&Math.random()<.25&&F.st!=='pend'){/* grown child stays as kin */m.r='kin'}}}
+function famYear(){if(!S.fam)return;try{builderRise()}catch(e){console.warn(e)}for(const F of S.fam.L)for(const m of F.m){m.a++;if(m.r==='child'&&m.a>=16&&F.m.length>=6&&Math.random()<.25&&F.st!=='pend'){/* grown child stays as kin */m.r='kin'}}try{skYear()}catch(e){console.warn(e)}}
 function famNextPend(){return S.fam?S.fam.L.filter(F=>F.st==='pend'&&F.m.length).sort((a,b)=>a.t0-b.t0||b.m.length-a.m.length)[0]:null}
 function famTentRm(F){const i=S.bl.findIndex(b=>b.t==='tent'&&b.fam===F.id);if(i>=0){S.bl.splice(i,1);rebuildOcc();if(S.eco)S.eco._wc=1}}
 function famTents(){if(!TER||!S.bl)return;const ids=new Set(S.fam.L.filter(F=>F.st==='pend').map(F=>F.id));let ch=0;const FT0=[];
@@ -840,7 +864,7 @@ function load(){try{S=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem
 function migrate3(){S.seed=S.seed||7;genWorld(S.seed);S.center={x:START.x,y:START.y};const old=S.grid||[];S.bl=[];S.tier=(S.tier||0)+1;rebuildOcc();
  old.forEach((b,i)=>{if(!b)return;const gx=i%12,gy=Math.floor(i/12),x=S.center.x-15+gx*3,y=S.center.y-10+gy*3;if(!placeErr(b.t,x,y,true)){S.bl.push({t:b.t,l:b.l,x,y});rebuildOcc()}else autoPlace(b.t,b.l,true)});
  if(!S.bl.length)S.bl.push({t:'house',l:1,x:S.center.x,y:S.center.y});delete S.grid;S.ev.act=(S.ev.act||[]).filter(e=>e.id!=='fire');S.v=3}
-function migrate(){if(S.res&&!S.tv2){S.tv2=1;if(S.eco&&S.eco.yt)S.eco.yt=Math.floor(S.eco.yt*(ECO_YD*DAYLEN)/(60*540))}if(S.bl&&S.bl.some(b=>b.t==='thresh'||b.t==='shed')){const rf={thresh:{wood:5,stone:15},shed:{wood:20}};S.bl=S.bl.filter(b=>{const r=rf[b.t];if(!r)return true;for(const k in r)S.res[k]=(S.res[k]||0)+Math.round(r[k]*(b.l||1)*.5);return false});if(S.dm)for(const k in S.dm)if(/^(thresh|shed)/.test(k))delete S.dm[k]}if(S.res&&!S.mw)S.mw=256;if(S.res&&!S.itemsV){S.itemsV=1;S.stk={};if((S.tier||0)>=1&&S.bl&&S.bl.length&&!S.bl.some(b=>b.t==='storehouse'))S.needStore=1}(S.bl||[]).forEach(b=>{if(b.t==='tent'||b.t==='farm'){delete b.fv}});if((S.v||1)<2){S.companies=[];S.cid=0;const map={spear:'spear',archer:'archer',chariot:'lchariot'};
+function migrate(){if(S.res&&S.fam&&!S.skv){S.skv=1;try{const sd={};if(S.eco)S.eco.steads.forEach(q=>sd[q.id]=q);for(const F of S.fam.L){for(const m of F.m)skInit(m);const st=F.st==='stead'?sd[F.l]:null;if(st&&st.sk)for(const c in st.sk){if(!ADVSK[c]||st.sk[c]<3)continue;const m=F.m.filter(m=>m.r!=='head'&&m.a>=16).sort((x,y)=>y.a-x.a)[0];if(m){m.adv[c]=Math.max(1,Math.round((st.sk[c]-3)*12));m.sk[ADVSK[c][0]]=Math.max(m.sk[ADVSK[c][0]],ADV_TH)}}}}catch(e){console.warn(e)}}if(S.res&&!S.tv2){S.tv2=1;if(S.eco&&S.eco.yt)S.eco.yt=Math.floor(S.eco.yt*(ECO_YD*DAYLEN)/(60*540))}if(S.bl&&S.bl.some(b=>b.t==='thresh'||b.t==='shed')){const rf={thresh:{wood:5,stone:15},shed:{wood:20}};S.bl=S.bl.filter(b=>{const r=rf[b.t];if(!r)return true;for(const k in r)S.res[k]=(S.res[k]||0)+Math.round(r[k]*(b.l||1)*.5);return false});if(S.dm)for(const k in S.dm)if(/^(thresh|shed)/.test(k))delete S.dm[k]}if(S.res&&!S.mw)S.mw=256;if(S.res&&!S.itemsV){S.itemsV=1;S.stk={};if((S.tier||0)>=1&&S.bl&&S.bl.length&&!S.bl.some(b=>b.t==='storehouse'))S.needStore=1}(S.bl||[]).forEach(b=>{if(b.t==='tent'||b.t==='farm'){delete b.fv}});if((S.v||1)<2){S.companies=[];S.cid=0;const map={spear:'spear',archer:'archer',chariot:'lchariot'};
  for(const k in (S.army||{})){let n=S.army[k];while(n>0){const m=Math.min(CMAX,n);n-=m;S.cid++;S.companies.push({id:S.cid,name:NICK[(S.cid-1)%NICK.length],type:map[k],men:m,xp:10,armor:0,slot:defSlot(map[k])})}}
  delete S.army;S.scouted={};S.general={name:'Hattu',lvl:1,xp:0};S.formation='line';S.v=2}
  S.scouted=S.scouted||{};S.ev=S.ev||{act:[],next:200};for(const[k,v]of[['extraJobs',{}],['bonus',{}],['tech',{}],['won',[]],['jobs',{}],['companies',[]],['log',[]],['general',{name:'Hattu',lvl:1,xp:0}]])if(!S[k])S[k]=v;if((S.v||2)<3)migrate3();if(S.v<4)migrate4();if(S.v<5)migrate5();S.companies=S.companies||[];S.general=S.general||{name:'Hattu',lvl:1,xp:0};ecoMigrate()}
@@ -1703,8 +1727,14 @@ function migrate5(){const oc=S.center||{x:30,y:26},dx=START.x-oc.x,dy=START.y-oc
 function migrate4(){genWorld(S.seed||7);const old=S.bl||[];S.bl=[];rebuildOcc();roadSet=new Uint8Array(MW*MH);const hub=old.filter(b=>b.t==='granary'||b.t==='campfire'||b.t==='palace');old.sort((a,b)=>(hub.includes(b)?1:0)-(hub.includes(a)?1:0));
  for(const b of old){if(!placeErrBase(b.t,b.x,b.y,true)){S.bl.push(b);rebuildOcc()}else autoPlace(b.t,b.l,true)}delete S.roads;computeRoads.S=null;S.v=4}
 // ---------- inspect pane ----------
+
+const skBar=(v,c)=>'<span style="display:inline-block;width:70px;height:7px;background:rgba(255,255,255,.12);border-radius:3px;vertical-align:middle;margin:0 4px"><span style="display:block;height:7px;width:'+Math.max(2,Math.min(100,v))*.7+'px;background:'+(c||'#c8a050')+';border-radius:3px"></span></span>';
+function skHTML(m){skInit(m);let h='<div class="small" style="margin-top:6px"><b>Skills</b> · Ambition '+(m.amb||0)+' ('+ambMul(m.amb).toFixed(2)+'× learning'+(m.amb===0?', lazy':'')+')<table style="border-collapse:collapse">';
+ for(const k in BSK)h+='<tr><td>'+BSK[k]+'</td><td>'+skBar(m.sk[k])+'</td><td class="n">'+skTxt(m.sk[k])+'</td></tr>';
+ const ad=Object.keys(m.adv||{});h+='</table>'+(ad.length?'<b>Advanced</b><table>'+ad.map(a=>'<tr><td>'+ADVSK[a][1]+'</td><td>'+skBar(m.adv[a],'#7ab8e0')+'</td><td class="n">'+skTxt(m.adv[a])+'</td></tr>').join('')+'</table>':'<span style="opacity:.7">No advanced skills yet (needs a basic skill of '+ADV_TH+').</span>')+'</div>';return h}
+function hungHTML(a){const v=Math.max(0,Math.min(1,a.hung||0)),c=v>.75?'#ff7a5a':v>.5?'#f0c060':'#8fd07a',w=v>.75?'Starving — going home to eat':v>.5?'Hungry':v>.25?'Peckish':'Fed';return 'Hunger:'+skBar(v*100,c)+'<b>'+w+'</b>'+(a.mq!=null?' · last meal '+['poor','plain','good','fine'][Math.min(3,Math.floor(a.mq*4))]:'')+'<br>'}
 function showInsp(){const P=$('insp');if(!sel){P.style.display='none';return}P.innerHTML='';const h=document.createElement('b');P.appendChild(h);const d=document.createElement('div');P.appendChild(d);
- if(sel.a){const a=sel.a,L=LINES[a.role]||['Villager','Hi!'];h.textContent=L[0];d.innerHTML=(a.sick?'Health: <span style="color:#d8e890">ill</span>':'Health: good')+'<br>Doing: '+(a.carry?'hauling '+a.carry:a.state==='work'?'working':a.state==='home'?'resting':a.state)+(HAPPINESS?'<br>Mood: '+pawnMood(a)+'% ('+moodW(pawnMood(a))+')':'')+'<br><span class="small">'+(S.hapF||[]).slice().sort((x,y)=>Math.abs(y[1])-Math.abs(x[1])).slice(0,4).map(f=>(f[1]>0?'+':'')+f[1]+' '+f[0]).join('<br>')+'</span><br><i>"'+L[1]+'"</i>';const fa=famForAgent(a);if(fa&&fa[0]){d.insertAdjacentHTML('beforeend',famHTML(fa[0],fa[1]));famBind(d);const mm=fa[0].m.find(m=>m.i===fa[1]);if(mm)h.textContent=mm.n+' '+fa[0].sn+' · '+L[0]}}
+ if(sel.a){const a=sel.a,L=LINES[a.role]||['Villager','Hi!'];h.textContent=L[0];d.innerHTML=(a.sick?'Health: <span style="color:#d8e890">ill</span>':'Health: good')+'<br>Doing: '+(a.carry?'hauling '+a.carry:a.state==='work'?'working':a.state==='home'?'resting':a.state)+(HAPPINESS?'<br>Mood: '+pawnMood(a)+'% ('+moodW(pawnMood(a))+')':'')+'<br><span class="small">'+(S.hapF||[]).slice().sort((x,y)=>Math.abs(y[1])-Math.abs(x[1])).slice(0,4).map(f=>(f[1]>0?'+':'')+f[1]+' '+f[0]).join('<br>')+'</span><br><i>"'+L[1]+'"</i>';const fa=famForAgent(a);if(fa&&fa[0]){d.insertAdjacentHTML('beforeend',famHTML(fa[0],fa[1]));famBind(d);const mm=fa[0].m.find(m=>m.i===fa[1]);if(mm){h.textContent=mm.n+' '+fa[0].sn+' · '+L[0];d.insertAdjacentHTML('beforeend',skHTML(mm))}}if(a.hung!=null)d.insertAdjacentHTML('afterbegin',hungHTML(a))}
  else if(sel.n){const r=rnInfoAt(sel.n[0],sel.n[1]);if(!r){sel=null;P.style.display='none';return}h.textContent=r.h;d.innerHTML=r.t}
  else{const i=sel.i,b=S.bl[i];if(!b){sel=null;P.style.display='none';return}const s=bsz(b.t),mx=3+S.tier,c=bcost(b.t,b.l);h.textContent=BLD[b.t].n+'  Lv'+b.l;
   let tx=BLD[b.t].d+'<br>Size '+s+'x'+s;if(S.tier>=1&&!NOROAD[b.t])tx+='<br>Road: '+(CONN[i]?'<span style="color:#9fe07a">connected (faster walking)</span>':'none — works fine; paths wear in where people walk');
@@ -1841,7 +1871,7 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
  vis.migr=vis.migr.filter(m=>{if(!m.route.length)return false;const p=m.route[0],dx=p.x-m.x,dy=p.y-m.y,d=Math.hypot(dx,dy),sp=.9*dt;m.dir=dirOf(dx,dy);m.ft+=dt*7;if(d<=sp){m.x=p.x;m.y=p.y;m.route.shift()}else{m.x+=dx/d*sp;m.y+=dy/d*sp}const P=isoP(m.x,m.y);if(z>=.5)D.push({k:P.y,f:()=>drawAgent(m,P,true,now)});return m.route.length>0});
  if(vis.raid&&z>=.5){const c=S.center,R=RAD[S.tier];for(let k=0;k<Math.min(10,vis.raid);k++){const p=isoP(c.x-R-1+(k%2)*.7,c.y-2+k*.6);const a={o:OUTFIT.raider,dir:0,ft:now/140+k,role:'soldier',idx:k};D.push({k:p.y,f:()=>drawAgent(a,p,true,now)})}}
  if(vis.caravan&&z>=.5){const h=hubT();for(let k=0;k<3;k++){const c={k:'goat',x:h.x+1+k*.8,y:h.y+.4,dir:1};D.push({k:c.y*TS,f:()=>{critDraw(c,now);rr(vx,c.x*TS-5,c.y*TS-6,10,5,1,k%2?PB.red[3]:PB.glaze[3],OUTL,.6)}})}const mp=isoP(h.x+.4,h.y-.4);D.push({k:mp.y,f:()=>drawAgent({o:OUTFIT.merchant,dir:1,ft:0,idx:0},mp,false,now)})}
- ecoVis(D,dt,z,inV,now);if(BV)bvPush(D,now,inV);D.sort((a,b)=>a.k-b.k);for(const d of D)d.f();if(propBake.up&&propBake.on){for(const[c,x,y,w]of propBake.up)vx.drawImage(c,x,y,w,w)}propBake.on=0;if(BV)bvOver(now,inV);
+ ecoVis(D,dt,z,inV,now);if(BV)bvPush(D,now,inV);D.sort((a,b)=>a.k-b.k);for(const d of D)d.f();if(propBake.up&&propBake.on){for(const[c,x,y,w]of propBake.up)vx.drawImage(c,x,y,w,w)}propBake.on=0;if(BV)bvOver(now,inV);if(DEVO.occ&&z>=.3){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){const i=gy*MW+gx;if(occ[i]){vx.fillStyle='rgba(255,60,40,.28)';vx.fillRect(gx*TS,gy*TS,TS,TS)}else if(roadSet[i]){vx.fillStyle='rgba(60,140,255,.22)';vx.fillRect(gx*TS,gy*TS,TS,TS)}}if(z>=.8){vx.strokeStyle='rgba(255,255,255,.12)';vx.lineWidth=1/z;vx.beginPath();for(let gx=gx0;gx<=gx1+1;gx++){vx.moveTo(gx*TS,gy0*TS);vx.lineTo(gx*TS,(gy1+1)*TS)}for(let gy=gy0;gy<=gy1+1;gy++){vx.moveTo(gx0*TS,gy*TS);vx.lineTo((gx1+1)*TS,gy*TS)}vx.stroke()}}
  if(S.beau&&BEAU){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){const v=BEAU[gy*MW+gx];if(Math.abs(v)<.4)continue;const L=Math.max(-1,Math.min(1,v/12));vx.fillStyle=L>0?'hsla('+(70+L*80|0)+',85%,'+(55-L*10)+'%,'+(.12+L*.33)+')':'hsla(10,85%,45%,'+(.18-L*.35)+')';vx.fillRect(gx*TS,gy*TS,TS,TS)}}
  if(S.heat){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){const i=gy*MW+gx;if(!roadSet[i])continue;const L=Math.min(1,LOAD[i]/1.4);vx.fillStyle='hsla('+((1-L)*120|0)+',85%,50%,.5)';vx.fillRect(gx*TS+1,gy*TS+1,TS-2,TS-2)}}
  fbOver(vl,vr,vt,vb,now,z);
@@ -3834,4 +3864,28 @@ function fpsOv(){let d=$('fpsov');if(!GFX.fps){if(d)d.style.display='none';retur
   requestAnimationFrame(loop)};requestAnimationFrame(loop)}
 addEventListener('keydown',e=>{if(e.key==='F3'){e.preventDefault();GFX.fps=!GFX.fps;try{gfxSave()}catch(_){}fpsOv()}});
 setTimeout(fpsOv,500);
+
+// ---- 0.17 Dev mode (Ctrl+Shift+D, or ?dev in the URL): test tools; any use marks the save as dev-tainted ----
+const DEVO={on:0,occ:0};
+function devT(){S.devT=1}
+function devSkip(ticks,done){const was=spd;setSpeed(0);let left=ticks;const step=()=>{const t0=performance.now();try{while(left>0&&performance.now()-t0<40){tick();left--}}catch(e){console.warn(e);left=0}const p=$('devp');if(p&&p._st)p._st.textContent=left>0?'Running… '+Math.round(100-100*left/ticks)+'%':'Done';if(left>0)setTimeout(step,0);else{setSpeed(was);renderTop();renderView();done&&done()}};step()}
+function devPanel(){let P=$('devp');if(!DEVO.on){if(P)P.style.display='none';return}if(!P){P=document.createElement('div');P.id='devp';P.style.cssText='position:fixed;right:8px;top:44px;z-index:95;width:236px;max-height:78vh;overflow:auto;background:rgba(20,14,10,.94);color:#f0e0c0;font:12px sans-serif;padding:8px;border:1px solid #c89a4a;border-radius:6px';document.body.appendChild(P)}P.style.display='block';P.innerHTML='<b style="color:#ffcc66">DEV MODE</b> <span class="small" style="opacity:.7">Ctrl+Shift+D</span><div id="devst" class="small" style="margin:4px 0;opacity:.8"></div>';
+ const st=P.querySelector('#devst');P._st=st;st.textContent=(S.devT?'Save is dev-tainted · ':'')+'Day '+(calInfo().day)+' · '+SEASN[seasI()]+' · Yr '+(S.eco?S.eco.yr:1);
+ const add=(t,f)=>{const b=btn(t,()=>{devT();f();devPanel()});b.style.cssText='display:block;width:100%;margin:3px 0;padding:4px 6px;font-size:12px';P.appendChild(b)};
+ add('+500 food, wood, stone, metals',()=>{for(const r of ['food','wood','stone','copper','tin','bronze'])S.res[r]=(S.res[r]||0)+500;renderTop()});
+ add('+1000 crown silver',()=>{if(S.eco)S.eco.silver=(S.eco.silver||0)+1000;renderTop()});
+ add('Skip to next morning',()=>{const d=DAYLEN-(S.t%DAYLEN);devSkip(d)});
+ add('Skip 1 season ('+(ECO_YD/4)+' days)',()=>devSkip(yearLen()/4));
+ add('Skip to Tithe Day (end of year)',()=>{if(S.eco)devSkip(Math.max(1,yearLen()-S.eco.yt));});
+ add('Force a family split',()=>{if(!S.fam)return;const E=S.eco,sd={};(E?E.steads:[]).forEach(s=>sd[s.id]=s);const F=S.fam.L.filter(F=>F.st==='stead'||F.st==='pend').sort((a,b)=>b.m.length-a.m.length).find(F=>F.m.some(m=>m.r!=='head'&&m.r!=='spouse'&&m.a>=18&&m.a<50));if(F)famSplit(F,sd);else log('Dev: no family has an adult child to split off.')});
+ add('Age everyone +1 year',()=>{try{famYear()}catch(e){console.warn(e)}});
+ add('Max skills of selected pawn',()=>{const m=devSelMem();if(m&&m.sk){for(const k in m.sk)m.sk[k]=100;m.adv=m.adv||{};for(const k of Object.keys(ADVSK))m.adv[k]=Math.max(m.adv[k]||0,1);log('Dev: maxed '+m.n)}else log('Dev: select a stead/family pawn first.')});
+ add('Feed everyone (hunger 0)',()=>{for(const a of agents)a.hung=0;if(S.fam)for(const F of S.fam.L)for(const m of F.m)m.hg=0});
+ add('Starve everyone (hunger 0.9)',()=>{for(const a of agents)a.hung=.9});
+ add((DEVO.occ?'Hide':'Show')+' occupancy / grid overlay',()=>{DEVO.occ=!DEVO.occ});
+ add('FPS overlay (F3)',()=>{GFX.fps=!GFX.fps;fpsOv()});
+ add('Close',()=>{DEVO.on=0})}
+function devSelMem(){try{if(sel&&sel.a&&sel.a.mem)return sel.a.mem;if(sel&&sel.m)return sel.m}catch(e){}return null}
+addEventListener('keydown',e=>{if(e.ctrlKey&&e.shiftKey&&(e.key==='D'||e.key==='d')){e.preventDefault();DEVO.on=!DEVO.on;devPanel()}});
+if(/[?&]dev\b/.test(location.search))setTimeout(()=>{DEVO.on=1;devPanel()},1500);
 </script></body></html>
