@@ -20,3 +20,12 @@ Bronze and Blood, made by Weston Gordon.
 | Wind | generated for this game (filtered brown noise, ffmpeg) | — | — |
 
 Files were re-encoded to Ogg Vorbis (music 64 kbps, ambience 32 to 48 kbps mono; ambience trimmed to 40 s loops).
+
+## More ambience and work sounds
+| Sound | Author | License | Source |
+|---|---|---|---|
+| River / running water | hippodevelopment | CC-BY 3.0 | https://opengameart.org/content/running-water-background-noise |
+| Village crowd (low-passed) | starninjas | CC0 | https://opengameart.org/content/crowd-shoutingspeaking-ambience |
+| Chopping wood | Kurt | CC-BY 3.0 | https://opengameart.org/content/chopping-tree |
+| Hammer on anvil | themightyglider | CC0 | https://opengameart.org/content/hammer-on-anvil |
+| UI clicks (wooden game pieces, trimmed) | aidanwalker | CC0 | https://opengameart.org/content/boardgame-piece-wobbles |
