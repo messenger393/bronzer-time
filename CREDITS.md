@@ -29,3 +29,5 @@ Files were re-encoded to Ogg Vorbis (music 64 kbps, ambience 32 to 48 kbps mono;
 | Chopping wood | Kurt | CC-BY 3.0 | https://opengameart.org/content/chopping-tree |
 | Hammer on anvil | themightyglider | CC0 | https://opengameart.org/content/hammer-on-anvil |
 | UI clicks (wooden game pieces, trimmed) | aidanwalker | CC0 | https://opengameart.org/content/boardgame-piece-wobbles |
+
+- Ram's horn ("Small Shofar") by Sauron974, CC0: https://freesound.org/people/Sauron974/sounds/223368/ (trimmed to one blast as audio/sfx-ramhorn.ogg)
