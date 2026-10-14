@@ -588,7 +588,7 @@ function renderTaxes(V){const E=S.eco;if(!E){V.textContent='…';return}const P=
  sl('Crown patronage','patron',0,50,5,v=>v+'% of crafts',null,'The crown buys this share of crafted goods at 1.5× price.');
  sl('Royal household','house',0,3,1,v=>['none','modest','courtly','splendid'][v]);
  sec('Silver spends','One-off silver costs. Parks, fountains and monuments are now buildings (Construction › Buildings › Decor); mercenaries are in Military.');
- const g=document.createElement('div');g.className='taxbuy';for(const k in ECOBUY){const B=ECOBUY[k];if(B.hide||B.army)continue;const c=typeof B.s==='function'?B.s():B.s,ok=!B.ok||B.ok();const b=btn(B.n+' · '+c+'⛁',()=>{ecoBuy(k);renderView()},E.silver<c||!ok);tipOn(b,()=>B.d);g.appendChild(b)}P.appendChild(g);
+ const g=document.createElement('div');g.className='taxbuy';for(const k in ECOBUY){const B=ECOBUY[k];if(B.hide||B.army)continue;const c=typeof B.s==='function'?B.s():B.s,ok=!B.ok||B.ok();const b=btn(B.n+' · '+c+'⛁',()=>{ecoBuy(k);renderView()},E.silver<c?'Needs '+c+' silver (treasury: '+Math.floor(E.silver)+')':!ok?'Not available right now':'');tipOn(b,()=>B.d);g.appendChild(b)}P.appendChild(g);
  H('<p class="small muted">Money and ledgers: <a href="#" onclick="openTab(\'budget\');return false">Budget</a> · Petitions and grants: <a href="#" onclick="openTab(\'admin\');return false">Administration</a></p>');taxSum()}
 function taxLive(){taxSum()}
 function taxSum(){const el=$('taxsum');if(!el||!S.eco)return;const E=S.eco,I=calInfo();const c=(v,l)=>'<div><b>'+v+'</b><span>'+l+'</span></div>';
@@ -626,7 +626,7 @@ function renderAdmin(V){const E=S.eco;if(!E){V.textContent='…';return}const tb
 function sel_(i){sel={i};showInsp()}
 // ---- Military: Army & Mercenaries ----
 function armyMercs(V){const E=S.eco;const d=document.createElement('div');d.className='tsec';d.innerHTML='<b>Army & Mercenaries</b>';V.appendChild(d);if(!E)return;const B=ECOBUY.mercs;
- const r=document.createElement('div');r.className='seg';r.appendChild(btn('Hire 8 mercenaries · '+B.s+'⛁',()=>{ecoBuy('mercs');renderView()},E.silver<B.s));V.appendChild(r);
+ const r=document.createElement('div');r.className='seg';r.appendChild(btn('Hire 8 mercenaries · '+B.s+'⛁',()=>{ecoBuy('mercs');renderView()},E.silver<B.s?'Needs '+B.s+' silver (treasury: '+Math.floor(E.silver)+')':''));V.appendChild(r);
  const l=document.createElement('label');l.className='st';l.innerHTML='<span>Training grounds drill (soldiers gain experience, extra wages)</span>';const i=document.createElement('input');i.type='checkbox';i.checked=!!E.drill;i.onchange=()=>{E.drill=i.checked?1:0;save()};l.appendChild(i);V.appendChild(l);
  const mer=S.companies.filter(c=>c.merc).reduce((a,c)=>a+c.men,0);V.insertAdjacentHTML('beforeend','<p class="small">Soldiers from your people: '+soldN()+' (paid from the tithe'+(E.unpaid?', <span style="color:#ff9070">currently unpaid</span>':'')+') · Mercenaries: '+mer+' (1.5 silver per man per year; dismiss with ✕ on the company).</p>')}
 
@@ -960,7 +960,7 @@ function fixJobs(){const fd=j=>JOBS[j]&&JOBS[j][1]==='food';while(employed()>S.p
 // ---------- rendering ----------
 const $=id=>document.getElementById(id);
 let cur='build';
-function btn(txt,fn,dis,cls){const b=document.createElement('button');b.textContent=txt;b.disabled=!!dis;if(cls)b.className=cls;b.onclick=e=>{e.stopPropagation();fn();save();renderTop();renderView()};return b}
+function btn(txt,fn,dis,cls){const b=document.createElement('button');b.textContent=txt;b.disabled=!!dis;if(dis&&typeof dis==='string')b.title=dis;if(cls)b.className=cls;b.onclick=e=>{e.stopPropagation();fn();save();renderTop();renderView()};return b}
 function row(parent,label,sub,...btns){const r=document.createElement('div');r.className='row';const l=document.createElement('div');l.innerHTML=label+(sub?'<div class="small">'+sub+'</div>':'');r.appendChild(l);const b=document.createElement('div');btns.forEach(x=>b.appendChild(x));r.appendChild(b);parent.appendChild(r);return r}
 function bldAvail(k){const B=BLD[k];if(B.tier>S.tier)return'Needs '+TIERS[B.tier].n;if(B.tech&&!S.tech[B.tech])return'Needs '+TECH[B.tech].n;if(B.req&&!S.won.some(i=>REG[i]&&REG[i].v===B.req))return'Conquer Tin Hills';return''}
 function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderArchitect(V);return}if(cur==='jobs'){renderWork(V);renderPolicy(V);return}if(cur==='log'){V.innerHTML='<div id="loglist"></div>';renderLog();return}if(cur==='taxes'){renderTaxes(V);return}if(cur==='fam'){renderFamilies(V);return}if(cur==='budget'){renderBudget(V);return}if(cur==='admin'){renderAdmin(V);return}
@@ -985,9 +985,9 @@ function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderA
     btn('✕',()=>{if(confirm('Disband '+c.name+'?')){S.companies=S.companies.filter(x=>x!==c);if(S.eco&&!c.merc)S.eco._sol-=c.men}}))});
   if(!S.companies.length)V.innerHTML+='<div class="small">No companies yet.</div>';
   V.appendChild(Object.assign(document.createElement('b'),{textContent:'Recruit'}));
-  for(const t in UNIT){const U=UNIT[t],lock=unitLock(t);if(U.civ&&U.civ!==(S.civ||'egypt'))continue;row(V,U.n,lock||('A'+U.atk+' D'+U.def+' HP'+U.hp+' Spd'+U.spd+(U.rng?' ranged':'')+' Arm'+U.arm+(U.ap?' AP'+U.ap:'')+(U.shock?' shock':'')+' · '+cstr(U.cost)+' · upkeep '+U.up),btn('Recruit',()=>recruit(t),lock||!can(U.cost)||armyN()>=armyCap()))}}
+  for(const t in UNIT){const U=UNIT[t],lock=unitLock(t);if(U.civ&&U.civ!==(S.civ||'egypt'))continue;row(V,U.n,lock||('A'+U.atk+' D'+U.def+' HP'+U.hp+' Spd'+U.spd+(U.rng?' ranged':'')+' Arm'+U.arm+(U.ap?' AP'+U.ap:'')+(U.shock?' shock':'')+' · '+cstr(U.cost)+' · upkeep '+U.up),btn('Recruit',()=>recruit(t),lock||(!can(U.cost)?'Not enough resources: needs '+cstr(U.cost):'')||(armyN()>=armyCap()?'Army at capacity ('+armyCap()+'): build or upgrade barracks':'')))}}
  if(cur==='tech'){V.innerHTML='<h3>Tech Tree</h3>';for(const k in TECH){const T=TECH[k];const lock=T.req&&!S.tech[T.req];
-  row(V,(S.tech[k]?'✔ ':'')+T.n,T.d+(S.tech[k]?'':' · '+cstr(T.cost))+(lock?' · needs '+TECH[T.req].n:''),btn(S.tech[k]?'Done':'Learn',()=>{if(pay(T.cost)){S.tech[k]=1;log('Learned '+T.n+'!')}},S.tech[k]||lock||!can(T.cost)))}}
+  row(V,(S.tech[k]?'✔ ':'')+T.n,T.d+(S.tech[k]?'':' · '+cstr(T.cost))+(lock?' · needs '+TECH[T.req].n:''),btn(S.tech[k]?'Done':'Learn',()=>{if(pay(T.cost)){S.tech[k]=1;log('Learned '+T.n+'!')}},S.tech[k]?'Already learned':lock?'Needs '+TECH[T.req].n+' first':!can(T.cost)?'Not enough resources: needs '+cstr(T.cost):''))}}
  if(cur==='map'){V.innerHTML='<h3>Region Map</h3><div class="small">Tap a flag to scout or attack. Our army: '+armyN()+' men</div>';const c=document.createElement('canvas');c.width=256;c.height=150;V.appendChild(c);drawMap(c);
   c.onclick=e=>{const r=c.getBoundingClientRect();const x=(e.clientX-r.left)*256/r.width,y=(e.clientY-r.top)*150/r.height;let best=-1,bd=400;REG.forEach((g,i)=>{const d=(g.x-x)**2+(g.y-y)**2;if(d<bd){bd=d;best=i}});if(best>=0)regionModal(best)};
   REG.forEach((g,i)=>row(V,(S.won.includes(i)?'🚩 ':'')+g.n+(S.won.includes(i)?'':' · '+CIV[ownersFor(S.civ||'egypt')[i]].n),TERR[g.terr].n+' · '+(S.scouted[i]?enemyMen(i)+' men, '+FORM[g.form].n:'~'+enemyMen(i)+' men?')+' · '+g.d,btn(S.won.includes(i)?'Ours':'Attack',()=>regionModal(i),S.won.includes(i))))}
