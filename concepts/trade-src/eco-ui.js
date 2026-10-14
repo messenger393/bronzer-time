@@ -1,0 +1,42 @@
+/*ECOUI START*/
+function renderTaxes(V){const E=S.eco;if(!E){V.textContent='…';return}const P=document.createElement('div');P.className='panel tax';V.appendChild(P);
+ const H=(h)=>P.insertAdjacentHTML('beforeend',h);
+ H('<h3>Taxes & Treasury</h3>');
+ if(!holdB()){H('<p>Build the <b>Imperial Holding</b> (Architect → Storage) to start the tithe economy. Serf families will be granted steads on open land around the city, farm them, and once a year carry the tithe to the Holding — your treasury.</p>');const b=btn('Place Imperial Holding',()=>{if(cur!=='build')openTab('build');placing='holding';log('Tap an empty spot to place the Imperial Holding')},!!bldAvail('holding'),'pri');P.appendChild(b);if(bldAvail('holding'))H('<p class="small">'+bldAvail('holding')+'</p>')}
+ const live=document.createElement('div');live.id='taxlive';P.appendChild(live);
+ const sl=(lab,key,min,max,step,fmt,hint)=>{const l=document.createElement('label');l.className='st taxsl';l.innerHTML='<span>'+lab+'</span>';const i=document.createElement('input');i.type='range';i.min=min;i.max=max;i.step=step;i.value=E[key];const o=document.createElement('b');const up=()=>{o.innerHTML=fmt(E[key])+(hint?' <span class="small">'+hint(E[key])+'</span>':'')};up();i.oninput=()=>{E[key]=+i.value;up();taxLive()};i.onchange=()=>save();l.appendChild(i);l.appendChild(o);P.appendChild(l)};
+ const ck=(lab,key)=>{const l=document.createElement('label');l.className='st';l.innerHTML='<span>'+lab+'</span>';const i=document.createElement('input');i.type='checkbox';i.checked=!!E[key];i.onchange=()=>{E[key]=i.checked?1:0;save();taxLive()};l.appendChild(i);P.appendChild(l)};
+ const sec=t=>H('<div class="hdr2" style="margin-top:8px"><b>'+t+'</b></div>');
+ sec('Tithe (from serf steads)');
+ sl('Tithe','tithe',5,60,1,v=>v+'%',v=>v<10?'<span style="color:#ffb070">too low: the court & miners go unpaid</span>':v<=25?'<span style="color:#9fe07a">healthy (15–25%)</span>':v<=35?'<span style="color:#ffd070">heavy: slower rise, waste</span>':'<span style="color:#ff8070">crushing: hunger & unrest</span>');
+ H('<p class="small">Each family pays this share of its year’s produce, in its main item first, carried to the Holding on Tithe Day. What is left is their wage: it becomes savings, donkeys and carts, and skilled members rising to crafters.</p>');
+ ck('Grant steads to idle & landless families','autoStead');
+ {const r=document.createElement('div');r.className='seg';r.appendChild(btn('Grant a stead now (3 idle people)',()=>{if(S.pop-employed()<3){log('Need 3 idle people for a new stead.');return}if(foundStead(3))log('A stead was granted.');else log('No open land found for a stead.')},!holdB()));
+  const all=document.createElement('select');all.innerHTML='<option value="">All steads: main item…</option><option value="auto">Auto</option>'+Object.keys(EIT).filter(g=>!EIT[g].cr).map(g=>'<option value="'+g+'">'+EIT[g].n+'</option>').join('');all.onchange=()=>{const v=all.value;if(!v)return;for(const s of E.steads)s.main=(v==='auto'||LAND[s.land].out[v])?v:s.main;log('Main tithe item set to '+(v==='auto'?'Auto':EIT[v].n)+' where the land allows it.');save();taxLive()};r.appendChild(all);P.appendChild(r)}
+ sec('Merchants (chartered houses)');
+ sl('Merchant tax','mtax',0,50,1,v=>v+'%',v=>v>30?'<span style="color:#ff8070">houses may evade or leave</span>':'');
+ sl('Charter limit','charters',0,20,1,v=>v+' houses');ck('Auto-grant charters up to the limit','autoCh');
+ sl('Sell Holding surplus above','sell',40,100,5,v=>v>=100?'never':v+'% of storage');
+ sec('Royal spending (paid in tithe goods)');
+ sl('Crown patronage','patron',0,50,5,v=>v+'% of crafts',()=>'bought at 1.5×');
+ sl('Royal household','house',0,3,1,v=>['none','modest','courtly','splendid'][v],()=>'+happiness, costs wages');
+ ck('Training grounds drill (soldiers gain experience, extra wages)','drill');
+ {const r=document.createElement('div');r.className='seg';r.appendChild(btn(E.mineL>=3?'Royal mines: max level':'Upgrade royal mines → Lv'+(E.mineL+1)+' ('+mineCost()+' in goods)',ecoMineUp,E.mineL>=3||holdVal()<mineCost()));P.appendChild(r)}
+ sec('Silver projects');
+ const g=document.createElement('div');g.className='taxbuy';for(const k in ECOBUY){const B=ECOBUY[k],c=typeof B.s==='function'?B.s():B.s,ok=!B.ok||B.ok();const b=btn(B.n+' · '+c+'⛁',()=>ecoBuy(k),E.silver<c||!ok);b.title=B.d;g.appendChild(b)}P.appendChild(g);
+ const pt=document.createElement('div');pt.id='taxpet';P.appendChild(pt);
+ taxLive()}
+function taxLive(){const L=$('taxlive');if(!L||!S.eco)return;const E=S.eco;if(!holdB()){L.innerHTML='';return}
+ const tot=holdTot(),cp=holdCap(),pc=Math.min(100,tot/cp*100),d=((yearLen()-E.yt)/DAYLEN).toFixed(1),last=E.last;
+ let h='<div class="taxgrid"><div><b>'+fmtS(E.silver)+'</b><span>silver</span></div><div><b>'+fmtS(holdVal())+'</b><span>goods value</span></div><div><b>'+E.steads.length+'</b><span>steads ('+serfN()+' serfs)</span></div><div><b>'+E.cr.length+' / '+E.mh.length+'</b><span>crafters / merchants</span></div></div>';
+ h+='<div class="small">Year '+E.yr+' · Tithe Day in '+d+' days'+(E.car.length?' · <b>'+E.car.length+' carriers on the road</b>':'')+'</div>';
+ h+='<div class="taxbar"><i style="width:'+pc+'%;background:'+(tot>cp?'#d8402a':pc>85?'#d8a040':'#7ab050')+'"></i></div><div class="small">Holding storage '+Math.round(tot)+' / '+cp+' · spoilage ×'+spoilF().toFixed(2)+(tot>cp?' · <b style="color:#ff9070">overflowing — goods rot fast</b>':'')+'</div>';
+ const top=Object.keys(E.hold).filter(g=>E.hold[g]>1).sort((a,b)=>E.hold[b]*EIT[b].v-E.hold[a]*EIT[a].v).slice(0,8);if(top.length)h+='<div class="small">'+top.map(g=>'<span style="color:'+EIT[g].c+'">■</span> '+EIT[g].n+' '+Math.round(E.hold[g])).join(' · ')+'</div>';
+ if(E.unpaid)h+='<div class="small" style="color:#ff9070">Royal wages are unpaid: mines slow, people grumble. Raise the tithe or spend less.</div>';
+ if(last)h+='<div class="small"><b>Last year</b> · tithe '+fmtS(last.tithe)+' · spoiled '+fmtS(last.spoil)+' · wages '+fmtS(last.wages)+' · silver in '+fmtS(last.sIn)+' (surplus '+fmtS(last.sold)+', merchant tax '+fmtS(last.mtax)+', food '+fmtS(last.food)+', ore '+fmtS(last.ore)+') · out '+fmtS(last.sOut)+'<br>'+last.risers+' rose to crafters · '+last.merch+' new merchants · '+last.born+' born · '+last.arrived+' arrived · '+(last.starve+last.left)+' lost'+(last.arrears?' · arrears '+fmtS(last.arrears):'')+'</div>';
+ if(E.hist.length>1){const W=260,Hh=46,mx=Math.max(1,...E.hist.map(r=>r.tithe));h+='<svg width="'+W+'" height="'+Hh+'" class="taxsvg"><polyline fill="none" stroke="#d8b850" stroke-width="2" points="'+E.hist.map((r,i)=>(i/(E.hist.length-1)*W).toFixed(1)+','+(Hh-2-r.tithe/mx*(Hh-6)).toFixed(1)).join(' ')+'"/><polyline fill="none" stroke="#d8402a" stroke-width="1.5" points="'+E.hist.map((r,i)=>(i/(E.hist.length-1)*W).toFixed(1)+','+(Hh-2-Math.min(mx,r.spoil)/mx*(Hh-6)).toFixed(1)).join(' ')+'"/></svg><div class="small"><span style="color:#d8b850">— tithe</span> <span style="color:#d8402a">— spoiled</span> per year</div>'}
+ const lands={};for(const s of E.steads)lands[s.land]=(lands[s.land]||0)+1;if(E.steads.length){let sv=0,dn=0,ct=0,ow=0,hp=0;for(const s of E.steads){sv+=s.sv;dn+=s.don;ct+=s.cart;ow+=s.ow>0;hp+=s.hap}h+='<div class="small">Steads: '+Object.keys(lands).map(k=>lands[k]+' '+LAND[k].n.toLowerCase()).join(', ')+' · avg savings '+fmtS(sv/E.steads.length)+' · '+dn+' donkeys, '+ct+' carts · mood '+Math.round(hp/E.steads.length)+'%'+(ow?' · <span style="color:#ff9070">'+ow+' in arrears</span>':'')+'</div>'}
+ if(E.cr.length){const cc={};for(const c of E.cr)cc[c.c]=(cc[c.c]||0)+1;h+='<div class="small">Town crafters: '+Object.keys(cc).map(k=>cc[k]+' '+CRAFT[k].n.toLowerCase()+(cc[k]>1?'s':'')).join(', ')+' · town space '+(E.cr.length+E.mh.length)+'/'+(E._tcap||'?')+'</div>'}
+ L.innerHTML=h;
+ const pt=$('taxpet');if(pt){const key=E.pet.join(',')+'|'+E.mh.length+'|'+E.charters;if(pt._k!==key){pt._k=key;pt.innerHTML='';if(E.pet.length){pt.insertAdjacentHTML('beforeend','<div class="hdr2" style="margin-top:8px"><b>Charter petitions</b></div>');for(const id of E.pet){const c=E.cr.find(c=>c.id===id);if(!c)continue;const r=document.createElement('div');r.className='row';r.innerHTML='<span>'+CRAFT[c.c].n+' household · '+fmtS(c.ag)+' silver </span>';r.appendChild(btn('Grant',()=>grantCharter(id),E.mh.length>=E.charters));r.appendChild(btn('Refuse',()=>refuseCharter(id)));pt.appendChild(r)}}}}}
+/*ECOUI END*/
