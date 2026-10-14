@@ -503,9 +503,10 @@ function grantEval(a,b){const x0=Math.min(a.gx,b.gx),x1=Math.max(a.gx,b.gx),y0=M
  if(r.tiles.length<GRANT_MIN+4)r.err=r.err||('Too small: '+r.tiles.length+' usable tiles (min '+(GRANT_MIN+4)+')');
  const n=r.tiles.length||1;r.land=c.s>=n*.3&&c.w>=3?'clay':c.w>=6?'river':c.f>=n*.4?'forest':c.h>=n*.4?'hills':c.s>=n*.4?'clay':'plain';r.suit=Math.round(Math.min(100,(r.tiles.length/(w*h))*100*(c.w>=3?1.1:1)));return r}
 function grantMake(g){const E=S.eco;if(pendFam()<1){log('No family is waiting for land.');return false}
- // farmhouse: best free 2x2 spot inside the grant, nearest the town
- const set=new Set(g.tiles);let hb=null,bd=1e9;for(let y=g.y0;y<g.y1;y++)for(let x=g.x0;x<g.x1;x++){const ii=[y*MW+x,y*MW+x+1,(y+1)*MW+x,(y+1)*MW+x+1];if(!ii.every(i=>set.has(i)&&TER[i]!==T_FOREST))continue;const d=Math.hypot(x-S.center.x,y-S.center.y);if(d<bd){bd=d;hb={x,y}}}
- if(!hb){log('No flat spot for a farmhouse in that grant.');return false}const hs=new Set([hb.y*MW+hb.x,hb.y*MW+hb.x+1,(hb.y+1)*MW+hb.x,(hb.y+1)*MW+hb.x+1]);
+ // farmstead compound (shape-mask footprint): best free spot inside the grant, nearest the town; masked-out corners may be forest/field
+ const set=new Set(g.tiles),SZ=bsz('stead');let hb=null,bd=1e9,hs=null;for(let y=g.y0;y<=g.y1-SZ+1;y++)for(let x=g.x0;x<=g.x1-SZ+1;x++){const M=fpMask('stead',bfp({t:'stead',x,y}));const ii=[];let ok=true;for(let j=0;j<SZ&&ok;j++)for(let i=0;i<SZ;i++){if(M&&!M[j*SZ+i])continue;const k=(y+j)*MW+x+i;if(!set.has(k)&&TER[k]!==T_FOREST){ok=false;break}if(occ[k]||TER[k]===T_WATER){ok=false;break}ii.push(k)}if(!ok)continue;const d=Math.hypot(x-S.center.x,y-S.center.y);if(d<bd){bd=d;hb={x,y};hs=new Set(ii)}}
+ if(hb)for(const k of hs)if(TER[k]===T_FOREST){TER[k]=T_GRASS;try{dirtyTile(k%MW,k/MW|0)}catch(e){}}// the family clears the trees under its farmstead
+ if(!hb){log('No room for a farmstead in that grant (needs about '+SZ+'×'+SZ+' clear tiles).');return false}
  // take the family: waiting family first, else 3 idle; otherwise from the least important jobs
  const FF=famNextPend();let take=FF?Math.max(1,FF.m.length):3;let idle=S.pop-employed();if(idle<take){let need=take-Math.max(0,idle);const ks=Object.keys(S.jobs).filter(j=>S.jobs[j]>0).sort((a,b)=>(S.prio&&S.prio[b]||3)-(S.prio&&S.prio[a]||3));for(const j of ks){while(need>0&&S.jobs[j]>0){S.jobs[j]--;need--}}if(need>0)S.pop+=need}
  const b={t:'stead',l:1,x:hb.x,y:hb.y};S.bl.push(b);rebuildOcc();try{autoRoadFor(b)}catch(e){}
@@ -1046,7 +1047,7 @@ const SPR={};
 // ---- buildings (hi-res sprites, multi-tile) ----
 const bsz=t=>(BLD[t]&&BLD[t].sz)||1;
 // realistic proportions: buildings at true scale vs ~0.65-tile people (art drawn at design size then scaled)
-const NSZ={tavern:6,shrine:2,senet:2,plaza:5,trainingcamp:7,spearschool:6,archery:7,slingfield:6,axehall:6,stables:7,gatherhut:4,storehouse:6,bakery:6,brewery:6,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:7,lodge:6,lumber:6,quarry:6,barracks:8,granary:7,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:2};
+const NSZ={holding:8,stead:7,craft:7,tavern:8,shrine:3,senet:2,plaza:5,trainingcamp:7,spearschool:6,archery:7,slingfield:6,axehall:6,stables:7,gatherhut:6,storehouse:8,bakery:7,brewery:7,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:9,lodge:6,lumber:6,quarry:6,barracks:10,granary:8,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:3};
 const BCOSTX={house:1.4,barracks:1.4,granary:1.4,temple:1.4,palace:1.3,market:1.3,smelter:1.3,lodge:1.2,lumber:1.2};
 for(const k in NSZ)if(BLD[k]){BLD[k].osz=BLD[k].sz||1;BLD[k].sz=NSZ[k];if(BCOSTX[k])for(const r in BLD[k].cost)BLD[k].cost[r]=Math.round(BLD[k].cost[r]*BCOSTX[k])}
 // ---- placement, occupancy, A*, roads ----
@@ -2857,6 +2858,25 @@ const FP={
  granary:[{n:'Beehive silos',p:[['c',.27,.27,.25,'dome'],['c',.73,.27,.25,'dome'],['c',.27,.73,.25,'dome'],['c',.73,.73,.25,'dome']],door:[.5,.99],k:'silo'},
   {n:'Great dome',p:[['c',.5,.5,.47,'dome']],door:[.5,.97],k:'silo'},{n:'Silo row and yard',p:[['c',.18,.24,.17,'dome'],['c',.5,.24,.17,'dome'],['c',.82,.24,.17,'dome'],['r',.04,.44,.92,.53,'court']],door:[.5,.97],k:'silo'}],
  farm:[{n:'Wheat field',legacy:1}],
+ gatherhut:[{n:'L-shaped gatherers\' shed',p:[['r',.04,.04,.62,.48],['r',.04,.04,.36,.92],['r',.4,.52,.56,.44,'court']],door:[.55,.52],k:'gather'}],
+ bakery:[{n:'Bakehouse with dome oven',p:[['r',.04,.18,.6,.56],['c',.79,.46,.19,'dome'],['r',.04,.74,.62,.22,'court']],door:[.34,.74],k:'bakehouse'}],
+ brewery:[{n:'Brewhouse and mash yard',p:[['r',.04,.04,.92,.44],['e',.27,.73,.23,.22],['r',.54,.48,.42,.48,'court']],door:[.75,.48],k:'brew'}],
+ storehouse:[{n:'Long store with tally room',p:[['r',.04,.08,.6,.86],['r',.64,.3,.32,.46]],door:[.34,.94],k:'store'}],
+ tavern:[{n:'Tavern with drinking yard',p:[['r',.04,.04,.6,.6],['r',.64,.04,.32,.4],['r',.04,.64,.92,.32,'court']],door:[.34,.64],k:'tavern'}],
+ shrine:[{n:'Round shrine and forecourt',p:[['c',.5,.38,.34],['r',.28,.7,.44,.27,'court']],door:[.5,.72],k:'shrine'}],
+ trainingcamp:[{n:'Hut and drill ground',p:[['r',.04,.04,.42,.3],['r',.04,.34,.92,.62,'court']],door:[.25,.34],k:'drill'}],
+ spearschool:[{n:'Spear hall and yard',p:[['r',.04,.04,.92,.3],['r',.04,.34,.92,.62,'court']],door:[.5,.34],k:'spear'}],
+ archery:[{n:'Bow shed and range',p:[['r',.04,.04,.3,.92],['r',.34,.04,.62,.92,'court']],door:[.34,.5],k:'archery'}],
+ slingfield:[{n:'Round hut and sling field',p:[['c',.25,.25,.21],['r',.04,.5,.92,.46,'court']],door:[.25,.46],k:'sling'}],
+ axehall:[{n:'Axe hall and sparring ring',p:[['r',.04,.16,.92,.52],['e',.5,.84,.3,.14,'court']],door:[.5,.68],k:'axe'}],
+ stables:[{n:'L stables round a paddock',p:[['r',.04,.04,.92,.34],['r',.04,.38,.3,.58],['r',.34,.38,.62,.58,'court']],door:[.55,.38],k:'stable2'}],
+ quarry:[{n:'Mason\'s shed and stone yard',p:[['r',.58,.04,.38,.32],['e',.42,.62,.4,.34,'court']],door:[.7,.36],k:'quarryhut'}],
+ copper:[{n:'Miners\' hut and ore yard',p:[['r',.04,.04,.42,.34],['e',.6,.6,.36,.36,'court']],door:[.3,.38],k:'minehut'}],
+ tin:[{n:'Round miners\' hut and ore yard',p:[['c',.27,.27,.23],['e',.62,.64,.34,.32,'court']],door:[.4,.45],k:'minehut2'}],
+ holding:[{n:'Treasury compound round a court',p:[['r',.03,.03,.94,.3],['r',.03,.33,.3,.64],['c',.8,.78,.17,'dome'],['r',.33,.33,.64,.64,'court']],door:[.6,.33],k:'holding'}],
+ stead:[{n:'Farmstead with byre and grain dome',p:[['r',.03,.03,.66,.52],['c',.84,.2,.14,'dome'],['r',.03,.55,.28,.42],['r',.31,.55,.66,.42,'court']],door:[.5,.55],k:'stead'}],
+ craft:[{n:'Town house with workshop',p:[['r',.04,.04,.55,.45],['r',.59,.04,.37,.62],['r',.04,.49,.55,.47,'court']],door:[.3,.49],k:'workshop'}],
+ statue:[{n:'Round plinth',p:[['c',.5,.5,.42]],k:'plinth'}],
  barracks:[{n:'Long barracks',p:[['r',.02,.3,.96,.4]],door:[.5,.7],k:'barracks'},{n:'Stable block',p:[['r',.31,.02,.38,.96]],door:[.69,.5],k:'stable'},
   {n:'L barracks + drill yard',p:[['r',.02,.02,.96,.33],['r',.02,.02,.33,.96],['r',.35,.35,.63,.63,'court']],door:[.18,.98],k:'barracks'}],
  smelter:[{n:'Round kiln house',p:[['c',.5,.5,.47]],door:[.5,.97],k:'kiln'},{n:'Twin kilns',p:[['c',.3,.33,.29],['c',.69,.64,.3]],door:[.69,.94],k:'kiln'}],
@@ -2874,7 +2894,7 @@ function fpMask(t,f){if(!f||!FP[t])return null;const k=t+'|'+(f.v||0)+(f.r||0)+(
   let any=0;for(const v of M)any|=v;if(!any)M=null}
  FPM.set(k,M);return M}
 let CURFP=null,PV={v:0,r:0,m:0};
-const bfp=b=>b&&b.fv&&FP[b.t]?b.fv:null;
+const bfp=b=>{if(!b||!FP[b.t])return null;if(b.fv)return b.fv;if(b._af===undefined){const ok=FP[b.t].map((v,i)=>v.legacy?-1:i).filter(i=>i>=0);b._af=ok.length?{v:ok[(hsh(b.x|0,b.y|0,5)*ok.length)|0],r:(hsh(b.x|0,b.y|0,6)*4)|0,m:hsh(b.x|0,b.y|0,7)<.5?1:0}:null}return b._af};
 function fpDoor(b){const f=bfp(b);if(!f)return null;const V=FP[b.t][f.v||0];if(!V||V.legacy||!V.door)return null;const s=bsz(b.t),d=fpT(V.door[0],V.door[1],f),M=fpMask(b.t,f);if(!M)return null;
  let best=null,bd=1e9;for(let j=0;j<s;j++)for(let i=0;i<s;i++){if(!M[j*s+i])continue;for(const[a,c]of[[1,0],[-1,0],[0,1],[0,-1]]){const ii=i+a,jj=j+c;if(ii>=0&&jj>=0&&ii<s&&jj<s&&M[jj*s+ii])continue;const dd=((ii+.5)/s-d[0])**2+((jj+.5)/s-d[1])**2;if(dd<bd&&walkC(b.x+ii,b.y+jj)){bd=dd;best={x:b.x+ii+.5,y:b.y+jj+.5}}}}return best}
 const FPB={on:0,n:2};// per-frame budget for building new detailed sprites (avoids hitches on phones)
@@ -3100,11 +3120,32 @@ function X_furnish(g,kd,W,test,door,m,l,seed,extra){const id=civId(),PL=X_PAL[id
   for(let i=0;i<6;i++)P(1,26,26,'wall',b=>X_pithos(g,b.cx,b.cy,11),{gap:1});lamps(1,3);P(1,30,30,'wall',b=>X_extra(g,id,b.cx,b.cy,m));
   if(A2){if(kd==='palace')pool(2,Math.min(120,W*.18),Math.min(80,W*.12));for(let i=0;i<3;i++)P(2,56,56,'wall',b=>id==='egypt'||id==='babylon'||id==='minoan'?X_palm(g,b.cx,b.cy,24):X_plant(g,b.cx,b.cy,12),{gap:0,rot:false});P(2,30,30,'center',b=>X_statue(g,b.cx,b.cy,'#e0b040'));for(let i=0;i<2;i++)P(2,20,20,'any',b=>X_brazier(g,b.cx,b.cy,m),{gap:20})}X_RICH=0;return}
  // gatherer's hut: a workplace (workers sleep at home) — drying racks and baskets on the walls, a sorting table with one stool per worker slot, storage jars
- if(kd==='gather'){const WK=4;const BK=(b)=>{X_ell(g,b.cx+1,b.cy+2,7,4.5,'rgba(0,0,0,.22)');X_circ(g,b.cx,b.cy,6,'#b08a4a',X_OL,1);X_circ(g,b.cx,b.cy,4.2,'#8a6a34');for(let k=0;k<5;k++)X_circ(g,b.cx-2.5+X_rnd()*5,b.cy-2.5+X_rnd()*5,1.4,['#b83a4a','#6a3a8a','#c84a2a','#4a7a3a'][k%4])};
+ if(kd==='gather'){const WK=2;const BK=(b)=>{X_ell(g,b.cx+1,b.cy+2,7,4.5,'rgba(0,0,0,.22)');X_circ(g,b.cx,b.cy,6,'#b08a4a',X_OL,1);X_circ(g,b.cx,b.cy,4.2,'#8a6a34');for(let k=0;k<5;k++)X_circ(g,b.cx-2.5+X_rnd()*5,b.cy-2.5+X_rnd()*5,1.4,['#b83a4a','#6a3a8a','#c84a2a','#4a7a3a'][k%4])};
   const RACK=b=>{const v=b.sw,L=v?b.h:b.w;g.save();g.translate(b.cx,b.cy);if(v)g.rotate(Math.PI/2);X_rr(g,-L/2,-2,L,4,1,'#7a5232',X_OL,1);for(const q of[-L/2+2,L/2-2])X_circ(g,q,0,2.6,'#5a3a20',X_OL,.8);for(let x=-L/2+7;x<L/2-5;x+=7){X_ln(g,x,1,x,6,'#6a4a26',1);X_ell(g,x,8,2.6,3.6,['#6a8a3a','#8a7a3a','#7a9a4a','#a8643a'][(x|0)&3],X_OL,.6)}g.restore()};
   P(1,40,22,'center',b=>{X_table(g,b.x+2,b.y+2,b.w-4,b.h-4,'#9a6c40');X_circ(g,b.cx-9,b.cy,3.4,'#c84a2a');X_circ(g,b.cx+8,b.cy-1,3.4,'#4a7a3a');for(let k=0;k<WK;k++)X_stool(g,b.x+9+(k%2)*(b.w-18),k<2?b.y-6:b.y+b.h+6);X_mark(R,b.x-6,b.y-14,b.w+12,b.h+28,0)},{gap:12,rot:false});
   for(let i=0;i<2;i++)P(1,46,12,'wall',RACK,{gap:3});
   for(let i=0;i<4;i++)P(1,14,14,'wall',BK,{gap:1});jars(1,3);return}
+ // ---- function-specific interiors (own layout per kind; workplaces have no beds; work spots = 2 worker slots) ----
+ const shelfW=(c,n,it)=>{for(let i=0;i<n;i++)P(c,48,12,'wall',b=>{if(b.sw){g.save();g.translate(b.cx,b.cy);g.rotate(Math.PI/2);X_shelf(g,-b.h/2,-6,b.h,it||4);g.restore()}else X_shelf(g,b.x,b.y,b.w,it||4)},{gap:3})};
+ const rackW=(c,n)=>{for(let i=0;i<n;i++)P(c,50,14,'wall',b=>X_weaponrack(g,b.cx,b.cy,50,b.sw?Math.PI/2:0),{gap:3})};
+ const bench=(c,w,seats)=>P(c,w,22,'center',b=>{X_table(g,b.x+2,b.y+2,b.w-4,b.h-4,'#8a5a32');for(let k=0;k<seats;k++){const col=k%Math.ceil(seats/2),nc=Math.ceil(seats/2);X_stool(g,b.x+(b.w)*(col+.5)/nc,k<nc?b.y-6:b.y+b.h+6)}X_mark(R,b.x-6,b.y-14,b.w+12,b.h+28,0)},{gap:10,rot:false});
+ const pith=(c,n)=>{for(let i=0;i<n;i++)P(c,22,22,'wall',b=>X_pithos(g,b.cx,b.cy,10),{gap:1})};
+ const target=(c,n)=>{for(let i=0;i<n;i++)P(c,24,24,'wall',b=>{X_circ(g,b.cx,b.cy,10,'#e8dcc0',X_OL,1);X_circ(g,b.cx,b.cy,6.5,'#c84a2a');X_circ(g,b.cx,b.cy,3,'#e8dcc0');X_circ(g,b.cx,b.cy,1.2,'#c84a2a')},{gap:20})};
+ const pile=(c,n,col)=>{for(let i=0;i<n;i++)P(c,22,18,'wall',b=>{for(let k=0;k<6;k++)X_circ(g,b.cx-6+(k%3)*6,b.cy-3+(k/3|0)*6-(k%3===1?2:0),4,col,X_OL,.6)},{gap:2})};
+ if(kd==='bakehouse'){bench(1,46,2);P(1,26,18,'wall',b=>X_quern(g,b.cx,b.cy));sacks(1,3);shelfW(1,1,5);jars(1,2);if(A2){pile(2,1,'#8a6038');trough(2)}return}
+ if(kd==='brew'){pith(1,5);bench(1,44,2);sacks(1,3);jars(1,3);if(A2){hearthC(2,11);P(2,30,30,'wall',b=>X_oven(g,b.cx,b.cy,13));jars(2,3)}return}
+ if(kd==='store'){shelfW(1,3,6);pith(1,4);sacks(1,8);jars(1,6);P(1,40,24,'far',b=>{X_desk(g,b.cx,b.cy,m);X_tablets(g,b.cx+12,b.cy-8,3)},{gap:6});return}
+ if(kd==='tavern'){hearthC(1,12);for(let i=0;i<2;i++)bench(1,44,4);shelfW(1,1,6);pith(1,2);jars(1,3);if(A2){bench(2,40,4);P(2,22,22,'wall',b=>X_plant(g,b.cx,b.cy,9))}return}
+ if(kd==='shrine'){P(1,30,20,'center',b=>X_altar(g,b.x,b.y,b.w,b.h,m),{gap:8,rot:false});lamps(1,2);P(1,14,14,'wall',b=>X_offering(g,b.cx,b.cy));if(A2){P(2,18,18,'center',b=>X_brazier(g,b.cx,b.cy,m),{gap:6})}return}
+ if(kd==='drill'||kd==='spear'||kd==='axe'){rackW(1,kd==='spear'?3:2);for(let i=0;i<3;i++)P(1,16,16,'wall',b=>X_shield(g,b.cx,b.cy,'#8a4a2a'),{gap:2});P(1,40,22,'wall',b=>X_chest(g,b.x,b.y,b.w,b.h,0),{gap:4});if(kd==='axe')P(1,26,22,'center',b=>X_anvil(g,b.cx,b.cy));if(A2){for(let i=0;i<3;i++)P(2,12,12,'center',b=>{X_circ(g,b.cx,b.cy,4,'#6a4a2a',X_OL,.8);X_ln(g,b.cx,b.cy-10,b.cx,b.cy,'#7a5232',2)},{gap:26})}return}
+ if(kd==='archery'){rackW(1,2);sacks(1,2);jars(1,2);P(1,40,22,'wall',b=>X_chest(g,b.x,b.y,b.w,b.h,0));if(A2)target(2,3);return}
+ if(kd==='sling'){pile(1,2,'#a8a294');rackW(1,1);if(A2){target(2,3);pile(2,2,'#a8a294')}return}
+ if(kd==='stable2'){for(let i=0;i<2;i++)trough(1);for(let i=0;i<3;i++)P(1,56,30,'wall',b=>X_horse(g,b.cx,b.cy,i%2?1:-1,['#6a4226','#3a2a1a','#a87a4a'][i]),{gap:4,rot:false});sacks(1,3);rackW(1,1);if(A2){P(2,56,30,'any',b=>X_horse(g,b.cx,b.cy,1,'#8a5a32'),{rot:false});trough(2)}return}
+ if(kd==='quarryhut'||kd==='minehut'||kd==='minehut2'){rackW(1,1);bench(1,40,2);sacks(1,2);if(kd!=='quarryhut')P(1,30,16,'wall',b=>X_ingots(g,b.cx,b.cy,4));if(A2){const col=kd==='quarryhut'?'#c8c0b0':kd==='minehut'?'#5a8a6a':'#8a9aa8';pile(2,4,col)}return}
+ if(kd==='holding'){P(1,40,24,'far',b=>{X_desk(g,b.cx,b.cy,m);X_tablets(g,b.cx+12,b.cy-8,4);X_stool(g,b.cx,b.cy+16)},{gap:8});for(let i=0;i<4;i++)P(1,40,22,'wall',b=>X_chest(g,b.x,b.y,b.w,b.h,1),{gap:3});pith(1,6);sacks(1,6);shelfW(1,2,6);lamps(1,2);if(A2){trough(2);P(2,60,24,'any',b=>X_donkey(g,b.cx,b.cy,1),{rot:false});sacks(2,4)}return}
+ if(kd==='stead'){hearthC(1,12);for(let i=0;i<2;i++)P(1,26,52,'wall',b=>X_bed(g,b.cx,b.cy,X_pick(PL.lin),b.rot,0));for(let i=0;i<6;i++)P(1,20,34,i<3?'wall':'any',b=>X_pallet(g,b.cx,b.cy,X_pick(PL.lin),b.rot));P(1,26,18,'wall',b=>X_quern(g,b.cx,b.cy));jars(1,3);court();return}
+ if(kd==='workshop'){hearthC(1,10);for(let i=0;i<5;i++)P(1,20,34,'wall',b=>X_pallet(g,b.cx,b.cy,X_pick(PL.lin),b.rot));bench(1,44,2);shelfW(1,2,5);P(1,26,22,'wall',b=>X_anvil(g,b.cx,b.cy));jars(1,3);court();return}
+ if(kd==='plinth'){P(1,30,30,'center',b=>X_statue(g,b.cx,b.cy,'#c8903a'),{gap:0,rot:false});return}
  if(kd==='lodge'){hearthC(1,11);P(1,50,26,'any',b=>{X_table(g,b.x+3,b.y+3,b.w-6,b.h-6,'#8a5a32');X_stool(g,b.x-3,b.cy);X_stool(g,b.x+b.w+3,b.cy)},{gap:8});for(let i=0;i<2;i++)P(1,40,28,'wall',b=>{X_rug(g,b.x,b.y,b.w,b.h,'#8a6038','#c8a868','#5a3a1c')});P(1,50,14,'wall',b=>X_weaponrack(g,b.cx,b.cy,50,b.sw?Math.PI/2:0));sacks(1,2);jars(1,2);return}
  if(kd==='market'){if(A2){P(2,48,48,'center',b=>{X_circ(g,b.cx,b.cy,20,'#a8a294',X_OL,1.2);X_circ(g,b.cx,b.cy,13,'#2e5a78');X_ln(g,b.cx-22,b.cy,b.cx+22,b.cy,'#7a5232',2);X_water(m,b.cx-10,b.cy-10,20,20)},{rot:false});
   P(2,44,24,'any',b=>{X_table(g,b.x,b.y,b.w,b.h,'#9a6c40');X_rr(g,b.x+8,b.y+6,10,10,2,'#c8803a');X_circ(g,b.x+30,b.cy,4,'#a8a294')});for(let i=0;i<4;i++)P(2,14,14,'any',b=>X_circ(g,b.cx,b.cy,6,'#c8a868',X_OL,.6),{gap:2});P(2,60,24,'any',b=>X_donkey(g,b.cx,b.cy,1),{rot:false});P(2,26,16,'any',b=>X_goat(g,b.cx,b.cy,-1));jars(2,4);sacks(2,4)}return}}
