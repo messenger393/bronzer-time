@@ -836,7 +836,7 @@ function tick(){if(spd&&!tick._x&&S&&S.nightFast!==false&&night()){tick._x=1;try
  const pj={};for(const j in S.jobs){const J=JOBS[j];if(!J[1]||j==='smith')continue;let v=S.jobs[j]*J[2]*mult*(BLD_JOB[j]&&!RNJ[j]?jobEff(j):1);if(J[1]==='food'&&j==='farmer'){if(S.tech.irrigation)v*=1.5;v*=EM.farm}v=rnJobOut(j,v);p[J[1]]+=v;pj[j]=v}
  for(const r in S.bonus)p[r]*=1+S.bonus[r];ecoProd(p);{const X=cX(),E=X.eco||{};for(const r in E)if(p[r]>0)p[r]*=1+E[r];if(X.purple)p.bronze+=(S.jobs.merchant||0)*X.purple}
  const sm=S.jobs.smith||0;if(sm){let n=Math.min(sm*0.3,S.res.copper/1,S.res.tin/0.5);S.res.copper-=n;S.res.tin-=n*.5;p.bronze+=n*mult*(1+(S.bonus.bronze||0))}
- let up=(S.pop-serfN())*0.4;for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up*RATION[S.ration||'normal'].up;
+ let up=(S.pop-serfN())*0.4;{let pn=0;if(S.fam)for(const F of S.fam.L)if(F.st==='pend')pn+=F.m.length;pn=Math.max(0,Math.min(pn,S.pop-serfN())-(S.jobs.gatherer||0));up-=pn*0.4*PEND_FORAGE}for(const c of S.companies)up+=c.men*UNIT[c.type].up;p.food-=up*EM.up*RATION[S.ration||'normal'].up;
  const C=cap();const toStk=itemsProduce(pj,p);workshopTick(mult);for(const r of RES)S.res[r]=Math.max(0,Math.min(C,S.res[r]+p[r]-(toStk[r]||0)));
  S.rate=p;try{foodTrack(pj)}catch(e){}try{raTick(p,up*EM.up*RATION[S.ration||'normal'].up)}catch(e){}try{ecoTick()}catch(e){console.error('eco',e)}
  if(S.res.food<=0&&p.food<0){if(armyN()>0&&Math.random()<.1){const c=S.companies.find(c=>c.men>0);c.men--;S.companies=S.companies.filter(c=>c.men>0);log('Starving! A soldier of '+c.name+' deserted.')}else if(S.pop>3&&Math.random()<.03){S.pop--;fixJobs();log('Starving! A villager left.')}}
@@ -2196,7 +2196,8 @@ const _fight0=fight;fight=function(i){const ri=routeInfo(i);if(ri.blocked){log('
  try{_fight0(i)}finally{CURRT=null;ex.forEach((c,k)=>c.slot=sv[k])}};
 let BEAU=null;function beautyAt(x,y){return BEAU&&x>=0&&y>=0&&x<MW&&y<MH?BEAU[y*MW+x]:0}
 // ================= HAPPINESS =================
-const RATION={meagre:{n:'Meagre',up:.75,h:-12},normal:{n:'Normal',up:1,h:0},generous:{n:'Generous',up:1.35,h:8}};
+// landless families in tents forage, snare and glean for most of their own food while waiting for a grant
+const PEND_FORAGE=1;const RATION={meagre:{n:'Meagre',up:.75,h:-12},normal:{n:'Normal',up:1,h:0},generous:{n:'Generous',up:1.35,h:8}};
 const TAX={low:{n:'Low',p:.9,h:6},normal:{n:'Normal',p:1,h:0},high:{n:'High',p:1.15,h:-12}};
 function hapCalc(){const F=[],add=(n,v)=>{if(Math.abs(v)>=.5)F.push([n,Math.round(v)])};
  const fs=['farmer','fisher','herder','hunter','gatherer'].filter(j=>(S.jobs[j]||0)>0).length+(cnt('garden')?1:0);add('Food variety ('+fs+' sources)',fs*2-3);
@@ -3202,7 +3203,7 @@ function relayoutTown(){genWorld(S.seed||7);const old=(S.bl||[]).slice();S.bl=[]
 const _mig5=migrate;migrate=function(){_mig5();if(!S.propV){S.propV=1;if((S.bl||[]).length>3||S.bl.some(b=>b.t!=='campfire'&&b.t!=='tent'))relayoutTown();else{const c=S.center;S.bl=[{t:'campfire',l:1,x:c.x-1,y:c.y-1},{t:'tent',l:1,x:c.x-7,y:c.y-5},{t:'tent',l:1,x:c.x+4,y:c.y-5}]}}};
 const _fresh2=fresh;fresh=function(){const s=_fresh2();const c=s.center;s.bl=[{t:'campfire',l:1,x:c.x-1,y:c.y-1},{t:'tent',l:1,x:c.x-7,y:c.y-5},{t:'tent',l:1,x:c.x+4,y:c.y-5},{t:'tent',l:1,x:c.x-2,y:c.y+4}];s.propV=1;
  // humble start (new games only): 6 people, 3 tents, small stock, no metals
- s.pop=6;s.jobs={gatherer:4};s.res={food:320,wood:40,stone:10,copper:0,tin:0,bronze:0};s.startV=2;return s};
+ s.pop=6;s.jobs={gatherer:4};s.res={food:600,wood:40,stone:10,copper:0,tin:0,bronze:0};s.startV=2;return s};
 // ================= LAUNCH v2: high-detail bas-relief, WebGL lighting from off-screen torches =================
 const RV={TW:4096,TH:1024,ready:false,run:false,gl:null,emb:[],off:[0,1700],t0:performance.now()};
 function rvDraw(){const W=RV.TW,H=RV.TH,c=typeof OffscreenCanvas!=='undefined'?new OffscreenCanvas(W,H):document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');g.fillStyle='#000';g.fillRect(0,0,W,H);g.globalCompositeOperation='lighter';
