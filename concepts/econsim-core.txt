@@ -1,0 +1,383 @@
+// ==== SIM CORE START ====
+var ECON = (function(){
+const DAYS=60, SEASON=15;
+const RAW=['food','wood','clay','stone','fiber','wool'];
+const LANDS={
+ river:{food:1.35,wood:0.2,clay:0.5,stone:0.1,fiber:0.6,wool:0.3, main:'food'},
+ hills:{food:0.7,wood:0.3,clay:0.2,stone:1.0,fiber:0.1,wool:1.0, main:'wool'},
+ forest:{food:0.75,wood:1.2,clay:0.1,stone:0.2,fiber:0.2,wool:0.3, main:'wood'},
+ clay:{food:0.9,wood:0.2,clay:1.2,stone:0.2,fiber:0.3,wool:0.3, main:'clay'},
+ flax:{food:1.0,wood:0.1,clay:0.3,stone:0.0,fiber:1.2,wool:0.2, main:'fiber'}
+};
+const LAND_W={river:0.36,hills:0.16,forest:0.16,clay:0.16,flax:0.16};
+// value of raw goods in "measures" (1 = one person-day of food)
+const BASEVAL={food:1,wood:1.2,clay:1.1,stone:1.4,fiber:1.3,wool:1.5};
+// specialist crafts: input raw, needs ore?, output value per day, per-person yearly want (VU)
+const CRAFTS={
+ bronzesmith:{raw:'wood', ore:true, out:9, want:2.0, land:'hills', boost:0.10},
+ potter:{raw:'clay', ore:false, out:5, want:1.3, land:'clay', boost:0},
+ weaver:{raw:'fiber', ore:false, out:5, want:1.6, land:'flax', boost:0},
+ jeweler:{raw:'stone', ore:true, out:10, want:0.6, land:'river', boost:0},
+ weaponsmith:{raw:'wood', ore:true, out:10, want:0.5, land:'forest', boost:0}
+};
+const CT=Object.keys(CRAFTS);
+const MINES=['copper','tin','quarry','claypit','salt'];
+
+function DEF(){return {
+ tithe:0.20, mtax:0.20, 
+ families:40, years:20, seed:1,
+ // tuning
+ workYield:2.6,       // raw VU per adult working day (other goods)
+ cropYield:9.5,      // food per adult spring-sow day (harvested in autumn)
+ skillPerYear:0.34,   // skill gained per year by the practising member
+ breakSavings:70,     // VU of family savings to set up a household
+ breakDemand:0.12,    // min unmet-demand ratio for that craft
+ merchantSilver:180,  // crafter silver needed to become merchant house
+ merchantYears:3,
+ regionalMargin:0.22, // annual return on merchant capital from regional trade
+ regionalCap:600,     // regional trade saturation (VU/yr per merchant before diminishing)
+ retainers:8,         // court/army mouths fed by holding (fixed) + 4% of pop
+ minersPerMine:4,
+ maxStead:140, townCap:60, holdingCap:15000, charterMax:6, foreignPrice:1.0, armyTarget:20, mineLevel:1, crafterBuy:0.2, household:150, storageLevel:1, sellAt:0.6, civic:0.3, mercs:0, upgrades:0.2, tribute:0 /* foreign relations STUB */, hazards:1.1, rivalPressure:0.75, adaptive:false, monumentOre:0.2, mercSupply:12, raidA:10, raidB:1.3, raidW:0.2, sackLimit:5, adaptThreat:1.3, wallLevel:1, skill:1, tactics:0.3, rivals:2,  clusterD:0.32, hungryRaid:0.06, layout:0.5 /* 0 poor .. 1 well laid out */ /* STUB regional trade: foreign price multiplier */         // land available for steads
+};}
+
+function rng(seed){let s=seed>>>0||1;return ()=>{s^=s<<13;s>>>=0;s^=s>>17;s^=s<<5;s>>>=0;return s/4294967296;};}
+
+function run(P){
+ const R=rng(P.seed*7919+13);
+ const pick=(w)=>{let r=R(),a=0;for(const k in w){a+=w[k];if(r<a)return k;}return Object.keys(w)[0];};
+ let nextId=1;
+ function newFamily(size){const land=pick(LAND_W);const f={id:nextId++,land,adults:Math.max(2,Math.round(size*0.55)),kids:Math.max(0,size-Math.round(size*0.55)),
+   st:{food:0,wood:0,clay:0,stone:0,fiber:0,wool:0},savings:0,cart:0,dist:Math.max(1,Math.round((2+R()*6)*(1.6-1.2*P.layout))),happy:60,
+   craft:CRAFTS_FOR(land),skill:R()*0.3,sown:0,yearProd:0,starve:0,away:0,tools:0};
+   f.st.food=f.adults*45+f.kids*30; return f;}
+ function CRAFTS_FOR(land){const c=CT.filter(k=>CRAFTS[k].land===land);return c.length?c[Math.floor(R()*c.length)]:CT[Math.floor(R()*CT.length)];}
+ let fams=[];for(let i=0;i<P.families;i++)fams.push(newFamily(4+Math.floor(R()*4)));
+ const A={deter:0,walls:0,war:0,warWith:null,allyHelp:0,armor:0,mercLoyal:1,lastRaid:'',mercs:0,prestige:0,upg:0,relations:0,soldiers:0,tg:false,arms:0,unpaid:0,spend:{army:0,mines:0,crafts:0,household:0,storage:0,walls:0,civic:0,mercs:0,upgrades:0,tribute:0}}; const mineLv={copper:0,tin:0,quarry:0,claypit:0,salt:0}; let oreYr=0;
+ const HZ={crop:1,winter:1,log:[]}; let dead=null, peakPop=0, lowHappyYrs=0, sackedYrs=0; P=Object.assign({},P);
+ const RIV=[]; for(let i=0;i<P.rivals;i++)RIV.push({name:['Hatti','Mitanni','Assur','Elam'][i%4],str:30+R()*40,cap:80+R()*90,g:0.12+R()*0.1});
+ let crafters=[], merchants=[]; let blocked=0;
+ const townPop=()=>crafters.reduce((a,c)=>a+c.size,0)+merchants.reduce((a,m)=>a+m.size,0);
+ const crowdMult=()=>{const r=townPop()/Math.max(1,P.townCap);return r>0.85?Math.max(0.5,1-(r-0.85)*1.5):1;};
+ const T={stLv:0,food:1500,goods:150,silver:50,ore:20,royalLabor:0};
+ const mineOut={copper:0,tin:0,quarry:0,claypit:0,salt:0};
+ let oreStock=10;// copper/tin bronze ore pooled, owned by holding
+ let merchantOre=0; // ore controlled by licensees
+ const hist=[];const ev=[];
+ let firstCrafter=null, firstMerchant=null;
+ const price={food:1};
+ let demand={};CT.forEach(k=>demand[k]=0);
+ let deathsStarve=0,births=0,deaths=0,splits=0,leftForCraft=0;
+ const days=P.years*DAYS;
+ var marketFood=0, merchTaxYr=0, deniedYr=0, silverIn=0; var stats={deliveryDays:0,paid:0};
+ for(let d=0;d<days;d++){
+  const yr=Math.floor(d/DAYS), dy=d%DAYS, season=Math.floor(dy/SEASON);
+  const pop=fams.reduce((a,f)=>a+f.adults+f.kids,0)+crafters.reduce((a,c)=>a+c.size,0)+merchants.reduce((a,m)=>a+m.size,0);
+  // ---------- families: daily labour & eating
+  for(const f of fams){
+   const L=LANDS[f.land];
+   let work=Math.max(0,f.adults-(f.away>0?f.awayN:0)); if(f.away>0){f.away--; if(f.away===0)f.awayN=0;}
+   const boost=(0.92+0.12*P.layout)*(1+(f.tools>0?CRAFTS.bronzesmith.boost:0)+(f.cart?0.04:0));
+   if(season===0){ // spring: most labour sows
+     f.sown+=work*0.8*P.cropYield*L.food*boost; addRaw(f,L,work*0.2*boost,P);
+   } else if(season===1){ addRaw(f,L,work*0.9*boost,P); f.skill+=P.skillPerYear/SEASON*0.5;
+   } else if(season===2){
+     if(dy<SEASON*2+5){ const h=f.sown/5*HZ.crop; f.st.food+=h; f.yearProd+=h; } else addRaw(f,L,work*0.7*boost,P);
+     if(dy===SEASON*2+5){ f.sown=0; payTithe(f); }
+   } else { addRaw(f,L,work*0.4*boost,P); f.skill+=P.skillPerYear/SEASON*0.5; }
+   // eat; wood fuel in winter
+   const need=(f.adults+f.kids*0.6)*(season===3?HZ.winter:1);
+   f.st.food-=need; f.st.food*=0.9985; f.st.wool*=0.9995;
+   if(season===3) f.st.wood-=0.05*need;
+   if(f.st.food<0){ // try market
+     const buy=Math.min(-f.st.food, f.savings/price.food); f.savings-=buy*price.food; f.st.food+=buy; marketFood-=buy;
+     if(f.st.food<0){ f.starve++; f.st.food=0; f.happy-=0.6; } }
+   if(f.st.wood<0){f.savings+=f.st.wood*1.2;f.st.wood=0;}
+   if(f.tools>0)f.tools-=1/(DAYS*5);
+  }
+  // ---------- crafters (live in town near palace/storage; crowding cuts output)
+  const cm=crowdMult();
+  for(const c of crafters){
+   const C=CRAFTS[c.type];
+   let cap=c.size*0.8*(0.6+c.skill*0.4)*cm*(0.75+0.35*P.layout)*(c.denied?0.85:1);
+   if(C.ore){ const need=cap*0.08; const got=takeOre(need,c); cap*=need>0?got/need:1; }
+   c.stock+=cap*C.out*0.5; // value of produced refined goods (half spent on inputs)
+   c.food-=c.size; if(c.food<0){const b=Math.min(-c.food,c.silver/price.food);c.silver-=b*price.food;c.food+=b;marketFood-=b; if(c.food<0){c.food=0;c.hungry++;}}
+   c.skill=Math.min(2,c.skill+0.003);
+  }
+  // ---------- holding daily upkeep & royal mines
+  const ret=P.retainers+pop*0.04;
+  T.food-=ret+A.soldiers*1.0; // court + army rations
+  for(const m of MINES){ const licensed=false; // licensing scrapped: all mines royal
+   if(!licensed){ const lv=mineLv[m]; T.food-=P.minersPerMine*(1+0.5*lv); const o=P.minersPerMine*0.25*(1+0.7*lv)*(1+A.upg); oreYr+=(m==='copper'||m==='tin')?o*0.5:0; if(m==='copper'||m==='tin')oreStock+=o*0.5; else T.goods+=o*1.5; }
+   else { const o=P.minersPerMine*0.25; if(m==='copper'||m==='tin')merchantOre+=o*0.5; else merchants[0].silver+=o*1.5; } }
+  if(T.food<0){ const b=Math.min(-T.food,T.goods*0.8); T.goods-=b/0.8*1; T.food+=b; if(T.food<0){T.food=0;T.short=(T.short||0)+1;} }
+  // ---------- end of season: market, demand, crafts sales
+  if(dy%SEASON===SEASON-1){
+   market(season,yr);
+   const cap=P.holdingCap*(1+T.stLv)*(1+A.upg); const fr=[0.07,0.035,0.02,0.012][Math.min(3,T.stLv)]*(1.4-0.8*P.layout); // grain/bread/beer spoil; granary & sealed jars slow it
+   let sp=T.food*fr+T.goods*0.3*fr*0.5; // ~30% of goods perishable (wool, meat, beer); wood/stone/ore none
+   T.food-=T.food*fr; T.goods-=T.goods*0.3*fr*0.5;
+   // sell surplus (non-perishable silver) to merchant houses
+   const stock=T.food+T.goods; const keep=Math.max(ret*SEASON*4+P.armyTarget*SEASON*4, cap*P.sellAt);
+   if(merchants.length&&stock>keep){ let sell=stock-keep; const ms=merchants.reduce((a,m)=>a+m.silver,0); sell=Math.min(sell,ms*0.8/0.8); if(sell>0){ const fShare=T.food/stock; T.food-=sell*fShare; T.goods-=sell*(1-fShare); const pr=0.8; for(const m of merchants){const part=sell*m.silver/Math.max(1,ms); m.silver-=part*pr; m.cargo=(m.cargo||0)+part;} T.silver+=sell*pr; T.soldYr=(T.soldYr||0)+sell*pr; } }
+   if(oreStock>60&&merchants.length){ const o=Math.min(oreStock-60, merchants[0].silver/5); oreStock-=o; merchants[0].silver-=o*5; merchants[0].cargo=(merchants[0].cargo||0)+o*6; T.silver+=o*5; T.soldYr=(T.soldYr||0)+o*5; }
+   const st=T.food+T.goods; if(st>cap){ const lost=(st-cap)*0.5; sp+=lost; const k=(st-lost)/st; T.food*=k; T.goods*=k; } // overflow rots fast
+   T.wasted=(T.wasted||0)+sp;
+  }
+  if(dy===0)rollHazards(yr);
+  if(dy===22)raid(yr);
+  if(dy===40&&HZ.plague)plague(yr);
+  if(dy===12&&HZ.fire)fire(yr);
+  if(dy===DAYS-1){ yearEnd(yr); if(dead)break; }
+ }
+ function addRaw(f,L,lab,P){ // distribute labour across land goods weighted by suitability, main item favoured
+  const main=f.titheItem||L.main; let tot=0; for(const k of RAW){ if(k==='food')continue; tot+=L[k]*(k===main?2:1);}
+  for(const k of RAW){ if(k==='food')continue; const w=L[k]*(k===main?2:1)/tot; const v=lab*w*P.workYield*L[k]/BASEVAL[k]; f.st[k]+=v; f.yearProd+=v*BASEVAL[k]; }
+  if(main==='food'){ f.st.food+=lab*0.3*P.workYield; }
+ }
+ function payTithe(f){
+  let due=f.yearProd*P.tithe; f.yearProd=0; const main=f.titheItem||LANDS[f.land].main;
+  let paid=0; const order=[main,'food','wood','clay','stone','fiber','wool'];
+  for(const k of order){ if(due<=0)break; const reserve=k==='food'?(f.adults+f.kids*0.6)*45:0; const avail=Math.max(0,f.st[k]-reserve); const take=Math.min(avail,due/BASEVAL[k]); f.st[k]-=take; due-=take*BASEVAL[k]; paid+=take*BASEVAL[k]; if(k==='food'){const tl=take*Math.min(0.3,0.012*f.dist*(1.5-P.layout));T.food+=take-tl;T.wasted=(T.wasted||0)+tl;} else T.goods+=take*BASEVAL[k]; }
+  if(due>0){ const take=Math.min(f.savings,due); f.savings-=take; T.goods+=take; paid+=take; due-=take; f.arrears=(f.arrears||0)+due; f.happy-=due>0?5:0; }
+  // physical delivery: carriers away 2*dist days
+  const capPer=f.cart===2?400:f.cart===1?150:40; const carriers=Math.min(f.adults,Math.max(1,Math.ceil(paid/capPer)));
+  f.awayN=carriers; f.away=2*f.dist; stats.deliveryDays+=carriers*2*f.dist; stats.paid+=paid;
+ }
+ function takeOre(need,c){ let got=Math.min(need,oreStock); if(got>0){ const cost=got*6; if(c.silver<cost){got=c.silver/6;} oreStock-=got; c.silver-=got*6; T.silver+=got*6; }
+  let rest=need-got; if(!merchants.length&&merchantOre>0){oreStock+=merchantOre;merchantOre=0;}
+  if(rest>0&&merchantOre>0){ const g2=Math.min(rest,merchantOre); const pr=6*1.8; const g=Math.min(g2,c.silver/pr); merchantOre-=g; c.silver-=g*pr; const tax=g*pr*P.mtax; T.silver+=tax; (merchants[0]||T).silver+=g*pr-tax; got+=g; }
+  return got; }
+ function market(season,yr){
+  // food price from supply/demand
+  let supply=0,needAll=0; for(const f of fams){ const n=(f.adults+f.kids*0.6); const reserve=n*reserveDays(season); supply+=Math.max(0,f.st.food-reserve); needAll+=n*15; }
+  price.food=Math.min(4,Math.max(0.5,1.5*needAll/(supply+needAll*0.5)));
+  // families sell surplus raw → savings (goods are the savings); keep reserves
+  for(const f of fams){ const n=f.adults+f.kids*0.6;
+   const reserve=n*reserveDays(season);
+   if(f.st.food>reserve){ const s=(f.st.food-reserve)*0.5; f.st.food-=s; f.savings+=s*price.food*0.9; marketFood+=s; }
+   for(const k of RAW){ if(k==='food')continue; const keep=n*2; if(f.st[k]>keep){ const s=(f.st[k]-keep)*0.7; f.st[k]-=s; f.savings+=s*BASEVAL[k]*0.85; } }
+  }
+  if(marketFood>0){ // crafters and holding draw down; leftover spoils slowly
+   marketFood*=0.85; }
+  // refined goods: per-season wants; buy from crafters with savings above a buffer
+  const want={},supplyR={}; CT.forEach(k=>{want[k]=0;supplyR[k]=0;});
+  for(const c of crafters)supplyR[c.type]+=c.stock;
+  const buyers=fams.concat(crafters.map(c=>({craftBuyer:c,adults:c.size,kids:0,savings:c.silver})));
+  for(const f of fams){ const n=f.adults+f.kids*0.5; const buffer=n*8; const budget=Math.max(0,f.savings-buffer)*0.35;
+   let wantTot=0; CT.forEach(k=>wantTot+=CRAFTS[k].want); 
+   for(const k of CT){ const w=n*CRAFTS[k].want/4; want[k]+=w; const share=Math.min(w,budget*CRAFTS[k].want/wantTot);
+     const avail=supplyR[k]; const take=Math.min(share,avail); if(take>0){ supplyR[k]-=take; f.savings-=take; payCrafters(k,take); if(k==='bronzesmith')f.tools=Math.max(f.tools,take/ w); } }
+  }
+  // holding buys weapons/bronze for army with silver
+  for(const k of ['weaponsmith','bronzesmith']){ const w=4+fams.length*0.05; want[k]+=w; const take=Math.min(w,supplyR[k],T.silver*0.3); if(take>0){supplyR[k]-=take;T.silver-=take;if(k==='weaponsmith')A.arms+=take;else T.goods+=take;payCrafters(k,take);} }
+  // merchants export leftover refined goods regionally
+  for(const k of CT){ if(merchants.length&&supplyR[k]>0){ const ex=supplyR[k]*0.5*Math.min(1,P.foreignPrice); supplyR[k]-=ex; payCrafters(k,ex*0.8); merchants.forEach(m=>m.silver+=ex*(P.foreignPrice*1.0-0.8)/merchants.length); } }
+  for(const c of crafters){ c.stock=Math.min(c.stock,supplyR[c.type]*(c.stock/(Math.max(1e-9,crafterStockTotal(c.type))))); }
+  // demand meter: unmet want ratio, weighted by ability to pay
+  for(const k of CT){ const cap=crafters.filter(c=>c.type===k).reduce((a,c)=>a+c.size*0.8*CRAFTS[k].out*0.5*SEASON,0); demand[k]=Math.max(-1,Math.min(1,(want[k]-cap)/Math.max(1,want[k]))); }
+  // crafters buy food stock for the season with silver
+  for(const c of crafters){ const need=c.size*SEASON*0.6; if(c.food<need){const b=Math.min(need-c.food,c.silver/price.food*0.6);c.food+=b;c.silver-=b*price.food; distributeToFamilies(b*price.food);} }
+ }
+ function reserveDays(season){ // days until end of next harvest +15% buffer
+  const toHarvest=[35,20,65,50][season]; return toHarvest*1.15; }
+ function crafterStockTotal(k){return crafters.filter(c=>c.type===k).reduce((a,c)=>a+c.stock,0);}
+ function payCrafters(k,amt){ const cs=crafters.filter(c=>c.type===k); const tot=cs.reduce((a,c)=>a+c.stock,0)||1; for(const c of cs){ const s=amt*c.stock/tot; c.silver+=s; c.earnYr+=s; } }
+ function distributeToFamilies(v){ // silver/goods spent on food flows back to food sellers' savings
+  if(!fams.length)return; const share=v/fams.length; for(const f of fams)f.savings+=share*0.5; }
+
+ // ================= HAZARDS (unforgiving world) =================
+ function sev(){return 0.3+R()*1.2;}
+ function rollHazards(yr){ const H=P.hazards; const prevDrought=HZ.crop<0.8; const prevFamine=HZ.famine; HZ.crop=1;HZ.winter=1;HZ.plague=0;HZ.fire=0;HZ.raidS=0; HZ.log=[];
+  if(R()<(prevDrought?P.clusterD:0.2)*H){const v=sev();HZ.crop=Math.max(0.25,1-0.45*v);HZ.log.push('drought '+(v).toFixed(1));}
+  else if(R()<0.15*H){HZ.crop=0.85;HZ.log.push('poor harvest');}
+  if(R()<0.22*H){const v=sev();HZ.winter=1+0.35*v;HZ.log.push('harsh winter '+v.toFixed(1));}
+  if(R()<(prevFamine?0.12:0.05)*H+(townPop()>P.townCap*0.9?0.04:0)){HZ.plague=sev();HZ.log.push('plague');}
+  if(R()<0.12*H){HZ.fire=sev();}
+  const wealth=T.goods+T.silver+oreStock*6; const rp=P.rivalPressure*(1+yr/40);
+  HZ.raidS=0; HZ.raidTier=''; HZ.war=0;
+  // RAIDERS: lured by wealth, deterred by perceived strength; fade as the city becomes established
+  const lure=Math.sqrt(Math.max(0,wealth))*P.raidW*4+fams.length*0.4; const D0=Math.max(5,defense());
+  const presence=Math.max(0.05,Math.exp(-A.deter/6)*(yr<25?1:0.6));
+  const pr=Math.min(0.8,(0.12+0.45*Math.min(2,lure/D0))*presence*H*(HZ.crop<0.8?1+P.hungryRaid*3:1));
+  if(yr>=1&&R()<pr){ const t=R(); const ph=0.1*Math.exp(-A.deter/4); const tier=t<ph?['horde',80,150]:t<ph+0.3?['warband',30,65]:['band',12,28];
+    HZ.raidTier=tier[0]; HZ.raidS=(tier[1]+R()*(tier[2]-tier[1]))*(0.8+0.25*Math.min(2,lure/D0))*P.rivalPressure*(1+Math.min(yr,20)/40); }
+  // RIVAL NATIONS (placeholder): grow on their own; occasional war declarations of varied severity
+  for(const rv of RIV){ rv.str+=rv.g*rv.str*(1-rv.str/rv.cap); rv.str*=0.92+R()*0.16; }
+  if(A.war>0){ A.war--; HZ.war=A.warWith.str*(0.3+R()*0.7); }
+  else if(yr>=8){ for(const rv of RIV){ const ratio=rv.str/Math.max(10,defense()+A.allyHelp); const pw=Math.min(0.3,(0.02+0.1*Math.max(0,ratio-0.8))*P.rivalPressure)*(A.relations>3?0.5:1);
+    if(R()<pw){ A.warWith=rv; A.war=Math.floor(R()*3); HZ.war=rv.str*(0.3+R()*0.7); HZ.log.push('WAR declared by '+rv.name); break; } } }
+ }
+ function raidBase(yr){ const wealth=T.goods+T.silver+oreStock*6; return (P.raidA+yr*P.raidB+Math.sqrt(Math.max(0,wealth))*P.raidW)*P.rivalPressure*(1+yr/40); }
+ function killPeople(n){ let k=0; for(let i=0;i<n*3&&k<n&&fams.length;i++){ const f=fams[Math.floor(R()*fams.length)]; if(f.kids>0&&R()<0.4){f.kids--;k++;} else if(f.adults>1){f.adults--;k++;} } deaths+=k; return k; }
+ function defense(){ const arm=0.6+0.4*Math.min(1,A.arms/Math.max(1,A.soldiers*3))+0.4*Math.min(1,A.armor/Math.max(1,A.soldiers*2));
+  return (A.soldiers*(A.tg?1:0.6)*arm + A.mercs*1.2*A.mercLoyal)*(0.65+0.7*P.layout)*(1+0.4*A.walls)*(0.8+0.5*P.tactics); }
+ function raid(yr){ if(HZ.raidS)battle(HZ.raidS,'raid ('+HZ.raidTier+')',false); if(HZ.war)battle(HZ.war,'war vs '+A.warWith.name,true); }
+ function battle(R0,label,isWar){ const D=defense()+(isWar?A.allyHelp:A.allyHelp*0.3);
+  if(D>=R0){ A.deter+=isWar?0.5:1; if(isWar&&R()<0.5){A.war=0;} const cas=Math.min(A.soldiers,Math.round(R0*0.04)); A.soldiers-=cas; deaths+=cas; HZ.log.push(label+' repelled '+Math.round(R0)); A.lastRaid='won'; return; }
+  A.deter=Math.max(0,A.deter-1);
+  const loss=Math.min(0.75,0.25+(R0-D)/R0*0.5); T.food*=1-loss; T.goods*=1-loss; T.silver*=1-loss*0.8; oreStock*=1-loss*0.5;
+  const burned=Math.floor(fams.length*loss*0.15); for(let i=0;i<burned;i++){const f=fams[Math.floor(R()*fams.length)]; f.st.food*=0.2; f.savings*=0.3; f.happy-=10;}
+  const killed=killPeople(Math.round((R0-D)*0.22)); const cas=Math.round(A.soldiers*0.3); A.soldiers-=cas; A.mercs=Math.round(A.mercs*0.6); deaths+=cas;
+  // disloyal mercs: some switch sides/flee after a loss
+  if(A.mercs>0&&R()<0.5){A.mercs=Math.round(A.mercs*0.5);HZ.log.push('mercenaries fled');}
+  for(const f of fams)f.happy-=8*loss; sackedYrs++; A.lastRaid='lost'; HZ.log.push((isWar?'WAR LOST ':'RAID SACKED ')+label+' '+Math.round(R0)+' vs '+Math.round(D)+' killed '+killed); if(isWar){ const lostF=Math.floor(fams.length*0.06); fams.splice(0,lostF); HZ.log.push('ceded land: '+lostF+' steads'); A.war=0; } }
+ function plague(yr){ const hungry=fams.filter(f=>f.starve>0).length/Math.max(1,fams.length); const frac=Math.min(0.3,(0.04+0.1*HZ.plague)*(1+hungry)*(townPop()>P.townCap*0.9?1.4:1));
+  const pop=fams.reduce((a,f)=>a+f.adults+f.kids,0); const k=killPeople(Math.round(pop*frac)); for(const c of crafters)if(R()<frac)c.size=Math.max(1,c.size-1); A.soldiers=Math.round(A.soldiers*(1-frac)); HZ.log.push('plague killed '+k); }
+ function fire(yr){ const prot=[1,0.8,0.6,0.45][Math.min(3,T.stLv)]; const l=Math.min(0.5,0.12*HZ.fire*prot*(1.4-0.8*P.layout)); T.goods*=1-l; T.food*=1-l*0.7; for(const c of crafters)if(R()<0.15*HZ.fire){c.stock=0;c.silver*=0.6;} HZ.log.push('fire −'+Math.round(l*100)+'% stores'); }
+ // ================= ADAPTIVE PLAYER (simple heuristic AI) =================
+ function D_low(){return defense()+A.allyHelp*0.5;}
+ function adapt(yr,last){ if(!P.adaptive||!last)return; P.tactics=0.35+0.4*P.skill; if(R()>P.skill)return; const pop=last.pop; const needYr=pop*30;
+  const foodCover=(T.food+fams.reduce((a,f)=>a+f.st.food,0))/Math.max(1,needYr);
+  if(last.happy<45&&P.tithe>0.12)P.tithe-=0.05; else if(foodCover<0.6&&P.tithe<0.3)P.tithe+=0.05; else if(foodCover>1.5&&P.tithe>0.15)P.tithe-=0.05;
+  const rivMax=Math.max(0,...RIV.map(r=>r.str)); const threat=Math.max(45*Math.exp(-A.deter/6)*(1+Math.sqrt(T.goods+T.silver)*0.01), rivMax*0.9)*P.adaptThreat/1.3;
+  if(D_low()<threat&&P.wallLevel<3&&T.goods+T.silver>900*(A.walls+1))P.wallLevel=A.walls+1;
+  if(rivMax>defense()*1.1)P.tribute=Math.min(200,P.tribute+50); else if(rivMax<defense()*0.8)P.tribute=Math.max(0,P.tribute-50); const D=defense(); const sacked=last.hazards&&last.hazards.some(x=>/SACKED/.test(x));
+  if(D<threat||sacked){ const gap=Math.max(0.2,(threat-D)/Math.max(1,threat)); if(foodCover>0.5&&last.happy>35)P.armyTarget=Math.min(Math.round(pop*0.09),P.armyTarget+Math.round(4+12*gap)); if(T.silver>300)P.mercs=Math.min(70,P.mercs+Math.round(3+10*gap)); }
+  if(P.armyTarget>pop*0.1)P.armyTarget=Math.round(pop*0.1);
+  if(sacked&&P.storageLevel<3)P.storageLevel++;
+  else if(D>threat*1.6){ P.armyTarget=Math.max(10,P.armyTarget-5); P.mercs=Math.max(0,P.mercs-5); }
+  if(last.wasted>T.food*0.2&&P.storageLevel<3)P.storageLevel++;
+  P.civic=last.happy<45?0.5:0.2;
+ }
+ function yearEnd(yr){
+  const brokeYr={};
+  // births / deaths / happiness
+  const civicHappy=Math.min(15, A.prestige/Math.max(1,fams.length)*0.6);
+ for(const f of [...fams]){
+   const n=f.adults+f.kids; const fed=f.starve<5;
+   const sav=f.savings/(n*10);
+   f.happy+= (60 + civicHappy - P.tithe*90 + Math.min(20,sav*8) + (f.starve>0?-Math.min(30,f.starve):0) + (f.cart?3:0) - f.happy)*0.5;
+   f.happy=Math.max(0,Math.min(100,f.happy));
+   if(fed&&R()<0.38+(f.happy-50)/250) {f.kids++;births++;}
+   if(f.kids>0&&R()<0.22){f.kids--;f.adults++;}
+   const dp=0.05+f.starve*0.012; if(R()<dp*n/5){ if(f.adults>1&&R()<0.6)f.adults--;else if(f.kids>0)f.kids--; deaths++; if(f.starve>5)deathsStarve++; }
+   f.starve=0;
+   // cart / donkey purchase or homemade
+   if(f.cart<2){ const cost=f.cart===0?45:120; if(f.savings>cost*1.6){f.savings-=cost;f.cart++;} else if(f.cart===0&&f.st.wood>12&&R()<0.15){f.st.wood-=12;f.cart=1;} }
+   // savings decay (spoilage/repairs)
+   f.savings*=0.92;
+   // family split to new stead
+   if(f.adults+f.kids>=10&&fams.length<P.maxStead){ const nf=newFamily(0); nf.adults=2;nf.kids=1; f.adults-=2;f.kids-=1; nf.st.food=Math.min(f.st.food*0.3,120); f.st.food-=nf.st.food; fams.push(nf); splits++; }
+   // break-off to crafter
+   const k=f.craft;
+   const ready=f.skill>=1&&f.savings>=P.breakSavings*(1-civicHappy/50)&&demand[k]>=P.breakDemand&&f.adults>=3;
+   if(ready&&townPop()+2>P.townCap){blocked++;}
+   else if(ready&&!brokeYr[k]){ brokeYr[k]=1;
+     f.adults-=1; f.savings-=P.breakSavings*0.8; f.skill=R()*0.3; leftForCraft++;
+     const c={type:k,size:1+(R()<0.5?1:0),skill:1,silver:P.breakSavings*0.5,stock:0,food:30,hungry:0,born:yr,earnYr:0};
+     if(c.size===2&&f.kids>0){f.kids--;} crafters.push(c); if(firstCrafter===null)firstCrafter=yr+1;
+     ev.push({y:yr+1,t:'crafter',k}); demand[k]-=0.3;
+   }
+   if(f.adults<=0){ fams.splice(fams.indexOf(f),1); ev.push({y:yr+1,t:'stead abandoned'}); }
+  }
+  // crafters: upkeep, growth, promote
+  for(const c of [...crafters]){
+   c.silver*=0.95; if(c.earnYr>60&&c.size<5&&R()<0.25&&townPop()<P.townCap)c.size++;
+   if(c.hungry>20&&R()<0.5){ crafters.splice(crafters.indexOf(c),1); ev.push({y:yr+1,t:'crafter failed',k:c.type}); continue; }
+   c.hungry=0; c.earnYr=0;
+   const elig=c.silver>=P.merchantSilver&&yr+1-c.born>=P.merchantYears&&R()<Math.min(1,Math.max(0.05,((P.foreignPrice*(1+P.regionalMargin)-1)*(1-P.mtax)-0.05)/0.12));
+   if(elig&&merchants.length>=P.charterMax){ c.denied=(c.denied||0)+1; deniedYr++; // charter refused
+     if(c.denied>=2&&R()<0.35){ crafters.splice(crafters.indexOf(c),1); ev.push({y:yr+1,t:'denied crafter left with silver',k:c.type}); continue; } }
+   else if(elig){
+     crafters.splice(crafters.indexOf(c),1); merchants.push({from:c.type,size:c.size+1,silver:c.silver,born:yr}); if(firstMerchant===null)firstMerchant=yr+1; ev.push({y:yr+1,t:'merchant',k:c.type}); }
+  }
+  // merchants: buy raw goods from holding, regional trade, tax, license fees
+  for(const m of [...merchants]){
+   const buy=0; // merchants now buy holding surplus via the sell-surplus policy (cargo)
+   const capital=m.silver+buy; // STUB regional trade: export up to regionalCap per house at fixed foreign price
+   const ex=Math.min(m.cargo||0,P.regionalCap); m.cargo=((m.cargo||0)-ex)*0.9; const rev=ex*0.8*P.foreignPrice*(1+P.regionalMargin); const own=Math.min(m.silver,P.regionalCap*0.5)*(P.foreignPrice*(1+P.regionalMargin)-1)*0.5; const profit=rev+own; m.tradeIn=rev+own; m.silver-=0; 
+   const tax=Math.max(0,profit-ex*0.8)*P.mtax; m.silver+=profit-tax; T.silver+=tax*0.6; T.goods+=tax*0.4; m.taxYr=tax;
+   
+   m.silver*=0.96;
+   // heavy tax drives merchant houses to move their trade elsewhere
+   if(P.mtax>0.3&&R()<(P.mtax-0.3)*0.8){ merchants.splice(merchants.indexOf(m),1); ev.push({y:yr+1,t:'merchant left region'}); }
+  }
+  silverIn=merchants.reduce((a,m)=>a+(m.tradeIn||0),0); merchTaxYr=merchants.reduce((a,m)=>a+(m.taxYr||0),0);
+  // ---------- Holding spending policies (tithe sinks)
+  const pay=(v,cat)=>{ let left=v; const g=Math.min(T.goods,left); T.goods-=g; left-=g; const sv=Math.min(T.silver,left); T.silver-=sv; left-=sv; const fd=Math.min(T.food*0.5,left); T.food-=fd; left-=fd; A.spend[cat]+=v-left; return left<=1e-6; };
+  for(const k in A.spend)A.spend[k]=0;
+  pay(P.household,'household');
+  if(P.armyTarget>0&&!A.tg&&T.goods+T.silver>500){ pay(400,'army'); A.tg=true; }
+  if(A.tg)pay(40,'army');
+  if(A.soldiers>0&&!pay(A.soldiers*6,'army')){ const d=Math.ceil(A.soldiers*0.2); A.soldiers-=d; A.unpaid++; ev.push({y:yr+1,t:'unpaid soldiers deserted',k:d}); }
+  else A.unpaid=0;
+  let recruits=Math.min(P.armyTarget-A.soldiers, Math.ceil(P.armyTarget*0.25)+3);
+  const pool=fams.filter(f=>f.adults>=3).sort((a,b)=>b.adults-a.adults);
+  for(let i=0;i<recruits&&i<pool.length;i++){ if(!pay(20,'army'))break; pool[i].adults--; pool[i].happy-=3; A.soldiers++; }
+  if(A.soldiers>P.armyTarget){ const x=A.soldiers-P.armyTarget; A.soldiers-=x; const fs2=fams.slice().sort((a,b)=>a.adults-b.adults); for(let i=0;i<x;i++)fs2[i%fs2.length].adults++; }
+  A.arms*=0.9; A.armor*=0.92; { const o2=Math.min(oreStock*0.5,A.soldiers*2); oreStock-=o2; A.arms+=o2*6; A.spend.army+=o2*6; const o3=Math.min(oreStock*0.5,A.soldiers*1.5); oreStock-=o3; A.armor+=o3*4; const o4=oreStock*P.monumentOre; oreStock-=o4; A.prestige+=o4*0.3; } // royal armoury turns ore into weapons
+  for(const m of MINES){ if(mineLv[m]<P.mineLevel&&T.goods+T.silver>350*(mineLv[m]+1)*1.5){ if(pay(350*(mineLv[m]+1),'mines'))mineLv[m]++; } }
+  // Holding buys refined goods from crafters at a 1.5x premium (patronage)
+  if(A.walls<P.wallLevel&&T.goods+T.silver+T.food*0.3>700*(A.walls+1)){ if(pay(700*(A.walls+1),'walls'))A.walls++; }
+  if(A.walls>0&&!pay(40*A.walls,'walls')&&R()<0.3){A.walls--; ev.push({y:yr+1,t:'walls fell into disrepair'});}
+  A.allyHelp=Math.min(60,A.relations*6);
+  A.deter=A.deter*0.95+(defense()>40?0.3:0);
+  if(T.stLv<P.storageLevel&&pay(400*(T.stLv+1),'storage'))T.stLv++; pay(30*T.stLv,'storage');
+  { const budget=(T.silver*0.5+Math.max(0,T.goods-1500)*0.3)*P.crafterBuy*0.4; if(budget>0&&crafters.length){ const sv=Math.min(T.silver,budget); T.silver-=sv; T.goods-=budget-sv; A.spend.crafts+=budget; const per=budget/crafters.length; for(const c of crafters){ c.silver+=per; c.earnYr+=per; } A.arms+=budget*0.3; } }
+  let strength=defense();
+  // ---------- silver sinks
+  { const reserve=300+A.mercs*20; let free=Math.max(0,T.silver-reserve);
+    const paySilver=(v,cat)=>{const x=Math.min(T.silver,v);T.silver-=x;A.spend[cat]+=x;return x>=v-1e-6;};
+    // mercenaries: silver army, no draft
+    if(A.mercs>0&&!paySilver(A.mercs*15*(1+A.mercs/50),'mercs')){ A.mercLoyal=Math.max(0.3,A.mercLoyal-0.3); const d=Math.ceil(A.mercs*0.5); A.mercs-=d; A.mercUnpaid=(A.mercUnpaid||0)+1; ev.push({y:yr+1,t:'unpaid mercenaries left (pillaged)',k:d}); T.goods*=0.85; for(const f of fams)f.happy-=4; } else { A.mercUnpaid=0; A.mercLoyal=Math.min(0.75,A.mercLoyal+0.1); }
+    let hired=0; const sup=Math.round(P.mercSupply*(0.5+R())); while(A.mercs<P.mercs&&hired<sup&&T.silver>reserve+30*(1+A.mercs/25)){ paySilver(30*(1+A.mercs/25),'mercs'); A.mercs++; hired++; }
+    if(A.mercs>P.mercs)A.mercs=P.mercs;
+    free=Math.max(0,T.silver-reserve);
+    // parks, fountains, temples, palaces, festivals -> prestige (decays 10%/yr)
+    const civ=free*P.civic; paySilver(civ,'civic'); A.prestige=A.prestige*0.9+civ/20;
+    // imperial building upgrades -> +output/storage (diminishing, max +100%)
+    const up=Math.max(0,T.silver-reserve)*P.upgrades; paySilver(up,'upgrades'); A.upg=Math.min(1,A.upg+up/(4000*(1+A.upg*3)));
+    // foreign relations STUB: tribute/gifts only move a meter
+    if(P.tribute>0){ const ok=paySilver(P.tribute,'tribute')||pay(P.tribute*0.5,'tribute'); A.relations=A.relations*0.85+(ok?P.tribute/50:P.tribute/120); } else A.relations*=0.85;
+  }
+
+  const pop=fams.reduce((a,f)=>a+f.adults+f.kids,0)+crafters.reduce((a,c)=>a+c.size,0)+merchants.reduce((a,m)=>a+m.size,0)+A.soldiers;
+  const fs=fams.map(f=>f.savings/Math.max(1,f.adults+f.kids));
+  const byType={};CT.forEach(k=>byType[k]=crafters.filter(c=>c.type===k).length);
+  const mw=merchants.reduce((a,m)=>a+m.silver,0);
+  hist.push({year:yr+1,pop,families:fams.length,crafters:crafters.length,merchants:merchants.length,byType,
+   treasury:T.food+T.goods+T.silver+oreStock*6, tFood:T.food,tGoods:T.goods,tSilver:T.silver,tOre:oreStock,
+   avgSav:fs.reduce((a,b)=>a+b,0)/Math.max(1,fs.length), happy:fams.reduce((a,f)=>a+f.happy,0)/Math.max(1,fams.length),
+   famFood:fams.reduce((a,f)=>a+f.st.food,0)/Math.max(1,pop), starveDeaths:deathsStarve, births,deaths,
+   demand:Object.assign({},demand), merchWealth:mw, holdingShort:T.short||0, wasted:T.wasted||0, soldYr:T.soldYr||0, stLv:T.stLv, oreStock, merchTax:merchTaxYr, denied:deniedYr, silverIn, soldiers:A.soldiers, mercs:A.mercs, strength, prestige:A.prestige, civicHappy, upg:A.upg, relations:A.relations, mercUnpaid:A.mercUnpaid||0, oreYr, spend:Object.assign({},A.spend), unpaid:A.unpaid, mineLv:Object.values(mineLv).reduce((a,b)=>a+b,0)/5, delivery:stats.deliveryDays/Math.max(1,fams.length),
+   townPop:townPop(),townCap:P.townCap,blocked,crowd:crowdMult(),carts:fams.filter(f=>f.cart).length/Math.max(1,fams.length), leftForCraft});
+  const L=hist[hist.length-1]; L.hazards=HZ.log.slice(); L.raidS=Math.max(HZ.raidS||0,HZ.war||0); L.walls=A.walls; L.deter=A.deter; L.allyHelp=A.allyHelp; L.rivalMax=Math.max(...RIV.map(r=>r.str)); L.war=HZ.war||0; L.defense=defense(); L.tithe=P.tithe; L.armyT=P.armyTarget; L.mercT=P.mercs; L.mercLoyal=A.mercLoyal; L.armor=A.armor;
+  { const prev=hist[hist.length-2]; const pe=[];
+    if(HZ.log.some(x=>/drought|poor harvest/.test(x)))pe.push('crop failure'); if(HZ.winter>1)pe.push('harsh winter'); if(HZ.raidS)pe.push(HZ.log.some(x=>/SACKED/.test(x))?'raid lost':'raid'); if(HZ.war)pe.push(HZ.log.some(x=>/WAR LOST/.test(x))?'war lost':'war'); if(HZ.plague)pe.push('plague'); if(HZ.fire)pe.push('fire');
+    if(prev&&L.starveDeaths>prev.starveDeaths)pe.push('food shortage'); if(L.holdingShort>0)pe.push('holding short');
+    if(L.happy<45)pe.push('unrest'); if(L.wasted>Math.max(300,(L.tFood+L.tGoods)*0.15))pe.push('spoilage'); if(L.blocked>0||fams.filter(f=>f.adults<2).length>fams.length*0.15)pe.push('labour gap');
+    if(L.unpaid>0||L.mercUnpaid>0)pe.push('pay arrears'); if(L.oreStock>400)pe.push('ore glut'); if(L.denied>0)pe.push('charter petitions');
+    L.pressure=pe; HZ.famine=pe.includes("food shortage"); }
+  peakPop=Math.max(peakPop,pop); lowHappyYrs=L.happy<25?lowHappyYrs+1:0;
+  if(pop<peakPop*0.4||pop<70) dead={y:yr+1,cause:sackedYrs>=2?'raids/war':(L.starveDeaths>pop*0.3?'famine':'depopulation')};
+  else if(lowHappyYrs>=3) dead={y:yr+1,cause:'revolt'};
+  else if(sackedYrs>=P.sackLimit) dead={y:yr+1,cause:'raids/war'};
+  if(dead){ev.push({y:dead.y,t:'CITY FELL: '+dead.cause});}
+  sackedYrs=Math.max(0,sackedYrs-(A.lastRaid==='won'?1:0.34)); A.lastRaid='';
+  adapt(yr,L);
+  stats.deliveryDays=0; oreYr=0; T.short=0; T.wasted=0; T.soldYr=0; blocked=0; deniedYr=0;
+ }
+ return {hist,ev,dead,firstCrafter,firstMerchant,diagnose:(dead?['FELL yr '+dead.y+': '+dead.cause]:[]).concat(diagnose(hist,P,firstCrafter,firstMerchant))};
+}
+function diagnose(h,P,fc,fm){
+ const last=h[h.length-1],first=h[0]; const F=[];
+ if(fc===null||last.crafters+last.merchants<2)F.push('stagnation');
+ if(last.merchWealth>Math.max(2000,last.treasury*1.0))F.push('runaway merchants');
+ const p5=h[Math.max(0,h.length-6)]; if(last.starveDeaths-p5.starveDeaths>last.pop*0.03||last.pop<first.pop*0.7)F.push('starvation spiral');
+ if(last.families<first.families*0.8)F.push('crafter exodus');
+ const tail=h.slice(-5); if(tail.reduce((a,x)=>a+x.holdingShort,0)>20||last.treasury<50)F.push('treasury collapse');
+ if(h.slice(-5).reduce((a,x)=>a+x.wasted,0)>h.slice(-5).reduce((a,x)=>a+x.treasury,0)*0.3)F.push('heavy spoilage');
+ if(last.oreStock>400)F.push('ore glut');
+ if(h.slice(-5).some(x=>x.unpaid>0))F.push('army unpaid/desertion');
+ if(h.slice(-5).some(x=>x.mercUnpaid>0))F.push('mercenary pillage');
+ if(last.tSilver>last.pop*60)F.push('silver pile-up');
+ if(last.happy<35)F.push('unrest');
+ if(h.slice(-5).reduce((a,x)=>a+x.blocked,0)>10)F.push('town housing cap');
+ return F;
+}
+return {run,DEF,CRAFTS,CT,MINES,LANDS};
+})();
+if(typeof module!=='undefined')module.exports=ECON;
+// ==== SIM CORE END ====

@@ -361,6 +361,8 @@ function wearInit(){if(WEAR&&WEAR.length===MW*MH&&wearInit.S===S)return true;if(
 function wearStep(i,dt){if(!WEAR||wearInit.S!==S){if(!wearInit())return}if(WEAR[i]===0){const t=TER[i];if(t===T_WATER||occ[i])return;WL.push(i)}WEAR[i]=Math.min(200,WEAR[i]+dt)}
 function wearTick(){if(!wearInit())return;let ch=0;const nl=[];for(const i of WL){let w=WEAR[i]*.985;if(WORN[i]){if(w<WEAR_OFF||roadSet[i]!==1){if(roadSet[i]===1){roadSet[i]=0;ch++;dirtyTile(i%MW,i/MW|0)}WORN[i]=0}}else if(w>=WEAR_ON&&!roadSet[i]&&!occ[i]&&TER[i]!==T_WATER){roadSet[i]=1;WORN[i]=1;ch++;dirtyTile(i%MW,i/MW|0)}if(w<.5&&!WORN[i]){WEAR[i]=0;continue}WEAR[i]=w;nl.push(i)}WL=nl;if(ch){ov64=null;mmBase=null}}
 function wearSave(){if(WORN&&wearInit.S===S){const o=[];for(const i of WL)if(WORN[i])o.push(i);S.worn=o}}
+// blueprint over trees/bushes/rocks: needs clearing (cached per ghost position)
+function needsClear(t,x,y){const k=t+x+','+y;if(needsClear.k===k)return needsClear.v;const s=bsz(t);let v=false;for(let yy=y;yy<y+s&&!v;yy++)for(let xx=x;xx<x+s;xx++)if(TER[yy*MW+xx]===T_FOREST){v=true;break}if(!v)for(const p of props)if(p.gx>=x&&p.gx<x+s&&p.gy>=y&&p.gy<y+s){v=true;break}needsClear.k=k;needsClear.v=v;return v}
 /*ECO END*/
 
 const BSAL={stead:['house',1],craft:['house',2],holding:['granary',3]};
@@ -673,10 +675,11 @@ function storeGoods(b,X,Y,s,al){const C=cap(),M=fpMask(b.t,bfp(b)),cells=[];for(
  if(S.gd&&S.gd.beer>1&&b.t!=='granary'){const n=Math.min(6,Math.ceil(S.gd.beer/10));for(let q=0;q<n;q++)stkIcon(vx,'beer',X+s*32-8-(q%3)*6,Y+s*32-9-((q/3)|0)*6,q)}vx.globalAlpha=1}
 // ================= CONSTRUCTION: clear plot -> haul materials -> build in stages =================
 function siteInit(b){if(b.t==='campfire'||b.t==='wall'||b.t==='gate')return;const s=bsz(b.t),cl=[],y0={wood:0,stone:0,food:0};for(const p of props){if(p.gx>=b.x&&p.gx<b.x+s&&p.gy>=b.y&&p.gy<b.y+s){cl.push([p.gx,p.gy,p.k]);if(p.k==='rock')y0.stone+=4;else if(p.k==='bush'||p.k==='flowers'||p.k==='reed')y0.food+=1.5;else y0.wood+=5}}
- const c=bcost(b.t,0);let tot=0;for(const r in c)tot+=c[r];b.cp={p:0,clr:cl.slice(0,24),cw:cl.length*2,cd:0,mt:Math.max(1,Math.ceil(tot/25)),md:0,w:Math.max(12,s*s*1.4),wd:0,y:y0}}
+ const ft=[];for(let y=b.y;y<b.y+s;y++)for(let x=b.x;x<b.x+s;x++){const i=y*MW+x;if(TER[i]===T_FOREST){ft.push(i);y0.wood+=6}}
+ const c=bcost(b.t,0);let tot=0;for(const r in c)tot+=c[r];b.cp={p:0,ft,clr:cl.slice(0,24),cw:cl.length*2+ft.length*3,cd:0,mt:Math.max(1,Math.ceil(tot/25)),md:0,w:Math.max(12,s*s*1.4),wd:0,y:y0}}
 function sitePhase(b){const c=b.cp;if(c.cd<c.cw)return 0;if(c.md<c.mt)return 1;return 2}
 function siteTick(){let ch=0;for(const b of S.bl){const c=b.cp;if(!c)continue;const near=agents.filter(a=>a.bsite===b&&a.state==='work'&&!a.route.length).length;const ph=sitePhase(b);
-  if(ph===0){c.cd+=near*1+.5;if(c.cd>=c.cw){const k=bid(b),o=(S.stk=S.stk||{})[k]||(S.stk[k]={});for(const r in c.y)if(c.y[r])o[r]=(o[r]||0)+c.y[r];c.clr=[];if(c.cw)log('Plot cleared for the '+BLD[b.t].n+'.')}}
+  if(ph===0){c.cd+=near*1+.5;if(c.cd>=c.cw){const k=bid(b),o=(S.stk=S.stk||{})[k]||(S.stk[k]={});for(const r in c.y)if(c.y[r])o[r]=(o[r]||0)+c.y[r];c.clr=[];if(c.ft&&c.ft.length){for(const i of c.ft)if(TER[i]===T_FOREST)TER[i]=T_GRASS;c.ft=[];ch=1}if(c.cw)qlog('Plot cleared for the '+BLD[b.t].n+' (yields go to storage).')}}
   else if(ph===1){c.md+=.08}
   else{c.wd+=near*1+.3}
   c.p=Math.min(1,(c.cw?.15*Math.min(1,c.cd/c.cw):.15)+.25*Math.min(1,c.md/c.mt)+.6*Math.min(1,c.wd/c.w));
@@ -844,7 +847,7 @@ const STORES={stockpile:1,granary:1,market:1,storehouse:1};
 function logi(x,y,s){const cx=x+s/2,cy=y+s/2;const h=hubT();let d=Math.abs(cx-h.x)+Math.abs(cy-h.y);for(const b of S.bl)if(STORES[b.t]){const z=bsz(b.t);d=Math.min(d,Math.abs(cx-b.x-z/2)+Math.abs(cy-b.y-z/2))}d=Math.max(0,d-s/2);const sec=d*2/1.6;const eff=Math.max(.3,Math.min(1,1/(1+Math.max(0,d-20)/30)));return{d:Math.round(d),sec:Math.round(sec),eff}}
 function effCol(e){return e>=.9?'#9fe07a':e>=.65?'#e8d070':'#ff9070'}
 function jobEff(j){let n=0,a=0;for(const b of S.bl)if(BLD[b.t].job===j){a+=logi(b.x,b.y,bsz(b.t)).eff;n++}return n?a/n:1}
-function placeErrBase(t,x,y,ignoreNear){const s=bsz(t),R=RAD[S.tier],FM=CURFP&&CURFP.t===t?fpMask(t,CURFP):null;for(let yy=y;yy<y+s;yy++)for(let xx=x;xx<x+s;xx++){if(FM&&!FM[(yy-y)*s+xx-x])continue;if(xx<0||yy<0||xx>=MW||yy>=MH)return'Off the map';const tt=ter(xx,yy);if(tt===T_WATER||(tt===T_SAND&&[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>ter(xx+a,yy+b)===T_WATER)))return'Not on water or shore';if(tt===T_FOREST)return'Forest in the way';if(CLIFF&&CLIFF[yy*MW+xx])return'Cliff in the way';if(occ[yy*MW+xx])return'Tile taken'}
+function placeErrBase(t,x,y,ignoreNear){const s=bsz(t),R=RAD[S.tier],FM=CURFP&&CURFP.t===t?fpMask(t,CURFP):null;for(let yy=y;yy<y+s;yy++)for(let xx=x;xx<x+s;xx++){if(FM&&!FM[(yy-y)*s+xx-x])continue;if(xx<0||yy<0||xx>=MW||yy>=MH)return'Off the map';const tt=ter(xx,yy);if(tt===T_WATER||(tt===T_SAND&&[[1,0],[-1,0],[0,1],[0,-1]].some(([a,b])=>ter(xx+a,yy+b)===T_WATER)))return'Not on water or shore';if(CLIFF&&CLIFF[yy*MW+xx])return'Cliff in the way';if(occ[yy*MW+xx])return'Tile taken'}
  const N=NEAR[t];if(N&&!ignoreNear&&!nearT(x,y,s,N[0],N[1]))return'Must be near '+N[2];if(BLD[t].max&&cnt2(t)>=BLD[t].max)return'Only one allowed';return''}
 const cnt2=t=>S.bl.filter(b=>b.t===t).length;
 const AG=new Float32Array(MW*MH),AP=new Int32Array(MW*MH),AS=new Int32Array(MW*MH);let astamp=1;
@@ -1546,7 +1549,7 @@ function vframe(now){const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;la
  // placement
  if(placing){const R=6,c=ghost?{x:ghost.gx,y:ghost.gy}:S.center;
   if(z>=.5){vx.strokeStyle='rgba(255,255,255,.07)';vx.lineWidth=1;vx.beginPath();for(let x=c.x-R;x<=c.x+R+1;x++){vx.moveTo(x*TS,(c.y-R)*TS);vx.lineTo(x*TS,(c.y+R+1)*TS)}for(let y=c.y-R;y<=c.y+R+1;y++){vx.moveTo((c.x-R)*TS,y*TS);vx.lineTo((c.x+R+1)*TS,y*TS)}vx.stroke()}
-  if(ghost&&placing[0]!=='_'){const s=bsz(placing),err=placeErr(placing,ghost.gx,ghost.gy)||(can(bcost(placing,0))?'':'Not enough resources'),ok=!err;vx.fillStyle=ok?'rgba(110,240,110,.3)':'rgba(240,74,74,.3)';{const FM=fpMask(placing,CURFP);if(FM){for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(FM[j*s+i])vx.fillRect((ghost.gx+i)*TS,(ghost.gy+j)*TS,TS,TS)}else vx.fillRect(ghost.gx*TS,ghost.gy*TS,s*TS,s*TS)}
+  if(ghost&&placing[0]!=='_'){const s=bsz(placing),err=placeErr(placing,ghost.gx,ghost.gy)||(can(bcost(placing,0))?'':'Not enough resources'),ok=!err,nc=ok&&needsClear(placing,ghost.gx,ghost.gy);vx.fillStyle=!ok?'rgba(240,74,74,.3)':nc?'rgba(240,210,60,.36)':'rgba(110,240,110,.3)';if(nc&&!err){vx.font='bold 11px sans-serif';vx.textAlign='center';vx.fillStyle='#24140c';vx.fillText('Needs clearing',(ghost.gx+s/2)*TS+1,(ghost.gy+s)*TS+13);vx.fillStyle='#ffe070';vx.fillText('Needs clearing',(ghost.gx+s/2)*TS,(ghost.gy+s)*TS+12);vx.textAlign='left';vx.fillStyle='rgba(240,210,60,.36)'}{const FM=fpMask(placing,CURFP);if(FM){for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(FM[j*s+i])vx.fillRect((ghost.gx+i)*TS,(ghost.gy+j)*TS,TS,TS)}else vx.fillRect(ghost.gx*TS,ghost.gy*TS,s*TS,s*TS)}
    const sp=FP[placing]&&!(FP[placing][PV.v]||{}).legacy?fpSpr({t:placing,l:1,fv:PV,x:ghost.gx,y:ghost.gy},''):bspr(placing,1);vx.globalAlpha=ok?.75:.4;vx.drawImage(sp.c,ghost.gx*TS-8,ghost.gy*TS-8,s*TS+16,s*TS+16);vx.globalAlpha=1;if(ok){const L=logi(ghost.gx,ghost.gy,s),tl=L.d+' tiles · ~'+L.sec+'s · '+Math.round(L.eff*100)+'%';vx.font='bold 11px sans-serif';vx.textAlign='center';vx.lineWidth=3;vx.strokeStyle='#24140c';vx.strokeText(tl,(ghost.gx+s/2)*TS,ghost.gy*TS-12);vx.fillStyle=effCol(L.eff);vx.fillText(tl,(ghost.gx+s/2)*TS,ghost.gy*TS-12)}if(err){vx.font='bold 11px sans-serif';vx.textAlign='center';vx.fillStyle='#24140c';vx.fillText(err,(ghost.gx+s/2)*TS+1,ghost.gy*TS-5);vx.fillStyle='#ffb0a0';vx.fillText(err,(ghost.gx+s/2)*TS,ghost.gy*TS-6);vx.textAlign='left'}}
   else if(ghost&&placing==='__move'){const sp=bspr('campfire',1);vx.drawImage(sp.c,ghost.gx*TS-8,ghost.gy*TS-8,48,48)}
   else if(placing==='__grant')grantGhost();else if(roadMode()){vx.fillStyle=placing==='__erase'?'rgba(240,74,74,.35)':'rgba(220,190,130,.45)';const ff=(x,y)=>vx.fillRect(x*TS,y*TS,TS,TS);if(drag&&drag.paint&&drag.st&&roadShape!=='free')shapeTiles(drag.st,drag.cur,ff);else if(ghost)brushTiles(ghost.gx,ghost.gy,ff)}}
@@ -2099,7 +2102,7 @@ function evOn(id){return S&&S.ev&&S.ev.act.find(e=>e.id===id)}
 const EICON={plague:'☠',drought:'☀',harvest:'🌾',fire:'🔥',festival:'🎉',unrest:'✊',quake:'⚡',raiders:'⚔',immig:'👥',caravan:'🐫'};
 function plagueMit(){return 1/(1+cnt('well')*.4+cnt('temple')*.6+(S.tech.sanitation?1.5:0))}
 // Random city events are switched off for now (playtest feedback). Set RANDOM_EVENTS=true to bring them back; raids stay on as part of the threat model.
-const RANDOM_EVENTS=false,THREAT_EV={raiders:1};
+const RANDOM_EVENTS=false,RAIDS=false,THREAT_EV=RAIDS?{raiders:1}:{};
 const EVT={
 plague:{n:'Plague!',w:()=>S.pop>8?1+S.tier*.5:0,dur:40,init:e=>{e.k=0;e.cap=Math.max(1,Math.ceil(S.pop*.15*plagueMit()*2));e.left=Math.round(25+30*plagueMit())},
  text:e=>'A fever spreads through the crowded houses. Density '+Math.round(S.pop/Math.max(1,housing())*100)+'%. Wells, a Temple and Sanitation slow it. Up to '+e.cap+' may die.',

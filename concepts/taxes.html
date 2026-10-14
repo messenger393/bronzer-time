@@ -1,0 +1,50 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Taxes Page Mockup</title><style>
+*{box-sizing:border-box}body{margin:0;background:#0d0b09;color:#e8dcc4;font:13px/1.35 Georgia,serif;padding:14px}
+.ex{position:fixed;top:6px;right:10px;background:#7a2a1a;color:#fff;padding:3px 8px;border-radius:3px;font:11px sans-serif;z-index:9}
+.panel{max-width:1250px;margin:auto;background:linear-gradient(#1b1611,#13100c);border:1px solid #6b4f2a;border-radius:6px;box-shadow:0 0 0 1px #000,0 8px 30px #000}
+h1{margin:0;padding:10px 14px;font-size:17px;color:#d9a85b;border-bottom:1px solid #4a3720;letter-spacing:1px;display:flex;justify-content:space-between}
+h1 small{color:#9b8a6c;font-size:11px;font-weight:normal}
+h2{font-size:12px;color:#c99a52;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px}
+.grid{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:12px;padding:12px}
+.box{background:#0f0c09;border:1px solid #3a2c1a;border-radius:4px;padding:10px}
+.pct{font:bold 30px sans-serif;color:#f0c674;text-align:center}
+input[type=range]{width:100%;accent-color:#c99a52}
+.scale{display:flex;justify-content:space-between;font:10px sans-serif;color:#9b8a6c}
+.eff{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #241b10;align-items:center}
+.eff b{font-family:sans-serif}.p{color:#7fc06a}.m{color:#d9644a}.n{color:#e8dcc4}
+.meter{height:6px;background:#241b10;border-radius:3px;margin-top:3px;width:120px}.meter i{display:block;height:100%;border-radius:3px}
+.note{font-size:11px;color:#9b8a6c;margin-top:8px}
+.mine{border:1px solid #3a2c1a;border-radius:4px;padding:8px;margin-bottom:8px;background:#14100c}
+.mh{display:flex;justify-content:space-between;align-items:center}
+.seg span{padding:4px 9px;border:1px solid #4a3720;font:11px sans-serif;cursor:pointer}.seg .on{background:#6b4f2a;color:#fff}
+.tr{font:11px sans-serif;color:#b8a888;margin-top:5px}
+.tot{display:flex;gap:18px;padding:10px 14px;border-top:1px solid #4a3720;background:#100d0a;font-family:sans-serif}
+.tot b{color:#f0c674}.btn{padding:6px 12px;border-radius:3px;border:1px solid #6b4f2a;background:#2a2016;color:#e8dcc4;font:12px sans-serif;margin-left:auto}
+</style></head><body><div class="ex">CONCEPT · EXAMPLE NUMBERS</div>
+<div class="panel"><h1><span>TAXES &amp; LICENSES <small>— Pause / Kingdom menu · Year 3, Season of Flood</small></span><small>14 steads · 3 merchant houses · 5 mines</small></h1>
+<div class="grid">
+<div class="box"><h2>Stead Tithe</h2><div class="pct" id="tp">20%</div>
+<input type="range" min="0" max="60" value="20" id="t"><div class="scale"><span>0% Generous</span><span>30%</span><span>60% Harsh</span></div>
+<div id="te"></div><div class="note">One rate for all steads. Serfs keep what remains after tithe — their savings are goods, not coin.</div></div>
+<div class="box"><h2>Merchant House Tax</h2><div class="pct" id="mp">15%</div>
+<input type="range" min="0" max="50" value="15" id="mt"><div class="scale"><span>0%</span><span>25%</span><span>50%</span></div>
+<div id="me"></div><div class="note">Paid in silver, finished goods or regional trade.</div></div>
+<div class="box"><h2>Mine Licenses</h2><div id="minelist"></div></div>
+</div>
+<div class="tot" id="tot"></div></div>
+<script>
+const mines=[["Copper Mine (Timna)","copper",40,6,"Bronze supply"],["Tin Mine (east hills)","tin",12,4,"Bronze supply — scarce"],["Stone Quarry","stone",60,5,"Building"],["Clay Pit","clay",50,3,"Pottery, bricks"],["Salt Flat","salt",30,3,"Trade good"]];
+const st=[1,1,0,1,0];
+function f(){const t=+T.value,m=+MT.value;tp.textContent=t+'%';mp.textContent=m+'%';
+const goods=Math.round(14*24*t/100),sav=Math.round(14*24*(1-t/100)*.4),rise=Math.max(0,(1.6-t/40)).toFixed(1),hap=Math.round(80-t*1.1);
+const row=(l,v,c,w,col)=>`<div class="eff"><span>${l}</span><span style="text-align:right"><b class="${c}">${v}</b><div class="meter"><i style="width:${w}%;background:${col}"></i></div></span></div>`;
+te.innerHTML=row('Goods to treasury / season',goods+' wheat-eq','p',t/0.6,'#c99a52')+row('Stead savings / season',sav+' goods',sav>100?'p':'m',sav/3.36,'#7fc06a')+row('Crafter rise speed',rise+'× normal',rise>=1?'p':'m',rise/1.6*100,'#7fc06a')+row('Stead happiness',hap+'%',hap>60?'p':'m',hap,hap>60?'#7fc06a':'#d9644a');
+const sil=Math.round(3*55*m/100*(1-m/120)*2),gr=(1.5-m/25).toFixed(1),routes=Math.max(0,Math.round(6-m/8)),mh=Math.round(85-m*1.3);
+me.innerHTML=row('Silver income / season',sil+' deben','p',sil/1.2,'#c99a52')+row('Merchant growth',(gr>0?'+':'')+gr+' / yr',gr>0?'p':'m',Math.max(0,gr/1.5*100),'#7fc06a')+row('Regional trade routes',routes,routes>3?'p':'m',routes/6*100,'#7fc06a')+row('Merchant happiness',mh+'%',mh>60?'p':'m',mh,mh>60?'#7fc06a':'#d9644a');
+let lab=0,ore=0,fee=0;minelist.innerHTML=mines_.map((x,i)=>{const k=st[i];if(k){lab+=x[3];ore+=x[2]}else{fee+=Math.round(x[2]*.4);ore+=Math.round(x[2]*m/100)}
+return `<div class="mine"><div class="mh"><b>${x[0]}</b><span class="seg"><span class="${k?'on':''}" onclick="st[${i}]=1;f()">Keep (Royal)</span><span class="${k?'':'on'}" onclick="st[${i}]=0;f()">License</span></span></div>
+<div class="tr">${k?`<span class="p">All ${x[2]} ${x[1]}/season to you</span> · <span class="m">uses ${x[3]} of your laborers</span>`:`<span class="p">+${Math.round(x[2]*.4)} silver fee</span> + ${m}% tax (~${Math.round(x[2]*m/100)} ${x[1]}) · <span class="p">no labor</span> · <span class="m">merchant controls supply</span>`} — ${x[4]}</div></div>`}).join('');
+tot.innerHTML=`Season total (example): <span>Goods <b>${goods}</b></span><span>Silver <b>${sil+fee}</b></span><span>Mine ore to you <b>${ore}</b></span><span>Royal laborers in mines <b>${lab}</b></span><span class="btn">Apply</span>`}
+const mines_=mines,T=t,MT=mt;T.oninput=MT.oninput=f;f();
+</script></body></html>
