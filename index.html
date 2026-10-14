@@ -192,7 +192,7 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
  if(S.t%60===0)ecoSync();
  // steads produce & eat (families use everything on their land except ore)
  if(S.t%DAYLEN<kr){for(const s of E.steads)steadClear(s);try{mzSettle()}catch(e){}}
- for(const s of E.steads){const kids=Math.floor(s.n*.35),w=Math.max(1,s.n-kids),aw=s.away>S.t?Math.min(w-.5,s.an):0,fr=Math.min(1,s.f.length/(8+w*5));
+ for(const s of E.steads){const kids=Math.floor(s.n*.35),w=Math.max(1,s.n-kids),aw=s.away>S.t?Math.min(w-.5,s.an):0,fr0=s.f.length/(8+w*5),fr=Math.min(1,fr0)+Math.min(.6,Math.max(0,fr0-1)*.4);// 0.17: fields beyond what the family can fully work still add yield (diminishing, up to +60%)
   const lab=(w-aw)*hm*(.5+.5*fr)*k*seasF()*(s.skf||1)*(s.ow>0?.95:1)*(s.oven?.95:1),L=LAND[s.land].out;for(const g in L){const q=L[g]*lab*(g==='grain'||g==='flax'?EM.farm:1);s.st[g]=(s.st[g]||0)+q;s.prod+=q*EIT[g].v}steadBake(s,k);
   let need=s.n*.4*k;for(const g of ECOFOOD){const h=s.st[g]||0,fv=g==='bread'?1.25:1,u=Math.min(h,need*(g==='grain'||g==='bread'?1:.5)/fv);s.st[g]=h-u;need-=u*fv}if(need>0){const h=s.st.grain||0,u=Math.min(h,need);s.st.grain=h-u;need-=u}if(need>.01){for(const src of [E.mkt,E.hold])for(const g of ['bread','grain','fish','dairy']){if(need<=.01)break;const h=src[g]||0,u=Math.min(h,need);if(u>0){src[g]=h-u;need-=u;const pz=u*EIT[g].v*(src===E.mkt?1:.8);s.sv=Math.max(0,(s.sv||0)-pz);if(src===E.hold){E.silver+=pz*.5}}}}if(need>.01)s.hun+=need;
   for(const g of['wool','flax','timber','clay'])if(s.st[g])s.st[g]-=Math.min(s.st[g],s.n*.025*k);
@@ -214,9 +214,7 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
   if(S.res.wood<C*.5&&E.hold.timber>0){const u=Math.min(E.hold.timber,C*.5-S.res.wood);E.hold.timber-=u;S.res.wood+=u}}
  // spoilage everywhere (slowed by proper storage)
  {const sf=spoilF(),cp=holdCap(),tot=holdTot(),over=tot>cp?(tot-cp)/tot:0;for(const g in E.hold){const h=E.hold[g];if(h<=0){delete E.hold[g];continue}const r=EIT[g].rot*sf*k+over*.0003*k;if(r>0){const l=h*Math.min(.5,r);E.hold[g]=h-l;led.spoil+=l*EIT[g].v}}
-  // 0.17: the Hall steward sells surplus to passing traders (40% of value) once the hold passes 80% of capacity, instead of letting the overflow rot
-   {const cp2=holdCap()*.8,t2=holdTot();if(t2>cp2){const f=Math.min(.5,(t2-cp2)/t2*.02*k);for(const g in E.hold){if(EIT[g].food&&E.hold[g]<S.pop*4)continue;const q=E.hold[g]*f;E.hold[g]-=q;const sv=q*EIT[g].v*.4;E.silver+=sv;led.sIn=(led.sIn||0)+sv;led.stew=(led.stew||0)+sv}}}
-   for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoilM=(led.spoilM||0)+l*EIT[g].v}}
+  for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoilM=(led.spoilM||0)+l*EIT[g].v}}
   const fr=.000025*k/(1+cnt('granary')*.5+cnt('storehouse')*.2);const fl=S.res.food*fr;S.res.food-=fl;led.spoil+=fl*EIT.grain.v}
  // auto-grant steads to idle families
  if(E.autoStead===2&&S.t%(DAYLEN/3|0)<kr&&S.pop-employed()>=4&&S.tier>=1){if(foundStead(3,'idle'))qlog('A stead was granted to an idle family. They will farm it and bring the tithe each year.')}
@@ -379,7 +377,7 @@ function builderRise(){const E=S.eco;if(!E||!S.fam)return;const nb=bldN();if((S.
  const b={t:'craft',l:1,x:t.X,y:t.Y};S.bl.push(b);rebuildOcc();E._wc=1;E.cr.push({id:++E.sid,c:'builder',n:2,sk:3,ag:0,stk:0,x:t.X,y:t.Y,hun:0,ref:0,from:null,fromFam:F.id});S.pop++;S.bxp=0;log('A skilled labourer of the '+F.sn+' family set up as a master builder in town — first of their name.')}
 function steadBake(s,k){if(!s.oven){if((s.sv||0)>=12&&s.n>=3){s.oven=1;s.sv-=12;s._ob=1}else return 0}const g=s.st.grain||0,want=Math.min(g,s.n*.12*k);if(want<=0)return 0;s.st.grain=g-want;s.st.bread=(s.st.bread||0)+want*BAKE_HOME;s.sk.baker=Math.min(6,(s.sk.baker||1)+want*.0004);return want}
 const FAM_M=['Hattu','Ilu','Tarhun','Arnu','Kiru','Zidan','Abi','Puhi','Nanu','Masu','Tudha','Urhi','Ammu','Pithan','Labar','Hanni','Kuzi','Ehli','Shalla','Talmi','Zuzu','Mursi','Ashur','Enlu','Kanzu','Dudu'],FAM_F=['Ashme','Tawa','Nikal','Henti','Kali','Mala','Ziti','Puduh','Tati','Ishta','Nunna','Ammi','Hepa','Danu','Siri','Lela','Ninsa','Belti','Kubi','Arsa','Geme','Hala'],FAM_S=['Arinna','Zalpa','Kussar','Hurma','Tawin','Ankuwa','Lawazan','Kanes','Hakpis','Samuha','Tapik','Nerik','Ussa','Pala','Kizzu','Halpa','Emar','Ugar','Alalah','Mittan','Kumanni','Isuwa','Tarsa','Ilansa','Hupis','Zippa','Amka','Sallu','Tegar','Washu'];
-const FAM_SPLIT=12,FAM_CROWD=10;
+const FAM_SPLIT=7,FAM_CROWD=10;
 const FAM_ST={pend:'Waiting for land',stead:'Stead',craft:'Crafter household',merch:'Merchant house'};
 function famR(a){return a[(Math.random()*a.length)|0]}
 function famName(){const used=new Set((S.fam?S.fam.L:[]).map(f=>f.sn));const fr=FAM_S.filter(s=>!used.has(s));if(fr.length)return famR(fr);return famR(FAM_S)+'-'+famR(['ili','uwa','anda','ash','iya'])}
@@ -397,7 +395,7 @@ function steadSkills(s){const o={cook:1,craft:1};try{for(const g in LAND[s.land]
 function famOf(s){return S.fam?S.fam.L.find(F=>F.st==='stead'&&F.l===s.id):null}
 function famBest(F){const b={},adv={};for(const m of F.m){skInit(m);for(const k in m.sk)b[k]=Math.max(b[k]||0,m.sk[k]);for(const k in m.adv||{})adv[k]=Math.max(adv[k]||0,m.adv[k])}return{b,adv}}
 // stead efficiency from its members' relevant skills: ~1.0 at starting skill, at most ~1.4 at 100 (soft, so a few pawns can't flood the market)
-function steadSkF(s){const F=famOf(s);if(!F||!F.m.length)return 1;const u=steadSkills(s);let t=0,n=0;for(const m of F.m){if(m.a<12)continue;skInit(m);for(const k in u){t+=m.sk[k];n++}}if(!n)return 1;const av=t/n;return .93+.47*Math.min(1,av/100)}
+function steadSkF(s){const F=famOf(s);if(!F||!F.m.length)return 1;const u=steadSkills(s);let t=0,n=0;for(const m of F.m){if(m.a<12)continue;skInit(m);for(const k in u){t+=m.sk[k];n++}}if(!n)return 1;const av=t/n;return .85+Math.min(1,av/100)}// 0.17: skill is a clear lever (avg 10 = .95, 30 = 1.15, 60 = 1.45)
 function skYear(){if(!S.fam)return;const E=S.eco;const sd={};if(E)E.steads.forEach(s=>sd[s.id]=s);
  for(const F of S.fam.L){const s=F.st==='stead'?sd[F.l]:null,u=s?steadSkills(s):{cook:1,craft:1,gather:1};
   for(const m of F.m){skInit(m);if(m.a<10)continue;const am=ambMul(m.amb),wk=m.a>=14&&m.a<62?1:.4;
@@ -3889,7 +3887,7 @@ function devPanel(){let P=$('devp');if(!DEVO.on){if(P)P.style.display='none';ret
  add((DEVO.occ?'Hide':'Show')+' occupancy / grid overlay',()=>{DEVO.occ=!DEVO.occ});
  add('FPS overlay (F3)',()=>{GFX.fps=!GFX.fps;fpsOv()});
  add('Close',()=>{DEVO.on=0})}
-function devSelMem(){try{if(sel&&sel.a&&sel.a.mem)return sel.a.mem;if(sel&&sel.m)return sel.m}catch(e){}return null}
+function devSelMem(){try{let fa=sel&&sel.fm?[famById(sel.fm[0]),sel.fm[1]]:sel&&sel.a?famForAgent(sel.a):null;if(fa&&fa[0])return fa[0].m.find(m=>m.i===fa[1])||null}catch(e){}return null}
 addEventListener('keydown',e=>{if(e.ctrlKey&&e.shiftKey&&(e.key==='D'||e.key==='d')){e.preventDefault();DEVO.on=!DEVO.on;devPanel()}});
 if(/[?&]dev\b/.test(location.search))setTimeout(()=>{DEVO.on=1;devPanel()},1500);
 </script></body></html>
