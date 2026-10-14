@@ -139,7 +139,9 @@ craft:{n:'Town House',cost:{},tier:0,sz:2,hide:1,d:'A crafter household, or a ch
 function qlog(m){S.log.unshift(m);S.log.length=Math.min(S.log.length,30);renderLog.last=m;renderLog()}
 // ===== Trading update: stead economy loop (tithe, Holding, crafters, merchants, spoilage). No regional trade/caravans yet. =====
 // Design source: concepts/econsim-report.md (validated in the simulator). One "tithe year" = ECO_YD game days (no seasons yet).
-const ECO_YD=60,ECO_K=10;
+const ECO_YD=24,ECO_K=10;// 0.17: 24-day year (4 seasons × 6 days); YSC keeps per-year economy rates equal to the validated 60-day × 540-tick design
+const YSC=(60*540)/(ECO_YD*560);
+const SEASN=['Spring','Summer','Autumn','Winter'],SEASM=[.95,1.15,1.1,.8];const seasI=()=>S&&S.eco?Math.min(3,Math.floor(S.eco.yt/(yearLen()/4))):0;const seasF=()=>SEASM[seasI()];
 const EIT={grain:{n:'Grain',v:.01,rot:.00004,food:1,c:'#d8b850'},fish:{n:'Dried fish',v:.012,rot:.00025,food:1,c:'#7aa8c0'},dairy:{n:'Cheese & milk',v:.02,rot:.00015,food:1,c:'#f0e8c8'},
  wool:{n:'Wool',v:.03,rot:.000005,c:'#e8e0d0'},flax:{n:'Flax',v:.025,rot:.00001,c:'#7aa860'},timber:{n:'Timber',v:.012,rot:0,c:'#8a6038'},clay:{n:'Clay',v:.008,rot:0,c:'#b06a40'},
  pottery:{n:'Pottery',v:.06,rot:0,c:'#c87a48',cr:1},cloth:{n:'Linen & cloth',v:.09,rot:.000005,c:'#e8d8f0',cr:1},tools:{n:'Tools & furniture',v:.1,rot:0,c:'#a08060',cr:1},bronzeware:{n:'Bronzeware',v:.2,rot:0,c:'#d89040',cr:1},beer:{n:'Beer',v:.03,rot:.0002,c:'#c8a040',cr:1}};
@@ -182,16 +184,16 @@ function steadSite(){const E=S.eco,c=S.center,R0=RAD[S.tier]+2,F=ecoFields();let
 function foundStead(n,why){const E=S.eco,st=steadSite();if(!st)return null;const b={t:'stead',l:1,x:st.x,y:st.y};S.bl.push(b);rebuildOcc();try{autoRoadFor(b)}catch(e){}
  const s={id:++E.sid,x:st.x,y:st.y,land:st.L.land,f:st.L.fields,n,main:'auto',st:{grain:n*400},sv:5,sk:{},don:0,cart:0,hap:60,ow:0,away:0,an:0,prod:0,hun:0};const F=ecoFields();for(const i of s.f)F[i]=1;E.steads.push(s);E._wc=1;ECOFC.delete(s.id);return s}
 // no Holding: families keep farming, the tithe cannot be delivered and is waived (stays with them), with a clear warning
-function ecoNoHold(){const E=S.eco,k=ECO_K,hm=Math.max(.6,Math.min(1.2,hapMul()));for(const s of E.steads){const w=Math.max(1,s.n-Math.floor(s.n*.35)),L=LAND[s.land].out;for(const g in L)s.st[g]=(s.st[g]||0)+L[g]*w*hm*k*.8;let need=s.n*.4*k;for(const g of ECOFOOD){const h=s.st[g]||0,u=Math.min(h,need);s.st[g]=h-u;need-=u}}E.yt+=k;if(E.yt>=yearLen()){E.yt=0;E.yr++;for(const s of E.steads)s.prod=0;log('⚠ Tithe Day: there is no Imperial Holding, so the tithe could not be delivered. Build or move one in (Architect → Storage & Treasury).')}}
+function ecoNoHold(){const E=S.eco,k=ECO_K*YSC,hm=Math.max(.6,Math.min(1.2,hapMul()));for(const s of E.steads){const w=Math.max(1,s.n-Math.floor(s.n*.35)),L=LAND[s.land].out;for(const g in L)s.st[g]=(s.st[g]||0)+L[g]*w*hm*k*.8;let need=s.n*.4*k;for(const g of ECOFOOD){const h=s.st[g]||0,u=Math.min(h,need);s.st[g]=h-u;need-=u}}E.yt+=ECO_K;if(E.yt>=yearLen()){E.yt=0;E.yr++;for(const s of E.steads)s.prod=0;log('⚠ Tithe Day: there is no Imperial Holding, so the tithe could not be delivered. Build or move one in (Architect → Storage & Treasury).')}}
 // ---- tick ----
 function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();delete S.newFam}if(TER&&(!S.fam||S.t%20===0))try{famSync()}catch(e){console.warn(e)}
  {const sn=soldN();if(E._sol!=null&&sn<E._sol)S.pop=Math.max(1,S.pop-(E._sol-sn));E._sol=sn}
- if(S.t%ECO_K)return;if(E.needHold&&TER)ecoStartHolding();if(S.t%5===0)try{grantStartBanner()}catch(e){}if(!ecoOn()){if(!E.steads.length)return;ecoNoHold();return}const k=ECO_K,EM=evMods(),hm=Math.max(.6,Math.min(1.2,hapMul())),led=E.led;
+ if(S.t%ECO_K)return;if(E.needHold&&TER)ecoStartHolding();if(S.t%5===0)try{grantStartBanner()}catch(e){}if(!ecoOn()){if(!E.steads.length)return;ecoNoHold();return}const kr=ECO_K,k=ECO_K*YSC,EM=evMods(),hm=Math.max(.6,Math.min(1.2,hapMul())),led=E.led;
  if(S.t%60===0)ecoSync();
  // steads produce & eat (families use everything on their land except ore)
- if(S.t%DAYLEN<k){for(const s of E.steads)steadClear(s);try{mzSettle()}catch(e){}}
+ if(S.t%DAYLEN<kr){for(const s of E.steads)steadClear(s);try{mzSettle()}catch(e){}}
  for(const s of E.steads){const kids=Math.floor(s.n*.35),w=Math.max(1,s.n-kids),aw=s.away>S.t?Math.min(w-.5,s.an):0,fr=Math.min(1,s.f.length/(8+w*5));
-  const lab=(w-aw)*hm*(.5+.5*fr)*k*(s.ow>0?.95:1)*(s.oven?.95:1),L=LAND[s.land].out;for(const g in L){const q=L[g]*lab*(g==='grain'||g==='flax'?EM.farm:1);s.st[g]=(s.st[g]||0)+q;s.prod+=q*EIT[g].v}steadBake(s,k);
+  const lab=(w-aw)*hm*(.5+.5*fr)*k*seasF()*(s.ow>0?.95:1)*(s.oven?.95:1),L=LAND[s.land].out;for(const g in L){const q=L[g]*lab*(g==='grain'||g==='flax'?EM.farm:1);s.st[g]=(s.st[g]||0)+q;s.prod+=q*EIT[g].v}steadBake(s,k);
   let need=s.n*.4*k;for(const g of ECOFOOD){const h=s.st[g]||0,fv=g==='bread'?1.25:1,u=Math.min(h,need*(g==='grain'||g==='bread'?1:.5)/fv);s.st[g]=h-u;need-=u*fv}if(need>0){const h=s.st.grain||0,u=Math.min(h,need);s.st.grain=h-u;need-=u}if(need>.01){for(const src of [E.mkt,E.hold])for(const g of ['bread','grain','fish','dairy']){if(need<=.01)break;const h=src[g]||0,u=Math.min(h,need);if(u>0){src[g]=h-u;need-=u;const pz=u*EIT[g].v*(src===E.mkt?1:.8);s.sv=Math.max(0,(s.sv||0)-pz);if(src===E.hold){E.silver+=pz*.5}}}}if(need>.01)s.hun+=need;
   for(const g of['wool','flax','timber','clay'])if(s.st[g])s.st[g]-=Math.min(s.st[g],s.n*.025*k);
   for(const g in s.st){const r=EIT[g].rot;if(r)s.st[g]*=1-r*1.4*k}}
@@ -215,9 +217,9 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
   for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoilM=(led.spoilM||0)+l*EIT[g].v}}
   const fr=.000025*k/(1+cnt('granary')*.5+cnt('storehouse')*.2);const fl=S.res.food*fr;S.res.food-=fl;led.spoil+=fl*EIT.grain.v}
  // auto-grant steads to idle families
- if(E.autoStead===2&&S.t%(DAYLEN/3|0)<k&&S.pop-employed()>=4&&S.tier>=1){if(foundStead(3,'idle'))qlog('A stead was granted to an idle family. They will farm it and bring the tithe each year.')}
+ if(E.autoStead===2&&S.t%(DAYLEN/3|0)<kr&&S.pop-employed()>=4&&S.tier>=1){if(foundStead(3,'idle'))qlog('A stead was granted to an idle family. They will farm it and bring the tithe each year.')}
  if(E._wc){E._wc=0;worldChanged()}
- E.yt+=k;try{titheWindow()}catch(e){console.warn(e)}if(E.yt>=yearLen()){E.yt=0;ecoYear()}
+ E.yt+=kr;try{titheWindow()}catch(e){console.warn(e)}if(E.yt>=yearLen()){E.yt=0;ecoYear()}
  if(E._qv&&E._qv.length){for(let j=0;j<2&&E._qv.length;j++)ecoSpawnVis(E._qv.shift())}}
 function townCrowd(){const E=S.eco,n=E.cr.length+E.mh.length,cap=Math.max(6,(cnt('palace')?24:12)+cnt('market')*4+cnt('storehouse')*2+cnt('barracks')*2+S.tier*6);E._tcap=cap;return n>cap*.85?Math.max(.5,1-(n/cap-.85)):1}
 function ecoSync(){const E=S.eco,K=new Set(),C=new Set();for(const b of S.bl){if(b.t==='stead')K.add(b.x+','+b.y);else if(b.t==='craft')C.add(b.x+','+b.y)}
@@ -265,7 +267,7 @@ function ecoYear(){const E=S.eco,led=E.led,T=E.tithe/100,hb=holdB(),hd=hb?doorOf
   for(const c of E.cr){const g=CRAFT[c.c].g,v=c.stk*EIT[g].v;const toC=c.stk*pr*Math.min(1,got);E.hold[g]=(E.hold[g]||0)+toC;c.ag+=toC*EIT[g].v*1.5;const rest=(c.stk-toC);c.ag+=rest*EIT[g].v*mf;c.sold=rest*mf;c.stk=rest*(1-mf)*.5}
   E._goods=Math.min(1,demand>0?Math.min(sellV,demand)/Math.max(1,demand):0)}
  // crafters: hunger, refused charters leave, petitions for a merchant charter
- E.cr=E.cr.filter(c=>{if(c.hun>yearLen()*.4||(c.ref&&Math.random()<.3)){S.pop=Math.max(1,S.pop-c.n);led.left++;ecoRemoveB(c);log('A '+CRAFT[c.c].n.toLowerCase()+' household left the city'+(c.ref?' after their charter was refused.':' — they could not afford food.'));return false}c.hun=0;
+ E.cr=E.cr.filter(c=>{if(c.hun>yearLen()*YSC*.4||(c.ref&&Math.random()<.3)){S.pop=Math.max(1,S.pop-c.n);led.left++;ecoRemoveB(c);log('A '+CRAFT[c.c].n.toLowerCase()+' household left the city'+(c.ref?' after their charter was refused.':' — they could not afford food.'));return false}c.hun=0;
   if(!c.ref&&c.ag>=60&&c.sk>=4.5&&!E.pet.includes(c.id))E.pet.push(c.id);return true});
  if(E.autoCh)for(const id of E.pet.slice()){if(E.mh.length>=E.charters)break;grantCharter(id)}
  // merchant houses: buy Holding surplus for silver, resell in town, pay merchant tax
@@ -294,7 +296,7 @@ function ecoTownOld(){const a=holdB()||S.bl.find(b=>b.t==='palace')||S.bl.find(b
 function grantCharter(id){const E=S.eco,i=E.cr.findIndex(c=>c.id===id);E.pet=E.pet.filter(x=>x!==id);if(i<0)return;if(E.mh.length>=E.charters){qlog('No charters left — raise the charter limit on the Taxes page.');return}const c=E.cr.splice(i,1)[0];
  E.mh.push({id:c.id,n:3,ag:c.ag,x:c.x,y:c.y,from:c.c});S.pop++;const b=S.bl.find(b=>b.t==='craft'&&b.x===c.x&&b.y===c.y);if(b){b.l=3;b.mh=1}E.mwait=E.mwait||[];E.mwait.push(c.id);mzSettle();if(E.mwait.includes(c.id))qlog('The new merchant house is waiting for a lot: paint a Market zone in Construction › Land Grants & Zones.');E.led.merch++;E._wc=1;qlog('Charter granted: the '+CRAFT[c.c].n.toLowerCase()+' household became a merchant house.')}
 function refuseCharter(id){const E=S.eco,c=E.cr.find(c=>c.id===id);E.pet=E.pet.filter(x=>x!==id);if(c){c.ref=1;qlog('Charter refused. The household is resentful (−15% output) and may leave.')}}
-function ecoTopTxt(){if(!S.eco||!holdB())return'';const d=Math.ceil((yearLen()-S.eco.yt)/DAYLEN);return' · Yr '+S.eco.yr+' · Tithe in '+d+'d'}
+function ecoTopTxt(){if(!S.eco||!holdB())return'';const d=Math.ceil((yearLen()-S.eco.yt)/DAYLEN);return' · '+SEASN[seasI()]+' · Yr '+S.eco.yr+' · Tithe in '+d+'d'}
 function ecoProd(p){if(!S.eco)return;const mf=mineF();p.copper*=mf;p.tin*=mf;if(p.wood>0)p.wood*=1+Math.min(.3,crN('carpenter')*.03)}
 function ecoHap(add){if(!S.eco)return;const E=S.eco;add('Tithe '+E.tithe+'%',Math.max(-26,Math.min(6,(20-E.tithe)*.65)));if(!holdB())return;
  if(E.steads.length){let h=0;for(const s of E.steads)h+=s.hap;add('Serf steads content',(h/E.steads.length-50)/6)}if(E.unpaid)add('Royal wages unpaid',-6);add('Royal household',E.house*2-1);
@@ -838,7 +840,7 @@ function load(){try{S=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem
 function migrate3(){S.seed=S.seed||7;genWorld(S.seed);S.center={x:START.x,y:START.y};const old=S.grid||[];S.bl=[];S.tier=(S.tier||0)+1;rebuildOcc();
  old.forEach((b,i)=>{if(!b)return;const gx=i%12,gy=Math.floor(i/12),x=S.center.x-15+gx*3,y=S.center.y-10+gy*3;if(!placeErr(b.t,x,y,true)){S.bl.push({t:b.t,l:b.l,x,y});rebuildOcc()}else autoPlace(b.t,b.l,true)});
  if(!S.bl.length)S.bl.push({t:'house',l:1,x:S.center.x,y:S.center.y});delete S.grid;S.ev.act=(S.ev.act||[]).filter(e=>e.id!=='fire');S.v=3}
-function migrate(){if(S.bl&&S.bl.some(b=>b.t==='thresh'||b.t==='shed')){const rf={thresh:{wood:5,stone:15},shed:{wood:20}};S.bl=S.bl.filter(b=>{const r=rf[b.t];if(!r)return true;for(const k in r)S.res[k]=(S.res[k]||0)+Math.round(r[k]*(b.l||1)*.5);return false});if(S.dm)for(const k in S.dm)if(/^(thresh|shed)/.test(k))delete S.dm[k]}if(S.res&&!S.mw)S.mw=256;if(S.res&&!S.itemsV){S.itemsV=1;S.stk={};if((S.tier||0)>=1&&S.bl&&S.bl.length&&!S.bl.some(b=>b.t==='storehouse'))S.needStore=1}(S.bl||[]).forEach(b=>{if(b.t==='tent'||b.t==='farm'){delete b.fv}});if((S.v||1)<2){S.companies=[];S.cid=0;const map={spear:'spear',archer:'archer',chariot:'lchariot'};
+function migrate(){if(S.res&&!S.tv2){S.tv2=1;if(S.eco&&S.eco.yt)S.eco.yt=Math.floor(S.eco.yt*(ECO_YD*DAYLEN)/(60*540))}if(S.bl&&S.bl.some(b=>b.t==='thresh'||b.t==='shed')){const rf={thresh:{wood:5,stone:15},shed:{wood:20}};S.bl=S.bl.filter(b=>{const r=rf[b.t];if(!r)return true;for(const k in r)S.res[k]=(S.res[k]||0)+Math.round(r[k]*(b.l||1)*.5);return false});if(S.dm)for(const k in S.dm)if(/^(thresh|shed)/.test(k))delete S.dm[k]}if(S.res&&!S.mw)S.mw=256;if(S.res&&!S.itemsV){S.itemsV=1;S.stk={};if((S.tier||0)>=1&&S.bl&&S.bl.length&&!S.bl.some(b=>b.t==='storehouse'))S.needStore=1}(S.bl||[]).forEach(b=>{if(b.t==='tent'||b.t==='farm'){delete b.fv}});if((S.v||1)<2){S.companies=[];S.cid=0;const map={spear:'spear',archer:'archer',chariot:'lchariot'};
  for(const k in (S.army||{})){let n=S.army[k];while(n>0){const m=Math.min(CMAX,n);n-=m;S.cid++;S.companies.push({id:S.cid,name:NICK[(S.cid-1)%NICK.length],type:map[k],men:m,xp:10,armor:0,slot:defSlot(map[k])})}}
  delete S.army;S.scouted={};S.general={name:'Hattu',lvl:1,xp:0};S.formation='line';S.v=2}
  S.scouted=S.scouted||{};S.ev=S.ev||{act:[],next:200};for(const[k,v]of[['extraJobs',{}],['bonus',{}],['tech',{}],['won',[]],['jobs',{}],['companies',[]],['log',[]],['general',{name:'Hattu',lvl:1,xp:0}]])if(!S[k])S[k]=v;if((S.v||2)<3)migrate3();if(S.v<4)migrate4();if(S.v<5)migrate5();S.companies=S.companies||[];S.general=S.general||{name:'Hattu',lvl:1,xp:0};ecoMigrate()}
@@ -1140,7 +1142,7 @@ function workSpot(a){if(a.role==='fisher'){const w=spotCache.water;return w.leng
 function inSpot(o,k,sl){const s=o.s||bsz(o.b.t);const d=doorOf(o.b);{const M=fpMask(o.b.t,bfp(o.b));if(M){const cs=[];for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(M[j*s+i]===1)cs.push([i,j]);if(!cs.length)for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(M[j*s+i])cs.push([i,j]);const c=cs[Math.abs((k*7919+(sl?3:0)))%cs.length];return{x:o.gx+c[0]+.5,y:o.gy+c[1]+.55,door:d,b:o.b}}}if(s<2)return{x:o.gx+.5,y:o.gy+.55,door:d,b:o.b};if(sl)return{x:o.gx+.45+(k%3)*(s-.9)/2,y:o.gy+.75+((k/3|0)%3)*(s-1.1)/2,door:d,b:o.b};return{x:o.gx+.75+((k*.618+(sl?.1:.4))%1)*(s-1.5),y:o.gy+.85+((k*.382+(sl?.05:.55))%1)*(s-1.6),door:d,b:o.b}}
 function go(a,to,st){let r;const pth=(f,t)=>t&&t.door?(t.b===a.inB?[{x:t.x,y:t.y}]:pathTo(f,t.door).concat([{x:t.x,y:t.y}])):pathTo(f,t);
  a.outB=null;if(a.inB&&(!to||to.b!==a.inB)){const d=doorOf(a.inB);a.outB=a.inB;a.inB=null;r=[{x:d.x,y:d.y}].concat(pth({x:d.x,y:d.y},to))}else r=pth(a,to);a.inB=to&&to.b||null;a.route=r;a.state=st}
-const DAYLEN=540;let LTk=0;const dayP=()=>(S.t%DAYLEN)/DAYLEN,night=()=>{const p=dayP();return p>.64&&p<.94};
+const DAYLEN=560;let LTk=0;const dayP=()=>(S.t%DAYLEN)/DAYLEN,night=()=>{const p=dayP();return p>.64&&p<.94};
 function lightT(now){const f=spd?Math.min(1,Math.max(0,(now-LTk)*spd/1000)):0;return S.t+f}
 function think(a){const h=hubT(),n=night();if(a.carry==='sack'&&a.state==='home'&&!a.load)a.carry=null;if(n&&a.state==='home'&&a.role!=='soldier'&&a.role!=='kid'){a.t=3;return}
  if(a.role==='soldier'&&milThink(a,h,n))return;
