@@ -585,7 +585,7 @@ function famOfLink(st,id){return S.fam&&S.fam.L.find(F=>F.st===st&&F.l===id)}
 function famJobN(F,m){if(F.st==='stead')return m.a<8?'child':m.a>=62?'elder':'farming the stead';if(F.st==='craft'){const c=S.eco.cr.find(c=>c.id===F.l);return c?CRAFT[c.c].n.toLowerCase():'crafter'}if(F.st==='merch')return 'trading';const k=m.k;if(!k)return m.a<14?'child':'resting';const j=k.split('#')[0];if(j==='idle')return m.a>=62?'elder':'civil laborer';if(j==='kid')return 'child';if(j==='soldier')return 'soldier';return(JOBS[j]&&JOBS[j][0]||j).toLowerCase()}
 function famRole(F,m){return m.r==='kin'?(m.a>=62?'elder':'kin'):m.r}
 function famLink(F){const E=S.eco;return F.st==='stead'?E.steads.find(s=>s.id===F.l):F.st==='craft'?E.cr.find(c=>c.id===F.l):F.st==='merch'?E.mh.find(c=>c.id===F.l):null}
-function famHome(F){const L=famLink(F);if(F.st==='stead')return L?LAND[L.land].n.toLowerCase()+' stead':'stead';if(F.st==='craft'||F.st==='merch')return 'town house';return S.bl.some(b=>b.t==='tent'&&b.fam===F.id)?'family tent':'sharing a tent'}
+function famHome(F){const L=famLink(F);if(F.st==='stead'){if(!L)return 'stead';const fm=farmMates(L).map(q=>(famOf(q)||{}).sn).filter(Boolean);return(steadKind(L)==='pasture'?'pasture':'grain farm')+' on '+LAND[L.land].n.toLowerCase()+(fm.length?' · shared farm with the '+fm.join(', '):'')}if(F.st==='craft'||F.st==='merch')return 'town house';return S.bl.some(b=>b.t==='tent'&&b.fam===F.id)?'family tent':'sharing a tent'}
 function famSav(F){const L=famLink(F);return L?(F.st==='stead'?L.sv:L.ag)||0:(F.sv||0)}
 function famHap(F){const L=famLink(F);return Math.round(L&&L.hap!=null?L.hap:(S.hap||50))}
 function famTithe(F){const L=famLink(F);return F.st==='stead'&&L?EIT[ecoMainItem(L)].n:'—'}
@@ -625,7 +625,7 @@ function renderZones(V){const sec=(t)=>{const h=document.createElement('h4');h.t
  V.insertAdjacentHTML('beforeend','<p class="muted">Roads are optional: they only speed up walking. Paths also wear in by themselves where people walk often.</p>')}
 
 // ---- Land Grant tool (player paints farmland for a waiting family) ----
-const GRANT_MIN=16,GRANT_MAX=14;
+const GRANT_MIN=16,GRANT_MAX=30,FARM_HH=70;// #14: big grants hold several households (one farmhouse + yard each, ~70 tiles per family)
 const famEarned=F=>!F.t0||(F.sy||0)>=1;
 function pendFam(){if(!S.eco)return 0;if(S.fam)return S.fam.L.filter(F=>F.st==='pend'&&famEarned(F)).length;return S.eco.pend||0}
 function grantEval(a,b){const x0=Math.min(a.gx,b.gx),x1=Math.max(a.gx,b.gx),y0=Math.min(a.gy,b.gy),y1=Math.max(a.gy,b.gy),w=x1-x0+1,h=y1-y0+1;const F=ecoFields();const r={x0,y0,x1,y1,w,h,err:'',tiles:[],land:'plain'};
@@ -645,6 +645,11 @@ function grantMake(g){const E=S.eco;if(pendFam()<1){log(S.fam&&S.fam.L.some(F=>F
  const b={t:'stead',l:1,x:hb.x,y:hb.y};S.bl.push(b);rebuildOcc();try{autoRoadFor(b)}catch(e){}
  const s={id:++E.sid,x:hb.x,y:hb.y,land:g.land,f:g.tiles.filter(i=>!hs.has(i)&&TER[i]!==T_FOREST),n:take,main:'auto',st:{grain:take*400},sv:5,sk:{},don:0,cart:0,hap:60,ow:0,away:0,an:0,prod:0,hun:0,gr:[g.x0,g.y0,g.x1,g.y1]};
  const F=ecoFields();for(const i of g.tiles)F[i]=1;s.claim=g.tiles;E.steads.push(s);if(FF){FF.st='stead';FF.l=s.id;famTentRm(FF);qlog('The '+FF.sn+' family took down their tent and moved to their new stead.')}worldChanged();qlog('Land granted: a '+LAND[g.land].n.toLowerCase()+' stead of '+s.f.length+' fields. Pick its main tithe item by tapping the farmhouse.');try{AU.sfx('chime')}catch(e){}return true}
+// #14 shared farm: a large grant is split into one homestead per household (each with its own farmhouse, yard and fields)
+function grantMakeMulti(g){const k=Math.max(1,Math.min(4,pendFam(),Math.floor(g.tiles.length/FARM_HH)));if(k<=1)return grantMake(g);const E=S.eco,gid=++E.sid,horiz=g.w>=g.h,parts=[];
+ for(let j=0;j<k;j++){const a=horiz?{gx:g.x0+Math.floor(g.w*j/k),gy:g.y0}:{gx:g.x0,gy:g.y0+Math.floor(g.h*j/k)},b=horiz?{gx:g.x0+Math.floor(g.w*(j+1)/k)-1,gy:g.y1}:{gx:g.x1,gy:g.y0+Math.floor(g.h*(j+1)/k)-1};const sg=grantEval(a,b);if(!sg.err)parts.push(sg)}
+ let n=0;const ids=[];for(const sg of parts){if(pendFam()<1)break;if(grantMake(sg)){n++;const st=E.steads[E.steads.length-1];st.farm=gid;ids.push(st.id)}}if(n>1)qlog('A shared farm: '+n+' households settled one grant, each with its own farmhouse and yard.');return n>0}
+function farmMates(s){if(!s.farm)return[];return S.eco.steads.filter(q=>q.farm===s.farm&&q!==s)}
 function grantStartBanner(){let el=$('grantban');if(($('modal')&&$('modal').style.display==='flex')||($('title')&&$('title').style.display!=='none')){if(el)el.style.display='none';return}const need=S.eco&&pendFam()>0&&(S.eco.steads.length===0||placing==='__grant');if(!need&&placing!=='__grant'){if(el)el.style.display='none';return}
  if(!el){el=document.createElement('div');el.id='grantban';el.className='glass';el.style.cssText='position:fixed;left:50%;top:56px;transform:translateX(-50%);z-index:9;padding:8px 12px;border-radius:8px;max-width:min(560px,92vw);text-align:center;font-size:13px';document.body.appendChild(el)}
  el.style.display='block';const k=pendFam()+'|'+placing;if(el._k===k)return;el._k=k;el.innerHTML='<b style="color:#f0d8a0">🌾 Grant farmland to your families</b><br><span class="small">'+(placing==='__grant'?'Drag on open land to paint a grant (min '+(GRANT_MIN+4)+' usable tiles, max '+GRANT_MAX+'×'+GRANT_MAX+'; no water, buildings or other grants). The family lays out its stead to suit the land.':'Families wait in their tents until you give them land.')+' Families waiting: <b>'+pendFam()+'</b></span><br>';
@@ -652,7 +657,7 @@ function grantStartBanner(){let el=$('grantban');if(($('modal')&&$('modal').styl
 function grantRow(V){if(!S.eco)return;const r=document.createElement('div');r.className='grow';r.innerHTML='<div><small>LAND GRANTS</small><b>🌾 Land Grant</b><div class="sub">'+pendFam()+' families waiting · '+S.eco.steads.length+' steads</div></div>';r.appendChild(btn(placing==='__grant'?'✔ Done':'Paint grant',()=>{placing=placing==='__grant'?null:'__grant';ghost=null},0,placing==='__grant'?'sel':'pri'));if(S.eco.steads.length){const m=btn('Manage / revoke',()=>{ADMV='grants';openTab('admin')});m.title='List of granted steads: jump to one or revoke a grant';r.appendChild(m)}V.appendChild(r)}
 function grantGhost(){cqDraw();if(placing!=='__grant')return;const a=drag&&drag.paint&&drag.st?drag.st:ghost?{gx:ghost.gx,gy:ghost.gy}:null;if(!a)return;const b=drag&&drag.paint&&drag.cur?drag.cur:a;const g=grantEval(a,b),ok=!g.err;vx.fillStyle=ok?'rgba(150,230,90,.28)':'rgba(240,80,60,.28)';vx.fillRect(g.x0*TS,g.y0*TS,g.w*TS,g.h*TS);vx.strokeStyle=ok?'#b8f070':'#ff8060';vx.lineWidth=2;vx.strokeRect(g.x0*TS,g.y0*TS,g.w*TS,g.h*TS);
  const tl=g.w+'×'+g.h+' · '+g.tiles.length+' usable'+(ok?' · '+LAND[g.land].n+' · suitability '+g.suit+'%':' · '+g.err);vx.font='bold 12px sans-serif';vx.textAlign='center';vx.lineWidth=3;vx.strokeStyle='#24140c';vx.strokeText(tl,(g.x0+g.w/2)*TS,g.y0*TS-8);vx.fillStyle=ok?'#d8f8a0':'#ffb0a0';vx.fillText(tl,(g.x0+g.w/2)*TS,g.y0*TS-8);vx.textAlign='left'}
-function grantEnd(){if(!drag||!drag.st)return;const g=grantEval(drag.st,drag.cur||drag.st);if(g.err){log('Land grant: '+g.err);return}grantMake(g);try{famSync()}catch(e){}save();renderTop();grantStartBanner();if(cur==='build'||cur==='taxes'||cur==='fam')renderView()}
+function grantEnd(){if(!drag||!drag.st)return;const g=grantEval(drag.st,drag.cur||drag.st);if(g.err){log('Land grant: '+g.err);return}grantMakeMulti(g);try{famSync()}catch(e){}save();renderTop();grantStartBanner();if(cur==='build'||cur==='taxes'||cur==='fam')renderView()}
 // Holding: start placement, move
 function ecoStartHolding(){const E=S.eco;if(!E||!E.needHold)return;E.needHold=0;if(holdB())return;const c=S.center;if(!autoPlace('holding',1,true,c.x+5,c.y+4))autoPlace('holding',1,true);worldChanged()}
 // ---- calendar (tithe year; seasons-wip can paint season bands into #calp .sb) ----
@@ -1281,7 +1286,7 @@ function rtMake(a){const r=hsh(a.idx||0,(a.key||'').length*31+7,77),r2=hsh(a.idx
  if(a.role==='farmer'&&age>=12){wake-=.03;sleep-=.015}/* farmers rise before dawn */if(age<12){sleep-=.035;wake+=.02}if(age>=60){wake-=.02;sleep-=.02}if(a.role==='soldier'){wake=.93;sleep=.66}
  return{wake:((wake%1)+1)%1,sleep,meal:.40+(hsh(a.idx||0,5,79)-.5)*.05,leis:.56+(hsh(a.idx||0,6,80)-.5)*.04,mk:hsh(a.idx||0,9,81)<.35}}
 function rtBlock(a){const R=a.rt||(a.rt=rtMake(a)),p=dayP();const w=R.wake;const asleep=w>.5?(p>=R.sleep&&p<w):(p>=R.sleep||p<w);if(asleep)return 'rest';if(p>=R.meal&&p<R.meal+.06)return 'meal';if(p>=w&&p<w+.05||(w<.5&&p<w+.05&&p>=w))return 'meal';if(p>=R.leis&&p<R.leis+.08)return 'leis';return 'work'}
-const rtHM=p=>{const h=((p*24+6)%24+24)%24;return (h|0)+':'+String(Math.round((h%1)*60)).padStart(2,'0').replace('60','59')};
+const rtHM=p=>{p=((p%1)+1)%1;/* day .94→.64 = 5:30→20:00, night .64→.94 = 20:00→5:30 */const d=(p-.94+1)%1;let h=d<.70?5.5+d/.70*14.5:20+(d-.70)/.30*9.5;h=h%24;return (h|0)+':'+String(Math.round((h%1)*60)).padStart(2,'0').replace('60','59')};
 function rtHTML(a){const R=a.rt||(a.rt=rtMake(a));return '<div class="small">Routine: up '+rtHM(R.wake)+' · meal '+rtHM(R.meal)+' · leisure '+rtHM(R.leis)+' · sleeps '+rtHM(R.sleep)+(R.mk?' · goes to market':'')+'<br>Now: '+({rest:'sleeping time',meal:'meal time',leis:'free time',work:'work time'})[rtBlock(a)]+'</div>'}
 function steadThink(a,h,n){const E=S.eco,s=E&&E.steads.find(q=>q.id===a.st);if(!s){go(a,h,'idle');a.t=3;return}
  if(n){if(a.state!=='home'){a.carry=null;go(a,a.home,'home');a.t=3}else a.t=4;return}
@@ -1957,7 +1962,9 @@ function intDraw(a,p,ip,now){if(ip.pose==='lie'){vx.save();vx.translate(p.x,p.y)
 function drawAgent(a,p,moving,now){if(a.state==='home'&&a.inB&&!moving&&!(a.route&&a.route.length)&&night()){const t=a.inB.t;if(t==='tent'){if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.8)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+6,p.y-14-(now/90%10))}return}
   vx.save();vx.translate(p.x,p.y-6);vx.rotate(-Math.PI/2);rr(vx,-22,-11,40,22,3,'#e8dcc0','rgba(60,40,20,.6)',.8);rr(vx,-22,-11,9,22,3,'#f4eee0');const br=Math.sin(now/1300+(a.idx||0))*.4;vx.drawImage(pawnSpr(a.o,1,2),-16,-14,21,28);rr(vx,-16,-.5+br,20,13-br,3,TUN[(a.idx||0)%TUN.length],'rgba(40,20,10,.6)',.7);ln(vx,-15,3+br,3,3+br,'rgba(255,240,200,.35)',.8);vx.restore();
   if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.85)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+8,p.y-18-(now/90%10))}return}
- _drawAgent0(a,p,moving,now)}
+ if(PSC!==1){vx.save();vx.translate(p.x,p.y);vx.scale(PSC,PSC);vx.translate(-p.x,-p.y);try{_drawAgent0(a,p,moving,now)}finally{vx.restore()}}else _drawAgent0(a,p,moving,now)}
+// #16 pawn-scale realism: people are drawn smaller against tiles and buildings (an adult ~1.7 m on a ~2.4 m tile), so houses, farms and the map read larger
+let PSC=.72;
 function _drawAgent0(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({},a.o,{sick:1}):a.o,d=a.dir==null?1:a.dir;const gl=moving?Math.abs(Math.sin((a.ft||0)*Math.PI))*1.6:Math.sin(now/700+(a.idx||0))*.25,jump=a.state==='dance'&&Math.floor(now/200+a.idx)%2?3:0,bob=gl;
  const fl=d===2?-1:1,face=d===0?0:d===2?Math.PI:d===3?-Math.PI/2:Math.PI/2,hx=X+(d===1?5:d===3?-5:fl*4),hy=Y-10-bob,cyc=(now/900+(a.idx||0)*.37)%1;
  const swingA=PWN.swing(cyc,[[0,.2],[.45,-1.5,'io'],[.58,.35,'in'],[.7,.2],[1,.2]]);
