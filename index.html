@@ -1217,6 +1217,8 @@ let MAXW=60;
 const JOBB={harvester:'gatherhut',hauler:null,baker:'bakery',brewer:'brewery',farmer:'farm',woodcutter:'lumber',quarrier:'quarry',coppermin:'copper',tinmin:'tin',smith:'smelter',herder:'farm',fisher:null,scribe:'temple',merchant:'market',gatherer:null,hunter:'lodge'};
 const CARRY={harvester:'log',baker:'sack',brewer:'sack',farmer:'sack',herder:'sack',fisher:'fish',woodcutter:'log',quarrier:'stone',coppermin:'cu',tinmin:'sn',smith:'ingot',gatherer:'sack',hunter:'meat',merchant:'sack'};
 let agents=[],critters=[],parts=[],clouds=[],birds=[],pops=[],bubble=null,rosterSig='',bgSig='',vis={migr:[],raid:0,caravan:0,shake:0,party:0},spotCache=null;
+// #2: wipe runtime caches of the previous game (pawns, paths, fields, flow fields) so New Game after quit-to-menu is a true fresh start
+function rtReset(){agents=[];critters=[];pops=[];rosterSig='';bgSig='';FAMK={};ECOF=null;try{ECOV.length=0;ECOFC.clear();PC.clear();FF.clear();FFN.clear()}catch(e){}try{sel=null;placing=null;ghost=null}catch(e){}}
 function blds(t){const o=[];S.bl.forEach((b,i)=>{if(!t||b.t===t)o.push({b,i,gx:b.x,gy:b.y,s:bsz(b.t)})});return o}
 function pick(a){return a[Math.floor(Math.random()*a.length)]}
 function nearSpots(types,max){const c=S.center,o=[];for(let r=1;r<18&&o.length<max;r++)for(let y=c.y-r;y<=c.y+r;y++)for(let x=c.x-r;x<=c.x+r;x++){if(Math.max(Math.abs(x-c.x),Math.abs(y-c.y))!==r)continue;if(types.includes(ter(x,y))){for(const[dx,dy]of[[0,1],[1,0],[0,-1],[-1,0]])if(walkC(x+dx,y+dy)&&ter(x+dx,y+dy)!==T_FOREST&&ter(x+dx,y+dy)!==T_WATER){o.push({x:x+dx+.5,y:y+dy+.5});break}}}return o}
@@ -2679,7 +2681,7 @@ $('dclose').onclick=()=>{$('drawer').classList.remove('open');document.body.clas
 document.querySelectorAll('#speed button').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.s));$('heatb').appendChild(ICO('heat',18));$('heatb').onclick=()=>{S.heat=!S.heat;$('heatb').classList.toggle('sel',S.heat)};$('beautb').onclick=()=>{S.beau=!S.beau;$('beautb').classList.toggle('sel',S.beau);if(S.beau&&!BEAU)calcBeauty()};
 window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'){e.preventDefault();setSpeed(spd?0:1)}else if(e.key>='1'&&e.key<='3')setSpeed(+e.key);else if(placing&&FP[placing]&&/^[rRfFvV]$/.test(e.key)){fpCycle(e.key.toLowerCase()==='f'?'m':e.key.toLowerCase())}else if(e.key==='Escape'){placing=null;ghost=null;sel=null;showInsp()}});
 $('start').onclick=()=>{$('title').style.display='none';if(!S.civ)pickCiv()};
-$('reset').onclick=()=>{if(confirm('Start a new game?')){if(MW!==NEWSZ){localStorage.setItem('bnbNewGame','1');location.reload();return}S=fresh();migrate();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv()}};
+$('reset').onclick=()=>{if(confirm('Start a new game?')){if(MW!==NEWSZ){localStorage.setItem('bnbNewGame','1');location.reload();return}S=fresh();migrate();rtReset();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv(()=>{rtReset();if(S.newFam&&!S.fam&&S.eco){famNew();delete S.newFam;try{famSync()}catch(e){}}save();renderTop();setSpeed(1)})}};
 function uiSkin(){const mkF=(pal,inner,sz)=>{const[c,g]=mk(sz*3,sz*3);const P=(x,y,w,h,col)=>{g.fillStyle=col;g.fillRect(x,y,w,h)};const W=sz*3;
   P(0,0,W,W,pal[0]);P(1,1,W-2,W-2,pal[3]);P(2,2,W-3,W-3,pal[1]);P(2,2,W-4,W-4,pal[2]);const b=sz>6?4:3;P(b,b,W-2*b,W-2*b,pal[0]);P(b+1,b+1,W-2*b-2,W-2*b-2,inner);
   if(sz>6){for(const[x,y]of[[1,1],[W-5,1],[1,W-5],[W-5,W-5]]){P(x,y,4,4,pal[0]);P(x+1,y+1,2,2,PB.gold[3])}}else{P(b+1,W-b-2,W-2*b-2,1,'rgba(0,0,0,.2)');P(b+1,b+1,W-2*b-2,1,'rgba(255,255,255,.35)')}return'url('+c.toDataURL()+')'};
@@ -4073,7 +4075,7 @@ dmTick=function(){if(!S.dm||!S.hv)fbMigrate();const ids=Object.keys(S.dm||{});ag
  const need=4+s*s*1.5+(b.l||1)*2;if(S.dm[id].p>=need){const r=dmRefund(b);for(const k in r)S.res[k]=(S.res[k]||0)+r[k];S.bl.splice(S.bl.indexOf(b),1);delete S.dm[id];crew.forEach(a=>{a.dmT=null;a.dmAt=0;a.dmSp=null;a.t=0});burst(b.x+s/2,b.y+s/2,'#d8c8a0',30);sel=null;showInsp();worldChanged();log('Deconstructed '+BLD[b.t].n+' — refunded '+(cstr(r)||'nothing')+'.');save();renderTop();renderView()}};
 
 
-setTimeout(()=>{if(localStorage.getItem('bnbNewGame')){localStorage.removeItem('bnbNewGame');S=fresh();migrate();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv()}},0);
+setTimeout(()=>{if(localStorage.getItem('bnbNewGame')){localStorage.removeItem('bnbNewGame');S=fresh();migrate();rtReset();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv(()=>{rtReset();if(S.newFam&&!S.fam&&S.eco){famNew();delete S.newFam;try{famSync()}catch(e){}}save();renderTop();setSpeed(1)})}},0);
 
 // ---- FPS / frame-time overlay (F3 or Settings) — measures real frame intervals on the player's display, uncapped ----
 const FPSO={ft:new Float32Array(600),n:0,i:0,last:0,run:0};
