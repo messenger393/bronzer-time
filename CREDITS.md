@@ -31,3 +31,4 @@ Files were re-encoded to Ogg Vorbis (music 64 kbps, ambience 32 to 48 kbps mono;
 | UI clicks (wooden game pieces, trimmed) | aidanwalker | CC0 | https://opengameart.org/content/boardgame-piece-wobbles |
 
 - Ram's horn ("Small Shofar") by Sauron974, CC0: https://freesound.org/people/Sauron974/sounds/223368/ (trimmed to one blast as audio/sfx-ramhorn.ogg)
+- Title theme by Weston Gordon (Suno), audio/title-theme.ogg (original for this game)
