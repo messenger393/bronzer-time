@@ -2746,7 +2746,7 @@ function evTick(){const E=S.ev;E.act.forEach(e=>{e.left--;const D=EVT[e.id];D.ti
  const was=E.act.length;E.act=E.act.filter(e=>e.left>0);if(was!==E.act.length)bgSig='';
  if(S.t<DAYLEN*4||$('modal').style.display==='flex')return;if(E.next>DAYLEN*3.2)E.next=DAYLEN*2;if(--E.next>0)return;E.next=Math.round(DAYLEN*(2+Math.random()));
  const ids=Object.keys(EVT).filter(k=>!EVT[k].hidden&&!evOn(k)&&(RANDOM_EVENTS||THREAT_EV[k]));let tot=0;const ws=ids.map(k=>tot+=Math.max(0,EVT[k].w()));if(!tot)return;const r=Math.random()*tot,id=ids[ws.findIndex(w=>r<w)];fireEv(id)}
-function fireEv(id){const D=EVT[id],e={id,left:D.dur};D.init&&D.init(e);const M=$('modal'),B=$('mbody');B.innerHTML='';const c=document.createElement('canvas');c.width=320;c.height=160;c.style.cssText='width:min(320px,80vw);aspect-ratio:2/1;display:block;margin:0 auto 6px;border:2px solid #6a5434;border-radius:6px';B.appendChild(c);evArt(c.getContext('2d'),id);
+function fireEv(id){if(TRIBES_PAUSED&&TRIBE_EV[id])return;const D=EVT[id],e={id,left:D.dur};D.init&&D.init(e);const M=$('modal'),B=$('mbody');B.innerHTML='';const c=document.createElement('canvas');c.width=320;c.height=160;c.style.cssText='width:min(320px,80vw);aspect-ratio:2/1;display:block;margin:0 auto 6px;border:2px solid #6a5434;border-radius:6px';B.appendChild(c);evArt(c.getContext('2d'),id);
  const h=document.createElement('h3');h.textContent=(EICON[id]||'')+' '+D.n;B.appendChild(h);const p=document.createElement('div');p.textContent=D.text(e);B.appendChild(p);
  (D.ch?D.ch(e):[['OK',()=>{}]]).forEach(([lbl,fn,dis])=>B.appendChild(btn(lbl,()=>{const r=fn();M.style.display='none';if(r!==false&&D.dur>0){S.ev.act.push(e);bgSig=''}if(!['raiders'].includes(id))vis.raid=0},dis)));
  M.style.display='flex';log('Event: '+D.n);addLetter(id);if(!D.ch){const b0=B.querySelector('button');if(b0)b0.click();M.style.display='none'}}
@@ -3055,7 +3055,7 @@ const _ri2=routeInfo;routeInfo=function(i){const p=S.wm&&S.wm.prov.find(p=>p.reg
 const _fight2=fight;fight=function(i){const before=S.won.includes(i);_fight2(i);const p=S.wm&&S.wm.prov.find(p=>p.reg===i);if(p&&!before&&S.won.includes(i)){for(const k in p.ctl)p.ctl[k]*=.3;p.ctl.P=(p.ctl.P||0)+70;p.gar=4;p.hold=S.t+DAYLEN*4;const old=p.own;p.own='P';wmOwnChange(p,old);for(const q of wmAdj(p))if(q.own==='P')q.ctl.P=(q.ctl.P||0)+10;wmCalc();save()}};
 HOWN.blocked='not reachable (no route from our land)';
 const _mig2=migrate;migrate=function(){_mig2();if(!S.wm||!S.wm.prov)wmGen();else{WADJ=null;for(const p of S.wm.prov)if(p.reg>=REG.length)REG[p.reg]={n:p.n,terr:p.terr,form:'line',m:0,army:[],x:p.x,y:p.y,rw:'res',v:p.res,d:'Province ('+p.res+')'}}};
-setInterval(()=>{if(!S||!S.wm||BV||!spd||$('title').style.display!=='none')return;wmCheckCiv();S.wm.acc=(S.wm.acc||0)+spd;if(S.wm.acc>=20){S.wm.acc=0;wmTick()}},1000);
+setInterval(()=>{if(!S||!S.wm||BV||!spd||TRIBES_PAUSED||$('title').style.display!=='none')return;wmCheckCiv();S.wm.acc=(S.wm.acc||0)+spd;if(S.wm.acc>=20){S.wm.acc=0;wmTick()}},1000);
 
 // ================= NATURAL GENERATION v2 (S.gen>=2): FBM + domain warp, hydrology, biomes; terrain-following provinces =================
 const GLUT=(()=>{const a=new Float32Array(512);for(let k=0;k<256;k++){a[k*2]=Math.cos(k/256*6.2831853);a[k*2+1]=Math.sin(k/256*6.2831853)}return a})();
@@ -3130,6 +3130,8 @@ const _genWorld1=genWorld;genWorld=function(seed){if(!(S&&S.gen>=2)){_genWorld1(
 /* System #1 (scale): TERRAIN_SIMPLE — new games get one plain terrain (flat grassland, sparse tree clumps) until the world scale is settled.
    The full terrain code is untouched; set TERRAIN_SIMPLE=false to bring it back. The choice is saved per game (S.plain), so old saves keep their terrain. */
 const TERRAIN_SIMPLE=true;
+/* beta: TRIBES_PAUSED — the outside world is frozen (rival nations and wandering tribes do not act: no wars, raids, diplomacy or caravans), so it is just your settlement on the plain. Set false to bring them back; nothing is deleted. */
+const TRIBES_PAUSED=true,TRIBE_EV={raiders:1,caravan:1,immig:0};
 const _genWorldP=genWorld;genWorld=function(seed){_genWorldP(seed);if(!(S&&S.plain))return;for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const i=y*MW+x,f=vnoise(x,y,14,seed+5);TER[i]=f>.78&&hsh(x,y,seed+9)<.45?T_FOREST:T_GRASS}CLIFF=new Uint8Array(MW*MH)};
 const _fresh1=fresh;fresh=function(){const s=_fresh1();s.gen=2;if(TERRAIN_SIMPLE)s.plain=1;s.seed=1+Math.floor(Math.random()*999983);return s};
 
