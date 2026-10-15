@@ -92,6 +92,7 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <script>
 "use strict";
 const GFX=Object.assign({master:.8,music:.6,sfx:.8,q:'med',parts:true,edge:false,pan:1},(()=>{try{return JSON.parse(localStorage.getItem('bnbSettings')||'{}')}catch(e){return{}}})());const gfxSave=()=>localStorage.setItem('bnbSettings',JSON.stringify(GFX));
+/* beta build served from /beta/: keep its saves and settings apart from the main game's */if(/\/beta\//.test(location.pathname)){const P=Storage.prototype,g=P.getItem,st=P.setItem,rm=P.removeItem;P.getItem=function(k){return g.call(this,'beta:'+k)};P.setItem=function(k,v){return st.call(this,'beta:'+k,v)};P.removeItem=function(k){return rm.call(this,'beta:'+k)}}
 const KEY='bronzeAndBloodSave',OLDKEY='bronzerTimeSave';
 const RES=['food','wood','stone','copper','tin','bronze'];
 const PAL={'.':null,k:'#3a2414',w:'#fff3d4',y:'#f2c14e',o:'#d9772b',r:'#b8402f',g:'#5f9e3a',G:'#8fd16a',b:'#8a5a32',B:'#c58a4a',s:'#9aa0a8',S:'#d6dae0',c:'#c8734a',t:'#7ea8b8',p:'#f4c49a',u:'#4a78c8',n:'#2d5a1e'};
@@ -3126,7 +3127,11 @@ function terrainX(seed){CLIFF=new Uint8Array(MW*MH);if(MW<=256)return;const W=MW
 const _genWorld1=genWorld;genWorld=function(seed){if(!(S&&S.gen>=2)){_genWorld1(seed);CLIFF=new Uint8Array(MW*MH);return}const k='g2:'+seed+':'+(S.civ||'')+':1';
  try{const c=JSON.parse(localStorage.getItem('bronzeAndBloodTer')||'null');if(c&&c.k===k){const bin=atob(c.d),T=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)T[i]=bin.charCodeAt(i);if(T.length===MW*MH){TER=T;terrainX(seed);return}}}catch(e){}
  genWorld2(seed);try{let s='';for(let i=0;i<TER.length;i+=8192)s+=String.fromCharCode.apply(null,TER.subarray(i,i+8192));localStorage.setItem('bronzeAndBloodTer',JSON.stringify({k,d:btoa(s)}))}catch(e){}terrainX(seed)};
-const _fresh1=fresh;fresh=function(){const s=_fresh1();s.gen=2;s.seed=1+Math.floor(Math.random()*999983);return s};
+/* System #1 (scale): TERRAIN_SIMPLE — new games get one plain terrain (flat grassland, sparse tree clumps) until the world scale is settled.
+   The full terrain code is untouched; set TERRAIN_SIMPLE=false to bring it back. The choice is saved per game (S.plain), so old saves keep their terrain. */
+const TERRAIN_SIMPLE=true;
+const _genWorldP=genWorld;genWorld=function(seed){_genWorldP(seed);if(!(S&&S.plain))return;for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const i=y*MW+x,f=vnoise(x,y,14,seed+5);TER[i]=f>.78&&hsh(x,y,seed+9)<.45?T_FOREST:T_GRASS}CLIFF=new Uint8Array(MW*MH)};
+const _fresh1=fresh;fresh=function(){const s=_fresh1();s.gen=2;if(TERRAIN_SIMPLE)s.plain=1;s.seed=1+Math.floor(Math.random()*999983);return s};
 
 // ---- world map v2 ----
 const WRIV0=WRIV.map(r=>r);let WG=null;
