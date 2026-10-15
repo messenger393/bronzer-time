@@ -94,6 +94,8 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 const GFX=Object.assign({master:.8,music:.6,sfx:.8,q:'med',parts:true,edge:false,pan:1},(()=>{try{return JSON.parse(localStorage.getItem('bnbSettings')||'{}')}catch(e){return{}}})());const gfxSave=()=>localStorage.setItem('bnbSettings',JSON.stringify(GFX));
 /* beta build served from /beta/: keep its saves and settings apart from the main game's */if(/\/beta\//.test(location.pathname)){const P=Storage.prototype,g=P.getItem,st=P.setItem,rm=P.removeItem;P.getItem=function(k){return g.call(this,'beta:'+k)};P.setItem=function(k,v){return st.call(this,'beta:'+k,v)};P.removeItem=function(k){return rm.call(this,'beta:'+k)}}
 const KEY='bronzeAndBloodSave',OLDKEY='bronzerTimeSave';
+/* System #1 scale (beta): SCL 2 = 1 tile is 2.5 m, buildings at real sizes, walking ~5 km/h. Chosen per game at page load; old saves (no scl) keep scale 1. */
+const SCL=(()=>{try{if(localStorage.getItem('bnbNewGame'))return 2;const d=localStorage.getItem(KEY)||localStorage.getItem(OLDKEY);if(d){const s=JSON.parse(d);if(s&&s.res)return s.scl||1}}catch(e){}return 2})(),SCLA=SCL>=2;
 const RES=['food','wood','stone','copper','tin','bronze'];
 const PAL={'.':null,k:'#3a2414',w:'#fff3d4',y:'#f2c14e',o:'#d9772b',r:'#b8402f',g:'#5f9e3a',G:'#8fd16a',b:'#8a5a32',B:'#c58a4a',s:'#9aa0a8',S:'#d6dae0',c:'#c8734a',t:'#7ea8b8',p:'#f4c49a',u:'#4a78c8',n:'#2d5a1e'};
 // 8x8 icon pixel maps
@@ -141,7 +143,7 @@ function qlog(m){S.log.unshift(m);S.log.length=Math.min(S.log.length,30);renderL
 // ===== Trading update: stead economy loop (tithe, Holding, crafters, merchants, spoilage). No regional trade/caravans yet. =====
 // Design source: concepts/econsim-report.md (validated in the simulator). One "tithe year" = ECO_YD game days (no seasons yet).
 const ECO_YD=24,ECO_K=10;// 0.17: 24-day year (4 seasons × 6 days); YSC keeps per-year economy rates equal to the validated 60-day × 540-tick design
-const YSC=(60*540)/(ECO_YD*560);
+const YSC=(60*540)/(ECO_YD*(SCLA?1120:560));/* scale A doubles the day; per-year economy rates stay the validated ones */
 const SEASN=['Spring','Summer','Autumn','Winter'],SEASM=[.95,1.15,1.1,.8];const seasI=()=>S&&S.eco?Math.min(3,Math.floor(S.eco.yt/(yearLen()/4))):0;const seasF=()=>SEASM[seasI()];
 const EIT={grain:{n:'Grain',v:.01,rot:.00004,food:1,c:'#d8b850'},fish:{n:'Dried fish',v:.012,rot:.00025,food:1,c:'#7aa8c0'},dairy:{n:'Cheese & milk',v:.02,rot:.00015,food:1,c:'#f0e8c8'},
  wool:{n:'Wool',v:.03,rot:.000005,c:'#e8e0d0'},flax:{n:'Flax',v:.025,rot:.00001,c:'#7aa860'},timber:{n:'Timber',v:.012,rot:0,c:'#8a6038'},clay:{n:'Clay',v:.008,rot:0,c:'#b06a40'},
@@ -175,7 +177,9 @@ const mineF=()=>S.eco?(1+.25*S.eco.mineL)*(S.eco.unpaid?.65:1):1;
 const yearLen=()=>ECO_YD*DAYLEN;
 const fmtS=v=>v>=1000?(v/1000).toFixed(1)+'k':v>=10?Math.round(v)+'':v.toFixed(1);
 function ecoHousing(){return S.eco?serfN()+townN()+soldN():0}
-let ECOF=null;function ecoFields(){if(ECOF&&ECOF.length===MW*MH)return ECOF;ECOF=new Uint8Array(MW*MH);if(S.eco)for(const s of S.eco.steads){for(const i of s.f)ECOF[i]=1;if(s.claim)for(const i of s.claim)ECOF[i]=1}return ECOF}
+/* scale A: one economic field is a FB×FB block of tiles (8×8 tiles = 20×20 m = 0.04 ha), keyed by its top-left tile */
+const FB=SCLA?8:1;function fBlk(i){if(FB===1)return[i];const o=[],x0=i%MW,y0=i/MW|0;for(let y=y0;y<y0+FB&&y<MH;y++)for(let x=x0;x<x0+FB&&x<MW;x++)o.push(y*MW+x);return o}function fTiles(a){if(FB===1)return a;const o=[];for(const i of a)for(const j of fBlk(i))o.push(j);return o}
+let ECOF=null;function ecoFields(){if(ECOF&&ECOF.length===MW*MH)return ECOF;ECOF=new Uint8Array(MW*MH);if(S.eco)for(const s of S.eco.steads){for(const i of fTiles(s.f))ECOF[i]=1;if(s.claim)for(const i of s.claim)ECOF[i]=1}return ECOF}
 // ---- procedural stead layout ----
 function steadScan(x,y,F){const c={w:0,f:0,h:0,s:0,g:0},cand=[];for(let dy=-6;dy<=7;dy++)for(let dx=-6;dx<=7;dx++){const X=x+dx,Y=y+dy;if(X<1||Y<1||X>=MW-1||Y>=MH-1)continue;const d=Math.hypot(dx-.5,(dy-.5)*1.1);if(d>6.2)continue;const i=Y*MW+X,t=TER[i];
   if(t===T_WATER){c.w++;continue}if(t===T_FOREST){c.f++;continue}if(t===T_CU||t===T_SN||t===T_ROCK)continue;if(t===T_HILL)c.h++;else if(t===T_SAND)c.s++;else c.g++;
@@ -203,11 +207,12 @@ function farmInit(s,b){const E=S.eco,SZ=bsz('stead');s.ph=0;s.till=[];s.pf=null;
  const day=s.n*.4*DAYLEN*YSC,wg=day*FKIT_D,hg=Math.max(0,(E.hold.grain||0)-(typeof wsRes==='function'?wsRes():0)),g=Math.min(wg,hg*.5);if(g>0){E.hold.grain-=g;s.st.grain=(s.st.grain||0)+g}
  let t=Math.min(FKIT_T,E.hold.timber||0);if(t>0)E.hold.timber-=t;const tw=Math.min(FKIT_T-t,Math.max(0,S.res.wood||0));if(tw>0){S.res.wood-=tw;t+=tw}s.bt=Math.max(0,t-15);s.kit={g,t};/* 15 timber goes into the first farmhouse */E.led.kit=(E.led.kit||0)+g;
  b.cp={p:0,ft:[],clr:[],cw:0,cd:0,mt:1,md:1,w:1,wd:0,y:{},fam:1}}
-function farmTarget(s){const w=Math.max(1,s.n-Math.floor(s.n*.35));const cap=8+w*5+6;return Math.min(FST[s.ph].fld,cap,(s.claim||[]).length)}
+function farmTarget(s){const w=Math.max(1,s.n-Math.floor(s.n*.35));const cap=8+w*5+6;return Math.min(FST[s.ph].fld,cap,Math.floor((s.claim||[]).length/(FB*FB)))}
 function farmCand(s){const hs=new Set(s.hs||[]),yd=new Set(s.yd?s.yd.t:[]),fs=new Set(s.f),ts=new Set(s.till),SZ=bsz('stead'),cx=s.x+SZ/2,cy=s.y+SZ/2;let best=null,bd=1e9;
- for(const i of s.claim||[]){if(hs.has(i)||yd.has(i)||fs.has(i)||ts.has(i))continue;const t=TER[i];if(t===T_WATER||t===T_CU||t===T_SN||occ[i]||roadSet[i])continue;const x=i%MW,y=i/MW|0;if(x>=s.x&&x<s.x+SZ&&y>=s.y&&y<s.y+SZ)continue;const d=Math.hypot(x+.5-cx,y+.5-cy)+(t===T_FOREST?3:0)+(t===T_ROCK||t===T_HILL?1.5:0);if(d<bd){bd=d;best=i}}return best}
+ const cl=FB>1?new Set(s.claim||[]):null,bad=j=>{if(hs.has(j)||yd.has(j))return 1;const t=TER[j];if(t===T_WATER||t===T_CU||t===T_SN||occ[j]||roadSet[j])return 1;const x=j%MW,y=j/MW|0;return x>=s.x&&x<s.x+SZ&&y>=s.y&&y<s.y+SZ};
+ for(const i of s.claim||[]){if(fs.has(i)||ts.has(i))continue;const x=i%MW,y=i/MW|0;if(FB>1&&(x%FB||y%FB))continue;let pen=0;if(FB>1){let ok=1,nf=0;for(const j of fBlk(i)){if(!cl.has(j)||bad(j)){ok=0;break}if(TER[j]===T_FOREST)nf++}if(!ok)continue;pen=nf/(FB*FB)*3*FB}else{if(bad(i))continue;const t=TER[i];pen=(t===T_FOREST?3:0)+(t===T_ROCK||t===T_HILL?1.5:0)}const d=Math.hypot(x+FB/2-cx,y+FB/2-cy)+pen;if(d<bd){bd=d;best=i}}return best}
 function farmPropAt(i){const x=i%MW,y=i/MW|0;for(let k=0;k<props.length;k++){const q=props[k];if((q.gx|0)===x&&(q.gy|0)===y)return k}return -1}
-function farmWorkOf(i){const t=TER[i];return t===T_FOREST?2.4:(t===T_ROCK||t===T_HILL)?1.2:farmPropAt(i)>=0?.8:.35}
+function farmWorkOf(i){if(FB>1){let f=0,r=0,pp=0;const B=fBlk(i);for(const j of B){const t=TER[j];if(t===T_FOREST)f++;else if(t===T_ROCK||t===T_HILL)r++}for(const q of props){const x=q.gx|0,y=q.gy|0,x0=i%MW,y0=i/MW|0;if(x>=x0&&x<x0+FB&&y>=y0&&y<y0+FB)pp++}const n=B.length;return .35+f/n*2.05+r/n*.85+Math.min(1,pp*.1)*.45}const t=TER[i];return t===T_FOREST?2.4:(t===T_ROCK||t===T_HILL)?1.2:farmPropAt(i)>=0?.8:.35}
 const sowSeason=()=>{const q=seasI();return q===0||q===2};
 // one ECO_K step of family development work
 function farmStep(s,kr){const b=farmB(s);if(!b)return;const w=Math.max(1,s.n-Math.floor(s.n*.35)),away=s.away>S.t?Math.min(w-.5,s.an||0):0,hun=s.hun>s.n*.4*DAYLEN*YSC*.5?.7:1;
@@ -223,7 +228,7 @@ function farmStep(s,kr){const b=farmB(s);if(!b)return;const w=Math.max(1,s.n-Mat
  while(U>0&&s.till.length&&sowSeason()&&(s.st.grain||0)>=FSOW-.01){const i=s.till[0];s.sw=(s.sw||0)+U;const need2=.2;if(s.sw<need2){U=0;break}s.sw-=need2;U-=need2;s.till.shift();s.st.grain=Math.max(0,s.st.grain-FSOW);s.f.push(i);s.sown=(s.sown||0)+1;S.eco.led.seed=(S.eco.led.seed||0)+FSOW;ECOF=null}
  // breaking new land: clear (trees/bush/rock) then plough, one tile at a time
  while(U>0&&s.f.length+s.till.length<tgt){if(!s.pf){const i=farmCand(s);if(i==null)break;s.pf={i,k:farmWorkOf(i)>.5?'clear':'plough',w:0,n:farmWorkOf(i)}}const P=s.pf,d=Math.min(U,P.n-P.w);P.w+=d;U-=d;if(P.w<P.n-1e-6)break;
-  if(P.k==='clear'){const i=P.i,t=TER[i];if(t===T_FOREST){TER[i]=T_GRASS;const u=Math.min(6,40-(s.bt||0));s.bt=(s.bt||0)+Math.max(0,u);s.st.timber=(s.st.timber||0)+6-Math.max(0,u)}const k=farmPropAt(i);if(k>=0){const q=props[k];props.splice(k,1);try{visProps.src=null}catch(e){}if(q.k==='rock')s.st.clay=(s.st.clay||0);else s.st.timber=(s.st.timber||0)+1}try{chunkDirty(i%MW,i/MW|0)}catch(e){}s.cleared=(s.cleared||0)+1;s.pf={i,k:'plough',w:0,n:.35}}
+  if(P.k==='clear'){const i=P.i;let nt=0;for(const j of fBlk(i)){if(TER[j]===T_FOREST){TER[j]=T_GRASS;nt++}const k=farmPropAt(j);if(k>=0){const q=props[k];props.splice(k,1);try{visProps.src=null}catch(e){}if(q.k!=='rock')s.st.timber=(s.st.timber||0)+1}try{chunkDirty(j%MW,j/MW|0)}catch(e){}}if(nt){const tt=FB>1?Math.max(6,Math.round(nt/4)):6,u=Math.min(tt,40-(s.bt||0));s.bt=(s.bt||0)+Math.max(0,u);s.st.timber=(s.st.timber||0)+tt-Math.max(0,u)}s.cleared=(s.cleared||0)+1;s.pf={i,k:'plough',w:0,n:.35}}
   else{s.till.push(P.i);s.pf=null}}
  // next stage when the fields of this stage are in and the family can afford the next step
  if(!b.cp){if(s.ph===1&&s.f.length>=FST[1].fld&&S.t-s.t0>DAYLEN*4&&(s.bt||0)<12){/* no trees on the land: buy lumber from the crown with savings (or a little on credit) */const E=S.eco,nd=12-(s.bt||0),av=Math.min(nd,(E.hold.timber||0)+Math.max(0,S.res.wood||0));if(av>=nd){let r=nd;const u1=Math.min(r,E.hold.timber||0);E.hold.timber=(E.hold.timber||0)-u1;r-=u1;S.res.wood-=r;s.bt=(s.bt||0)+nd;const pz=nd*.5;s.sv=(s.sv||0)-pz;E.silver+=pz;if(s.sv<0){s.ow=(s.ow||0)-s.sv;s.sv=0}}}
@@ -237,7 +242,7 @@ function farmStageUp(s,b){const fam=(famOf(s)||{}).sn||'A';if(b.cp){delete b.cp}
 // yard pieces and tilled ground, drawn on the ground layer
 function farmDraw(s,z){if(s.ph==null)return;const SZ=bsz('stead'),yd=s.yd;if(!yd)return;const Y=yd.y0*TS,X=s.x*TS,b=farmB(s),bc=b&&b.cp;
  // tilled (ploughed, waiting to be sown) and the tile being worked
- for(const i of s.till){const x=(i%MW)*TS,y=((i/MW)|0)*TS;vx.fillStyle='#7a5434';vx.fillRect(x+1,y+1,TS-2,TS-2);vx.strokeStyle='#5a3a20';vx.lineWidth=1.5;vx.beginPath();for(let k=5;k<TS;k+=7){vx.moveTo(x+3,y+k);vx.lineTo(x+TS-3,y+k)}vx.stroke()}
+ for(const i of fTiles(s.till)){const x=(i%MW)*TS,y=((i/MW)|0)*TS;vx.fillStyle='#7a5434';vx.fillRect(x+1,y+1,TS-2,TS-2);vx.strokeStyle='#5a3a20';vx.lineWidth=1.5;vx.beginPath();for(let k=5;k<TS;k+=7){vx.moveTo(x+3,y+k);vx.lineTo(x+TS-3,y+k)}vx.stroke()}
  if(s.pf){const x=(s.pf.i%MW)*TS,y=((s.pf.i/MW)|0)*TS,f=s.pf.w/s.pf.n;if(s.pf.k==='plough'){vx.fillStyle='rgba(122,84,52,'+(.25+.6*f)+')';vx.fillRect(x+1,y+1,TS-2,TS-2)}vx.strokeStyle='rgba(255,230,160,.8)';vx.setLineDash([4,3]);vx.lineWidth=1.5;vx.strokeRect(x+1,y+1,TS-2,TS-2);vx.setLineDash([])}
  if(z<.35)return;const P=(dx,dy)=>[X+dx*TS,Y+dy*TS];
  // fire pit (camp onward)
@@ -384,19 +389,19 @@ function mineCost(){return Math.round(150*Math.pow(S.eco.mineL+1,1.4))}
 function ecoMineUp(){const E=S.eco,c=mineCost();if(E.mineL>=3||holdVal()<c)return;let due=c;for(const g of ECOWAGE){if(due<=0)break;const h=E.hold[g]||0,u=Math.min(h,due/EIT[g].v);E.hold[g]=h-u;due-=u*EIT[g].v}E.mineL++;qlog('Royal mines upgraded to level '+E.mineL+' (+'+E.mineL*25+'% copper & tin), paid from the tithe stores.')}
 // ---- tithe carriers (visual only; deliveries are tracked in S.eco.car so saves are safe) ----
 const ECOV=[];function ecoSpawnVis(q){if(typeof astar!=='function')return;const p=astar(q.x,q.y,q.tx,q.ty);if(!p||!p.length)return;for(let i=0;i<q.n;i++)ECOV.push({x:q.x+i*.3,y:q.y,route:p.map(o=>({x:o.x,y:o.y})),o:OUTFIT.farmer,dir:0,ft:i*3,idx:i,carry:'grain',don:i===0?q.don:0,role:'farmer'})}
-function ecoVis(D,dt,z,inV,now){for(let j=ECOV.length-1;j>=0;j--){const m=ECOV[j];if(!m.route.length){ECOV.splice(j,1);continue}const p=m.route[0],dx=p.x-m.x,dy=p.y-m.y,d=Math.hypot(dx,dy),sp=.9*dt*(m.don?1.1:1);m.dir=dirOf(dx,dy);m.ft+=dt*7;if(d<=sp){m.x=p.x;m.y=p.y;m.route.shift()}else{m.x+=dx/d*sp;m.y+=dy/d*sp}
+function ecoVis(D,dt,z,inV,now){for(let j=ECOV.length-1;j>=0;j--){const m=ECOV[j];if(!m.route.length){ECOV.splice(j,1);continue}const p=m.route[0],dx=p.x-m.x,dy=p.y-m.y,d=Math.hypot(dx,dy),sp=.9*(SCLA?WALK_A:1)*dt*(m.don?1.1:1);m.dir=dirOf(dx,dy);m.ft+=dt*7;if(d<=sp){m.x=p.x;m.y=p.y;m.route.shift()}else{m.x+=dx/d*sp;m.y+=dy/d*sp}
   if(z<.5)continue;const P=isoP(m.x,m.y);if(!inV(P.x,P.y))continue;D.push({k:P.y,f:()=>drawAgent(m,P,true,now)});if(m.don){const c={k:'donkey',x:m.x-(dx>0?.9:-.9),y:m.y+.1,dir:dx>0?1:-1,tx:p.x,ty:p.y};D.push({k:P.y-1,f:()=>{critDraw(c,now);const X=c.x*TS,Y=c.y*TS;rr(vx,X-5,Y-9,10,5,1,'#c8a860',OUTL,.6);if(m.don>1){rr(vx,X-(c.dir>0?16:-6),Y-6,10,6,1,'#8a6038',OUTL,.6);circ(vx,X-(c.dir>0?11:-11),Y+1,2.4,'#5a4028',OUTL,.6)}}})}}}
 // ---- stead fields (procedural plots, cached per stead) ----
 const ECOFC=new Map();const CROPC={grain:['#c8a640','#b89434','#d8b850'],flax:['#6e9a5a','#5e8a4e','#88a8d8'],wool:['#86a84e','#7a9a46','#f0ecd8'],dairy:['#7ea04a','#6e9042','#f8f0e0'],clay:['#a8683e','#8a5432','#c88454'],timber:['#7a8a3a','#6a7a32','#8a6038'],fish:['#9aa860','#8a9850','#7aa8c0']};
-function steadCanvas(s){let e=ECOFC.get(s.id);if(e&&e.n===s.f.length&&e.sig===chunkSig)return e;let x0=1e9,y0=1e9,x1=-1,y1=-1;for(const i of s.f){const x=i%MW,y=i/MW|0;if(x<x0)x0=x;if(y<y0)y0=y;if(x>x1)x1=x;if(y>y1)y1=y}if(x1<0)return null;
- const P=16,[c,g]=mk((x1-x0+1)*P,(y1-y0+1)*P),set=new Set(s.f),L=steadOut(s),crops=Object.keys(L).filter(k=>k!=='fish'&&k!=='timber');if(!crops.length)crops.push('grain');const wt=crops.map(k=>L[k]),tw=wt.reduce((a,b)=>a+b,0);
+function steadCanvas(s){let e=ECOFC.get(s.id);if(e&&e.n===s.f.length&&e.sig===chunkSig)return e;const FT=fTiles(s.f);let x0=1e9,y0=1e9,x1=-1,y1=-1;for(const i of FT){const x=i%MW,y=i/MW|0;if(x<x0)x0=x;if(y<y0)y0=y;if(x>x1)x1=x;if(y>y1)y1=y}if(x1<0)return null;
+ const P=FB>1?8:16,[c,g]=mk((x1-x0+1)*P,(y1-y0+1)*P),set=new Set(FT),L=steadOut(s),crops=Object.keys(L).filter(k=>k!=='fish'&&k!=='timber');if(!crops.length)crops.push('grain');const wt=crops.map(k=>L[k]),tw=wt.reduce((a,b)=>a+b,0);
  const hz=hsh(s.x,s.y,5)<.5,cropAt=(x,y)=>{const u=hz?(y-y0)/(y1-y0+1):(x-x0)/(x1-x0+1);let a=0;for(let k=0;k<crops.length;k++){a+=wt[k]/tw;if(u<a+1e-6)return crops[k]}return crops[0]};
- for(const i of s.f){if(occ[i]||roadSet[i])continue;const x=i%MW,y=i/MW|0,X=(x-x0)*P,Y=(y-y0)*P,cp=cropAt(x,y),C=CROPC[cp]||CROPC.grain;g.fillStyle=C[hsh(x,y,7)<.5?0:1];g.fillRect(X,Y,P,P);g.globalAlpha=.55;g.strokeStyle=C[1];g.lineWidth=1.2;g.beginPath();
+ for(const i of FT){if(occ[i]||roadSet[i])continue;const x=i%MW,y=i/MW|0,X=(x-x0)*P,Y=(y-y0)*P,cp=cropAt(x,y),C=CROPC[cp]||CROPC.grain;g.fillStyle=C[hsh(x,y,7)<.5?0:1];g.fillRect(X,Y,P,P);g.globalAlpha=.55;g.strokeStyle=C[1];g.lineWidth=1.2;g.beginPath();
   if(cp==='grain'||cp==='flax'){for(let q=2;q<P;q+=4){if(hz){g.moveTo(X,Y+q);g.lineTo(X+P,Y+q)}else{g.moveTo(X+q,Y);g.lineTo(X+q,Y+P)}}g.stroke();if(cp==='flax'){g.fillStyle=C[2];for(let q=0;q<3;q++)g.fillRect(X+hsh(x,y,q)*14,Y+hsh(y,x,q)*14,2,2)}}
   else if(cp==='clay'){g.fillStyle=C[1];g.fillRect(X+3,Y+3,6,5);g.fillStyle=C[2];g.fillRect(X+9,Y+9,4,4)}else{g.fillStyle=C[2];if(hsh(x,y,3)<.35){g.globalAlpha=.9;g.beginPath();g.ellipse(X+8,Y+8,3,2,0,0,7);g.fill()}}g.globalAlpha=1}
- g.strokeStyle='#6a4a2a';g.lineWidth=1.5;g.beginPath();for(const i of s.f){const x=i%MW,y=i/MW|0,X=(x-x0)*P,Y=(y-y0)*P;if(!set.has(i-MW)){g.moveTo(X,Y+.75);g.lineTo(X+P,Y+.75)}if(!set.has(i+MW)){g.moveTo(X,Y+P-.75);g.lineTo(X+P,Y+P-.75)}if(!set.has(i-1)){g.moveTo(X+.75,Y);g.lineTo(X+.75,Y+P)}if(!set.has(i+1)){g.moveTo(X+P-.75,Y);g.lineTo(X+P-.75,Y+P)}}g.stroke();
+ g.strokeStyle='#6a4a2a';g.lineWidth=1.5;g.beginPath();for(const i of FT){const x=i%MW,y=i/MW|0,X=(x-x0)*P,Y=(y-y0)*P;if(!set.has(i-MW)){g.moveTo(X,Y+.75);g.lineTo(X+P,Y+.75)}if(!set.has(i+MW)){g.moveTo(X,Y+P-.75);g.lineTo(X+P,Y+P-.75)}if(!set.has(i-1)){g.moveTo(X+.75,Y);g.lineTo(X+.75,Y+P)}if(!set.has(i+1)){g.moveTo(X+P-.75,Y);g.lineTo(X+P-.75,Y+P)}}g.stroke();
  e={c,x0,y0,w:x1-x0+1,h:y1-y0+1,n:s.f.length,sig:chunkSig};ECOFC.set(s.id,e);if(ECOFC.size>160){const k=ECOFC.keys().next().value;ECOFC.delete(k)}return e}
-function ecoDrawFields(vl,vr,vt,vb,z){if(!S.eco||!S.eco.steads.length)return;let bud=6;for(const s of S.eco.steads){const X=(s.x-24)*TS,Y=(s.y-24)*TS;if(X>vr||X+56*TS<vl||Y>vb||Y+56*TS<vt)continue;let e=ECOFC.get(s.id);if(!e||e.n!==s.f.length||e.sig!==chunkSig){if(bud--<=0&&e){}else e=steadCanvas(s)}if(e){vx.globalAlpha=.92;vx.drawImage(e.c,e.x0*TS,e.y0*TS,e.w*TS,e.h*TS);vx.globalAlpha=1}if(s.ph!=null)try{farmDraw(s,z)}catch(er){}}}
+function ecoDrawFields(vl,vr,vt,vb,z){if(!S.eco||!S.eco.steads.length)return;let bud=6;for(const s of S.eco.steads){const RR=FB>1?150:24,X=(s.x-RR)*TS,Y=(s.y-RR)*TS;if(X>vr||X+(2*RR+8)*TS<vl||Y>vb||Y+(2*RR+8)*TS<vt)continue;let e=ECOFC.get(s.id);if(!e||e.n!==s.f.length||e.sig!==chunkSig){if(bud--<=0&&e){}else e=steadCanvas(s)}if(e){vx.globalAlpha=.92;vx.drawImage(e.c,e.x0*TS,e.y0*TS,e.w*TS,e.h*TS);vx.globalAlpha=1}if(s.ph!=null)try{farmDraw(s,z)}catch(er){}}}
 // ---- inspector ----
 let STAB='fam';
 function ecoInsp(b,d,r){const E=S.eco;if(!E)return;const ad=h=>d.insertAdjacentHTML('beforeend',h);
@@ -686,7 +691,7 @@ function renderZones(V){const sec=(t)=>{const h=document.createElement('h4');h.t
  V.insertAdjacentHTML('beforeend','<p class="muted">Roads are optional: they only speed up walking. Paths also wear in by themselves where people walk often.</p>')}
 
 // ---- Land Grant tool (player paints farmland for a waiting family) ----
-const GRANT_MIN=16,GRANT_MAX=30,FARM_HH=70;// #14: big grants hold several households (one farmhouse + yard each, ~70 tiles per family)
+const GRANT_MIN=SCLA?1000:16,GRANT_MAX=SCLA?160:30,FARM_HH=SCLA?2400:70;/* scale A: ~1.5 ha per household, grants up to 400 m a side */// #14: big grants hold several households (one farmhouse + yard each, ~70 tiles per family)
 const famEarned=F=>!F.t0||(F.sy||0)>=1;
 function pendFam(){if(!S.eco)return 0;if(S.fam)return S.fam.L.filter(F=>F.st==='pend'&&famEarned(F)).length;return S.eco.pend||0}
 function grantEval(a,b){const x0=Math.min(a.gx,b.gx),x1=Math.max(a.gx,b.gx),y0=Math.min(a.gy,b.gy),y1=Math.max(a.gy,b.gy),w=x1-x0+1,h=y1-y0+1;const F=ecoFields();const r={x0,y0,x1,y1,w,h,err:'',tiles:[],land:'plain'};
@@ -1257,7 +1262,10 @@ const SPR={};
 // ---- buildings (hi-res sprites, multi-tile) ----
 const SZFIX={shrine:3};const bsz=t=>SZFIX[t]||(BLD[t]&&BLD[t].sz)||1;
 // realistic proportions: buildings at true scale vs ~0.65-tile people (art drawn at design size then scaled)
-const NSZ={holding:8,stead:8,craft:7,tavern:8,shrine:3,senet:2,plaza:5,trainingcamp:7,spearschool:6,archery:7,slingfield:6,axehall:6,stables:7,gatherhut:6,storehouse:8,bakery:7,brewery:7,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:9,lodge:6,lumber:6,quarry:6,barracks:10,granary:8,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:3};
+
+const NSZ_A={holding:8,stead:5,craft:5,tavern:5,shrine:2,senet:2,plaza:6,trainingcamp:8,spearschool:6,archery:8,slingfield:6,axehall:5,stables:7,gatherhut:3,storehouse:6,bakery:4,brewery:4,tent:2,campfire:1,stockpile:3,garden:4,farm:8,house:4,lodge:4,lumber:5,quarry:6,barracks:8,granary:6,well:1,copper:6,tin:6,smelter:5,temple:14,market:10,palace:28,statue:2};
+const NSZ1={holding:8,stead:8,craft:7,tavern:8,shrine:3,senet:2,plaza:5,trainingcamp:7,spearschool:6,archery:7,slingfield:6,axehall:6,stables:7,gatherhut:6,storehouse:8,bakery:7,brewery:7,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:9,lodge:6,lumber:6,quarry:6,barracks:10,granary:8,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:3};
+const NSZ=SCLA?NSZ_A:NSZ1;
 const BCOSTX={house:1.4,barracks:1.4,granary:1.4,temple:1.4,palace:1.3,market:1.3,smelter:1.3,lodge:1.2,lumber:1.2};
 for(const k in NSZ)if(BLD[k]){BLD[k].osz=BLD[k].sz||1;BLD[k].sz=NSZ[k];if(BCOSTX[k])for(const r in BLD[k].cost)BLD[k].cost[r]=Math.round(BLD[k].cost[r]*BCOSTX[k])}
 // ---- placement, occupancy, A*, roads ----
@@ -1357,8 +1365,8 @@ function steadThink(a,h,n){const E=S.eco,s=E&&E.steads.find(q=>q.id===a.st);if(!
  if(a.state==='work'&&age>=12&&Math.random()<.25){go(a,hm,'carry');a.carry=age<14?'sack':'sack';return}if(a.state==='carry'){a.carry=null}
  a.bsite=null;if(s.ph!=null&&age>=12){const b=steadBld(s),day=Math.floor(S.t/DAYLEN),r=hsh(a.idx,day,17);
   if(b&&b.cp&&r<(s.ph===0?.7:.6)&&age>=14){a.bsite=b;const sp=inSpot({b,gx:b.x,gy:b.y,s:bsz('stead')},a.idx+day,0);go(a,{x:sp.x,y:sp.y},'towork');return}
-  const tg=s.pf?s.pf.i:(s.till.length&&sowSeason()?s.till[0]:null);if(tg!=null&&(r<.8||!s.f.length)){go(a,{x:tg%MW+.2+Math.random()*.6,y:(tg/MW|0)+.2+Math.random()*.6},'towork');return}}
- if(!s.f.length){go(a,{x:hm.x+(Math.random()-.5)*3,y:hm.y+2},'towork');return}const k=s.f[(Math.abs(hsh(a.idx,Math.floor(S.t/DAYLEN),3)*997|0)+(Math.random()*4|0))%s.f.length];go(a,{x:k%MW+.3+Math.random()*.4,y:(k/MW|0)+.3+Math.random()*.4},'towork')}
+  const tg=s.pf?s.pf.i:(s.till.length&&sowSeason()?s.till[0]:null);if(tg!=null&&(r<.8||!s.f.length)){go(a,{x:tg%MW+.2+Math.random()*(FB-.4),y:(tg/MW|0)+.2+Math.random()*(FB-.4)},'towork');return}}
+ if(!s.f.length){go(a,{x:hm.x+(Math.random()-.5)*3,y:hm.y+2},'towork');return}const k=s.f[(Math.abs(hsh(a.idx,Math.floor(S.t/DAYLEN),3)*997|0)+(Math.random()*4|0))%s.f.length];go(a,{x:k%MW+.3+Math.random()*(FB-.6),y:(k/MW|0)+.3+Math.random()*(FB-.6)},'towork')}
 // #13: civil laborers (landless) work for the crown: build, haul, harvest marked areas, else log / quarry for the town stores
 function laborThink(a,h){if(buildThink(a))return true;if(harvestThink(a,4))return true;if(haulThink(a))return true;
  if(a.state==='work'){go(a,{x:h.x+Math.random()*.6-.3,y:h.y+.3},'carry');a.carry=a.idx%3===2&&S.tier>=1?'stone':'log';return true}if(a.state==='carry'){a.carry=null;a.state='drop';a.t=.6;return true}
@@ -1370,7 +1378,7 @@ function workSpot(a){if(a.role==='fisher'){const w=spotCache.water;return w.leng
 function inSpot(o,k,sl){const s=o.s||bsz(o.b.t);const d=doorOf(o.b);{const M=fpMask(o.b.t,bfp(o.b));if(M){const cs=[];for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(M[j*s+i]===1)cs.push([i,j]);if(!cs.length)for(let j=0;j<s;j++)for(let i=0;i<s;i++)if(M[j*s+i])cs.push([i,j]);const c=cs[Math.abs((k*7919+(sl?3:0)))%cs.length];return{x:o.gx+c[0]+.5,y:o.gy+c[1]+.55,door:d,b:o.b}}}if(s<2)return{x:o.gx+.5,y:o.gy+.55,door:d,b:o.b};if(sl)return{x:o.gx+.45+(k%3)*(s-.9)/2,y:o.gy+.75+((k/3|0)%3)*(s-1.1)/2,door:d,b:o.b};return{x:o.gx+.75+((k*.618+(sl?.1:.4))%1)*(s-1.5),y:o.gy+.85+((k*.382+(sl?.05:.55))%1)*(s-1.6),door:d,b:o.b}}
 function go(a,to,st){let r;const pth=(f,t)=>t&&t.door?(t.b===a.inB?[{x:t.x,y:t.y}]:pathTo(f,t.door).concat([{x:t.x,y:t.y}])):pathTo(f,t);
  a.outB=null;if(a.inB&&(!to||to.b!==a.inB)){const d=doorOf(a.inB);a.outB=a.inB;a.inB=null;r=[{x:d.x,y:d.y}].concat(pth({x:d.x,y:d.y},to))}else r=pth(a,to);a.inB=to&&to.b||null;a.route=r;a.state=st}
-const DAYLEN=560;let LTk=0;const dayP=()=>(S.t%DAYLEN)/DAYLEN,night=()=>{const p=dayP();return p>.64&&p<.94};
+const DAYLEN=SCLA?1120:560;/* scale A: a day is ~18.7 min at speed 1 so a walk to the fields and back (~25 tiles each way at 5 km/h) is ~10% of it */let LTk=0;const dayP=()=>(S.t%DAYLEN)/DAYLEN,night=()=>{const p=dayP();return p>.64&&p<.94};
 function lightT(now){const f=spd?Math.min(1,Math.max(0,(now-LTk)*spd/1000)):0;return S.t+f}
 // 0.17 daily schedule (fixed per role) + hunger. Blocks by time of day: work, midday meal .40-.46, leisure .56-.64, night rest .64-.94, breakfast .94-1.
 // Hunger rises over ~0.8 day; a meal at home resets it (better meals last longer, step 6). Hunger > .7 overrides any block. Behavioural only: stead/economy output is unchanged.
@@ -2094,7 +2102,7 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
   const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);if(d>.03){c.x+=dx/d*.4*dt;c.y+=dy/d*.4*dt;c.dir=dx>0?1:-1}if(z<.5||!inV(c.x*TS,c.y*TS))return;D.push({k:c.y*TS,f:()=>critDraw(c,now)})});
  if(!S.rn||!S.herds)rnInit();rnBuild();rnHerdStep(dt);if(z>=.5)rnHerdDraw(D,dt,now,inV);
  const sickP=evOn('plague');
- for(const a of agents){if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?RSPD[rl]*Math.max(.35,congF(ri)):1,sp=(a.role==='kid'?1.4:a.carry?.75:1)*(a.sick?.6:1)*rd*dt;
+ for(const a of agents){if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?(SCLA?RSPD_A[rl]:RSPD[rl])*Math.max(.35,congF(ri)):1,sp=(SCLA?WALK_A*(a.role==='kid'||(a.o&&a.o.age==='old')?.8:1)*(a.carry?.6:1):(a.role==='kid'?1.4:a.carry?.75:1))*(a.sick?.6:1)*rd*dt;
    if(rl)TR[ri]+=dt*(a.carry&&S.tier>=2?2:1);if(!rl||(rl===1&&WORN&&WORN[ri]))wearStep(ri,dt);if(d>.01)a.dir=dirOf(dx,dy);a.ft+=dt*(a.role==='kid'?10:7);if(d<=sp){a.x=p.x;a.y=p.y;a.route.shift();if(!a.route.length){if(a.state==='towork'){a.state='work';a.t=3+Math.random()*4}else if(a.state==='home')a.t=3}}else{a.x+=dx/d*sp;a.y+=dy/d*sp}}
   else{a.t-=dt;if(a.t<=0){// job/path decisions are spread over frames: at most ~2 ms of thinking per frame (min 3 pawns), the rest wait a frame
  const TB=think.fb!==vframe.t0?(think.fb=vframe.t0,think.n=0,think.dl=performance.now()+2):0;if(think.n<3||performance.now()<think.dl){think.n++;think(a)}}}a.sick=!!sickP&&a.idx%3===0&&a.role!=='soldier';if(a.state==='home'&&!a.route.length&&!a.inB)continue;if(z<.5)continue;let p=isoP(a.x,a.y);if(!inV(p.x,p.y))continue;const mv=a.route.length>0;const ip=a.inB&&!mv&&a.inB.t!=='tent'?intPos(a,dt):null;if(ip)p=ip.p;D.push({k:a.inB&&!mv?(a.inB.y+bsz(a.inB.t))*TS:p.y,f:()=>ip?intDraw(a,p,ip,now):drawAgent(a,p,mv,now)})}
@@ -2171,7 +2179,7 @@ function roadsChanged(light){recomputeConn();calcRoadCap();PC.clear();ffAge(1);o
 function upgradeRoads(){const L=roadMax();let n=0;for(let i=0;i<MW*MH;i++)if(roadSet[i]&&roadSet[i]<L)n++;return n}
 // ---------- traffic ----------
 let TR=new Float32Array(MW*MH),LOAD=new Float32Array(MW*MH),RCAP=new Float32Array(MW*MH),congest=null;
-const RBASE=[0,2,4,7],RSPD=[1,1.12,1.3,1.5];
+const RBASE=[0,2,4,7],RSPD=[1,1.12,1.3,1.5],RSPD_A=[1,1.06,1.12,1.18],WALK_A=.55/* scale A: 0.55 tiles/s at 2.5 m/tile ≈ 5 km/h; loaded ×0.6 ≈ 3 km/h; children and elders ×0.8 */;
 function calcRoadCap(){RCAP=new Float32Array(MW*MH);for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const i=y*MW+x,l=roadSet[i];if(!l)continue;let n=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const xx=x+dx,yy=y+dy;if(xx>=0&&yy>=0&&xx<MW&&yy<MH&&roadSet[yy*MW+xx])n++}RCAP[i]=RBASE[l]*(1+(n-1)*.3)}}
 function trafficStep(){let best=0,bi=-1;for(let i=0;i<MW*MH;i++){if(!TR[i])continue;TR[i]*=.94;if(TR[i]<.01){TR[i]=0;LOAD[i]=0;continue}const c=RCAP[i]||1.2;LOAD[i]=TR[i]/c;if(LOAD[i]>best&&roadSet[i]){best=LOAD[i];bi=i}}
  congest=null;if(best>1.15){const x=bi%MW,y=(bi/MW)|0;let nb=null,nd=1e9;S.bl.forEach(b=>{const d=Math.abs(b.x-x)+Math.abs(b.y-y);if(d<nd){nd=d;nb=b}});congest={x,y,load:best,near:nb?BLD[nb.t].n:'the centre'}}}
@@ -2800,7 +2808,7 @@ $('dclose').onclick=()=>{$('drawer').classList.remove('open');document.body.clas
 document.querySelectorAll('#speed button').forEach(b=>b.onclick=()=>setSpeed(+b.dataset.s));$('heatb').appendChild(ICO('heat',18));$('heatb').onclick=()=>{S.heat=!S.heat;$('heatb').classList.toggle('sel',S.heat)};$('beautb').onclick=()=>{S.beau=!S.beau;$('beautb').classList.toggle('sel',S.beau);if(S.beau&&!BEAU)calcBeauty()};
 window.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'){e.preventDefault();setSpeed(spd?0:1)}else if(e.key>='1'&&e.key<='3')setSpeed(+e.key);else if(placing&&FP[placing]&&/^[rRfFvV]$/.test(e.key)){fpCycle(e.key.toLowerCase()==='f'?'m':e.key.toLowerCase())}else if(e.key==='Escape'){placing=null;ghost=null;sel=null;showInsp()}});
 $('start').onclick=()=>{$('title').style.display='none';if(!S.civ)pickCiv()};
-$('reset').onclick=()=>{if(confirm('Start a new game?')){if(MW!==NEWSZ){localStorage.setItem('bnbNewGame','1');location.reload();return}S=fresh();migrate();rtReset();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv(()=>{rtReset();if(S.newFam&&!S.fam&&S.eco){famNew();delete S.newFam;try{famSync()}catch(e){}}save();renderTop();setSpeed(1)})}};
+$('reset').onclick=()=>{if(confirm('Start a new game?')){if(MW!==NEWSZ||!SCLA){localStorage.setItem('bnbNewGame','1');location.reload();return}S=fresh();migrate();rtReset();genWorld(S.seed);worldChanged();centerOn(S.center.x,S.center.y);save();renderTop();renderView();renderLog();$('title').style.display='none';pickCiv(()=>{rtReset();if(S.newFam&&!S.fam&&S.eco){famNew();delete S.newFam;try{famSync()}catch(e){}}save();renderTop();setSpeed(1)})}};
 function uiSkin(){const mkF=(pal,inner,sz)=>{const[c,g]=mk(sz*3,sz*3);const P=(x,y,w,h,col)=>{g.fillStyle=col;g.fillRect(x,y,w,h)};const W=sz*3;
   P(0,0,W,W,pal[0]);P(1,1,W-2,W-2,pal[3]);P(2,2,W-3,W-3,pal[1]);P(2,2,W-4,W-4,pal[2]);const b=sz>6?4:3;P(b,b,W-2*b,W-2*b,pal[0]);P(b+1,b+1,W-2*b-2,W-2*b-2,inner);
   if(sz>6){for(const[x,y]of[[1,1],[W-5,1],[1,W-5],[W-5,W-5]]){P(x,y,4,4,pal[0]);P(x+1,y+1,2,2,PB.gold[3])}}else{P(b+1,W-b-2,W-2*b-2,1,'rgba(0,0,0,.2)');P(b+1,b+1,W-2*b-2,1,'rgba(255,255,255,.35)')}return'url('+c.toDataURL()+')'};
@@ -3133,7 +3141,7 @@ const TERRAIN_SIMPLE=true;
 /* beta: TRIBES_PAUSED — the outside world is frozen (rival nations and wandering tribes do not act: no wars, raids, diplomacy or caravans), so it is just your settlement on the plain. Set false to bring them back; nothing is deleted. */
 const TRIBES_PAUSED=true,TRIBE_EV={raiders:1,caravan:1,immig:0};
 const _genWorldP=genWorld;genWorld=function(seed){_genWorldP(seed);if(!(S&&S.plain))return;for(let y=0;y<MH;y++)for(let x=0;x<MW;x++){const i=y*MW+x,f=vnoise(x,y,14,seed+5);TER[i]=f>.78&&hsh(x,y,seed+9)<.45?T_FOREST:T_GRASS}CLIFF=new Uint8Array(MW*MH)};
-const _fresh1=fresh;fresh=function(){const s=_fresh1();s.gen=2;if(TERRAIN_SIMPLE)s.plain=1;s.seed=1+Math.floor(Math.random()*999983);return s};
+const _fresh1=fresh;fresh=function(){const s=_fresh1();s.gen=2;s.scl=2;if(TERRAIN_SIMPLE)s.plain=1;s.seed=1+Math.floor(Math.random()*999983);return s};
 
 // ---- world map v2 ----
 const WRIV0=WRIV.map(r=>r);let WG=null;
@@ -3223,7 +3231,7 @@ const FP={
  smelter:[{n:'Round kiln house',p:[['c',.5,.5,.47]],door:[.5,.97],k:'kiln'},{n:'Twin kilns',p:[['c',.3,.33,.29],['c',.69,.64,.3]],door:[.69,.94],k:'kiln'}],
  lodge:[{n:'Oval lodge',p:[['e',.5,.5,.47,.35]],door:[.5,.85],k:'lodge'},{n:'Lodge',legacy:1}],lumber:[{n:'Yard',legacy:1},{n:'Oval sawyard',p:[['e',.5,.5,.48,.4,'court']],door:[.5,.9],k:'lumber'}],
  temple:[{n:'Stepped ziggurat',legacy:1},{n:'Temple with forecourt',p:[['r',.2,.03,.6,.5],['r',.07,.5,.86,.47,'court']],door:[.5,.97],k:'temple'}],
- palace:[{n:'Wings around a central court',p:[['r',.02,.02,.5,.28],['r',.5,.06,.46,.24],['r',.02,.3,.25,.48],['r',.74,.3,.24,.42],['r',.1,.78,.6,.2],['r',.27,.3,.47,.48,'court']],door:[.4,.98],k:'palace'},
+ palace:[...(SCLA?[{n:'Palace of courts',p:[['r',0.020,0.020,0.230,0.140],['r',0.262,0.020,0.228,0.140],['r',0.502,0.020,0.233,0.140],['r',0.747,0.020,0.233,0.140],['r',0.020,0.172,0.160,0.198],['r',0.820,0.172,0.160,0.198],['r',0.020,0.382,0.160,0.198],['r',0.820,0.382,0.160,0.198],['r',0.020,0.592,0.160,0.188],['r',0.820,0.592,0.160,0.188],['r',0.370,0.172,0.260,0.288],['r',0.192,0.172,0.166,0.288,'court'],['r',0.642,0.172,0.166,0.288,'court'],['r',0.192,0.472,0.616,0.308,'court'],['r',0.020,0.792,0.380,0.188],['r',0.600,0.792,0.380,0.188],['r',0.412,0.850,0.176,0.130,'court']],door:[.5,.98],k:'palace'}]:[]),{n:'Wings around a central court',p:[['r',.02,.02,.5,.28],['r',.5,.06,.46,.24],['r',.02,.3,.25,.48],['r',.74,.3,.24,.42],['r',.1,.78,.6,.2],['r',.27,.3,.47,.48,'court']],door:[.4,.98],k:'palace'},
   {n:'Megaron long hall',p:[['r',.3,.02,.4,.78],['r',.22,.78,.56,.2,'court']],door:[.5,.98],k:'megaron'},{n:'Classic palace',legacy:1}],
  market:[{n:'Clustered stalls',p:[['r',.04,.08,.25,.18,'stall'],['r',.4,.02,.22,.2,'stall'],['r',.72,.1,.25,.18,'stall'],['r',.08,.42,.22,.2,'stall'],['r',.66,.46,.29,.18,'stall'],['r',.3,.74,.27,.2,'stall'],['r',.33,.28,.32,.4,'court']],door:[.45,.97],k:'market'},{n:'Open square',legacy:1}]};
 function fpT(x,y,f){if(f.m)x=1-x;for(let k=0;k<(f.r||0);k++){const t=x;x=1-y;y=t}return[x,y]}
@@ -3235,7 +3243,7 @@ function fpMask(t,f){if(!f||!FP[t])return null;const k=t+'|'+(f.v||0)+(f.r||0)+(
   let any=0;for(const v of M)any|=v;if(!any)M=null}
  FPM.set(k,M);return M}
 let CURFP=null,PV={v:0,r:0,m:0};
-const bfp=b=>{if(!b||!FP[b.t])return null;if(b.fv)return b.fv;if(b._af===undefined){const ok=FP[b.t].map((v,i)=>v.legacy?-1:i).filter(i=>i>=0);b._af=ok.length?{v:ok[(hsh(b.x|0,b.y|0,5)*ok.length)|0],r:(hsh(b.x|0,b.y|0,6)*4)|0,m:hsh(b.x|0,b.y|0,7)<.5?1:0}:null}return b._af};
+const bfp=b=>{if(!b||!FP[b.t])return null;if(b.fv)return b.fv;if(b._af===undefined){const ok=SCLA&&b.t==='palace'?[0]:FP[b.t].map((v,i)=>v.legacy?-1:i).filter(i=>i>=0);b._af=ok.length?{v:ok[(hsh(b.x|0,b.y|0,5)*ok.length)|0],r:SCLA&&b.t==='palace'?0:(hsh(b.x|0,b.y|0,6)*4)|0,m:hsh(b.x|0,b.y|0,7)<.5?1:0}:null}return b._af};
 function fpDoor(b){const f=bfp(b);if(!f)return null;const V=FP[b.t][f.v||0];if(!V||V.legacy||!V.door)return null;const s=bsz(b.t),d=fpT(V.door[0],V.door[1],f),M=fpMask(b.t,f);if(!M)return null;
  let best=null,bd=1e9;for(let j=0;j<s;j++)for(let i=0;i<s;i++){if(!M[j*s+i])continue;for(const[a,c]of[[1,0],[-1,0],[0,1],[0,-1]]){const ii=i+a,jj=j+c;if(ii>=0&&jj>=0&&ii<s&&jj<s&&M[jj*s+ii])continue;const dd=((ii+.5)/s-d[0])**2+((jj+.5)/s-d[1])**2;if(dd<bd&&walkC(b.x+ii,b.y+jj)){bd=dd;best={x:b.x+ii+.5,y:b.y+jj+.5}}}}return best}
 const FPB={on:0,n:2};
@@ -3243,7 +3251,7 @@ const FPB={on:0,n:2};
 function fpWarm(){if(fpWarm.run)return;fpWarm.run=1;let i=0;const step=()=>{const t0=performance.now();try{while(i<S.bl.length&&performance.now()-t0<24){const b=S.bl[i++];if(b&&b.t!=='wall'&&bfp(b))fpSpr(b,b.o||'')}}catch(e){console.warn(e)}if(i<S.bl.length)setTimeout(step,0);else{fpWarm.run=0;setTimeout(()=>{try{if(S.wm&&S.wm.prov&&S.wm.prov.length&&S.gen>=2)wgRaster(S.wm.prov,512,300)}catch(e){}},0)}};setTimeout(step,0)}// per-frame budget for building new detailed sprites (avoids hitches on phones)
 function fpStub(t){const s=bsz(t),k='STUB'+s;if(SPR[k])return SPR[k];const[c,g]=mkW(s*32+16,s*32+16);g.translate(8,8);g.globalAlpha=.35;rr(g,4,4,s*32-8,s*32-8,8,'#b8a07a');return SPR[k]={c,m:{lights:[],smoke:[],fx:[],fire:null,flat:false,s,walled:true}}}
 // sprite for a shaped building, drawn in its final orientation (smooth curved walls)
-function fpSpr(b,v){const f=bfp(b),t=b.t,l=Math.min(b.l||1,5);const key='F'+t+l+(f.v||0)+(f.r||0)+(f.m?1:0)+(v||'')+((S&&S.civ)||'')+(S&&S.tier>=3?'s':'');if(SPR[key])return SPR[key];if(FPB.on){if(FPB.n<=0||performance.now()-(vframe.t0||0)>(FPB.pre?9:5))return fpStub(t);FPB.n--}const P=fpPrims(t,f);if(!P)return bspr(t,b.l,v);
+function fpSpr(b,v){const f=bfp(b),t=b.t,l=Math.min(b.l||1,5);const key='F'+t+l+(f.v||0)+(f.r||0)+(f.m?1:0)+(v||'')+((S&&S.civ)||'')+(S&&S.tier>=3?'s':'');if(SPR[key])return SPR[key];if(FPB.on){const W8=fpSpr.w8||(fpSpr.w8=new Map()),wn=(W8.get(key)||0)+1;if(wn<40&&(FPB.n<=0||performance.now()-(vframe.t0||0)>(FPB.pre?9:5))){W8.set(key,wn);return fpStub(t)}W8.delete(key);FPB.n--}/* a sprite that has waited 40 frames is built anyway (big ones like the palace never fit the per-frame budget) */const P=fpPrims(t,f);if(!P)return bspr(t,b.l,v);
  const s=bsz(t),W=s*32,[c,g]=mkW(W+16,W+16);g.translate(8,8);const m={lights:[],smoke:[],fire:null,flat:false,s,walled:true};const A=civA(),wc=A.wall.c,th=Math.max(7,Math.min(11,W*.035));const V=FP[t][f.v||0];
  const path=(p,ins)=>{const q=new Path2D();if(p.k==='r'){const r=Math.min(10,p.w*W*.15,p.h*W*.15);q.roundRect?q.roundRect(p.x*W+ins,p.y*W+ins,p.w*W-2*ins,p.h*W-2*ins,Math.max(1,r-ins*.5)):q.rect(p.x*W+ins,p.y*W+ins,p.w*W-2*ins,p.h*W-2*ins)}else q.ellipse(p.x*W,p.y*W,Math.max(1,p.rx*W-ins),Math.max(1,p.ry*W-ins),0,0,6.2832);return q};
  const solid=P.filter(p=>!['court','field','thresh','fold','stall'].includes(p.tag)),open=P.filter(p=>p.tag==='court'),uni=new Path2D();
@@ -3419,7 +3427,9 @@ function X_person0(){}
 function X_legacy(g,kd,W,K,m,l,key){g.save();g.scale(1/K,1/K);const WW=W*K,th=5*K+3;X_LK=1/K;const cl=kd==='silo'?2:1;
  const test=(x,y)=>x>th&&y>th&&x<WW-th&&y<WW-th?cl:0;let sd=11;for(const ch of key)sd=(sd*31+ch.charCodeAt(0))>>>0;
  try{X_furnish(g,kd,WW,test,[WW/2,WW-th],m,l,sd,kd==='kiln'?[[WW*.6,WW*.4,WW*.4]]:null)}finally{X_LK=1;X_SP=null;g.restore()}}
-function X_furnish(g,kd,W,test,door,m,l,seed,extra){const id=civId(),PL=X_PAL[id]||X_PAL.egypt,rich=l>=3;X_SEED=(seed>>>0)%2147483646+1;const R=X_region(W,test);if(m){m.R=R;m.Rk=X_LK;m.spots=X_SP=[]}
+/* scale A: furniture is laid out at half its old drawing size so a bed is ~1x2 m next to a 1.7 m pawn */
+const FURN_K=SCLA?2:1;function X_furnish(g,kd,W,test,door,m,l,seed,extra){if(FURN_K===1)return X_furnish0(g,kd,W,test,door,m,l,seed,extra);const K=FURN_K,sc=q=>Array.isArray(q)?q.map(sc):typeof q==='number'?q*K:q,lk=X_LK;g.save();g.scale(1/K,1/K);X_LK=lk/K;try{return X_furnish0(g,kd,W*K,(x,y)=>test(x/K,y/K),door?sc(door):door,m,l,seed,extra?sc(extra):extra)}finally{X_LK=lk;g.restore()}}
+function X_furnish0(g,kd,W,test,door,m,l,seed,extra){const id=civId(),PL=X_PAL[id]||X_PAL.egypt,rich=l>=3;X_SEED=(seed>>>0)%2147483646+1;const R=X_region(W,test);if(m){m.R=R;m.Rk=X_LK;m.spots=X_SP=[]}
  if(door){R.door=door;X_mark(R,door[0]-22,door[1]-22,44,44,0);X_mark(R,door[0]-10,door[1]-50,20,50,0)}
  const P=(c,w,h,pref,fn,o)=>{const b=X_find(R,c,w,h,pref,o);if(b)fn(b);return b};const has=c=>R.cls.some((v,i)=>v===c&&!R.used[i]);
  const cnt=c=>{let k=0;for(const v of R.cls)if(v===c)k++;return k*R.C*R.C/1024};// area in tiles
@@ -3464,7 +3474,7 @@ function X_furnish(g,kd,W,test,door,m,l,seed,extra){const id=civId(),PL=X_PAL[id
  if(kd==='palace'||kd==='megaron'){X_RICH=1;
   if(kd==='megaron'&&extra){const[cx,cy]=extra;X_rug(g,cx-80,cy-62,160,124,PL.rug[0],PL.rug[1],PL.rug[2]);X_hearth(g,cx,cy,30,m);for(const[a,c]of[[-1,-1],[1,-1],[-1,1],[1,1]])X_column(g,cx+a*62,cy+c*54,12,PL.col[0],PL.col[1]);X_mark(R,cx-80,cy-70,160,140,0)}
   P(1,48,32,'far',b=>{X_rr(g,b.x,b.y,b.w,b.h,4,'#e8dcc0',X_OL,1.2);X_rr(g,b.x+8,b.y+5,b.w-16,b.h-12,3,PL.rug[0]);X_rr(g,b.x+14,b.y+b.h-14,b.w-28,10,2,'#c8a040',X_OL,.6)},{gap:14,rot:false,jit:1});
-  if(kd==='palace'){for(let i=0;i<Math.min(3,A1/40);i++)P(1,110,70,'center',b=>X_rug(g,b.x,b.y,b.w,b.h,PL.rug[0],PL.rug[1],PL.rug[2]),{gap:-50,jit:6});
+  if(kd==='palace'){if(FURN_K>1){/* a working palace: household beds, magazines of storage jars, benches for petitioners */for(let i=0;i<16;i++)P(1,26,52,'wall',b=>X_bed(g,b.cx,b.cy,X_pick(PL.lin),b.rot,1));for(let i=0;i<24;i++)P(1,22,22,'wall',b=>X_pithos(g,b.cx,b.cy,10),{gap:1});sacks(1,10);jars(1,8);for(let i=0;i<4;i++)P(1,44,22,'center',b=>X_table(g,b.x+2,b.y+2,b.w-4,b.h-4,'#8a5a32'),{gap:10});lamps(1,6)}for(let i=0;i<Math.min(3,A1/40);i++)P(1,110,70,'center',b=>X_rug(g,b.x,b.y,b.w,b.h,PL.rug[0],PL.rug[1],PL.rug[2]),{gap:-50,jit:6});
    const sp=Math.max(84,W/6);for(let y=sp*.5;y<W;y+=sp)for(let x=sp*.5;x<W;x+=sp){const b=X_find(R,1,22,22,'near',{p:[x,y],gap:8,jit:0,maxd:12,rot:false});if(b)X_column(g,b.cx,b.cy,10,PL.col[0],PL.col[1])}
    for(let i=0;i<2;i++)P(1,30,60,'wall',b=>{X_bed(g,b.cx,b.cy,PL.lin[i],b.rot,1);P(1,36,22,'near',q=>X_chest(g,q.x,q.y,q.w,q.h,1),{p:[b.cx,b.cy]})});P(1,44,40,'wall',b=>X_desk(g,b.x,b.y,m));P(1,70,26,'wall',b=>X_loom(g,b.cx,b.cy,b.sw?b.h:b.w,b.sw?Math.PI/2:0))}
   for(let i=0;i<2;i++)P(1,16,120,'wall',b=>X_table(g,b.x,b.y,b.w,b.h,'#7a5232'),{gap:4});for(let i=0;i<2;i++)P(1,20,20,'center',b=>X_brazier(g,b.cx,b.cy,m),{gap:30});
