@@ -155,7 +155,8 @@ function steadKind(s){if(!s.kind)s.kind=(s.main==='wool'||s.main==='dairy')?'pas
 function steadOut(s){const k=steadKind(s)+s.land;if(STO[k])return STO[k];const L=LAND[s.land].out,o={};if(s.kind==='pasture'){o.wool=.45;o.dairy=.4;o.grain=.15}else{let mv=0;for(const g in L){if(g==='wool'||g==='dairy'){mv+=L[g];continue}o[g]=L[g]}o.grain=(o.grain||0)+mv*.6}return STO[k]=o}
 const ECOFOOD=['bread','fish','dairy','grain'],ECOWAGE=['bread','clay','timber','flax','wool','pottery','tools','cloth','beer','bronzeware','grain','dairy','fish'];
 function ecoLed(){return{tg:{},wArmy:0,wMine:0,wHouse:0,wDrill:0,wBld:0,sMerc:0,sFest:0,sBld:0,deaths:0,tithe:0,spoil:0,wages:0,patron:0,sIn:0,sOut:0,sold:0,mtax:0,food:0,ore:0,risers:0,merch:0,born:0,arrived:0,arrears:0,starve:0,left:0}}
-function ecoNew(){return{pend:1,needHold:1,v:1,tithe:20,mtax:20,charters:4,autoCh:1,sell:80,patron:15,house:1,drill:0,mineL:0,storL:0,autoStead:1,yr:1,yt:0,steads:[],cr:[],mh:[],pet:[],car:[],hold:{},mkt:{},silver:0,led:ecoLed(),last:null,hist:[],sid:0,unpaid:0,popArmy:1,riseY:{}}}
+const HOLD0=200000;/* grain the tribe brought with them on New Game; it does not count against the Holding's room */
+function ecoNew(){return{pend:1,needHold:1,v:1,tithe:20,mtax:20,charters:4,autoCh:1,sell:80,patron:15,house:1,drill:0,mineL:0,storL:0,autoStead:1,yr:1,yt:0,steads:[],cr:[],mh:[],pet:[],car:[],hold:{grain:HOLD0},tribe:HOLD0,mkt:{},silver:0,led:ecoLed(),last:null,hist:[],sid:0,unpaid:0,popArmy:1,riseY:{}}}
 function ecoMigrate(){if(!S.eco){const e=ecoNew();e.pend=0;e.needHold=0;e.tithe={low:15,normal:20,high:30}[S.tax||'normal']||20;S.tax='normal';e.popArmy=0;S.eco=e}const E=S.eco,d=ecoNew();for(const k in d)if(E[k]==null)E[k]=d[k];
  if(!E.popArmy){E.popArmy=1;const n=soldN();if(n)S.pop+=n}E._sol=soldN();ECOF=null}
 const soldN=()=>{let n=0;for(const c of S.companies||[])if(!c.merc)n+=c.men;return n};
@@ -167,7 +168,7 @@ const ecoOn=()=>!!(S.eco&&holdB());
 const crN=c=>S.eco?S.eco.cr.filter(x=>x.c===c).length:0;
 const holdTot=()=>{let t=0;for(const g in S.eco.hold)t+=S.eco.hold[g];return t};
 const holdVal=()=>{let t=0;for(const g in S.eco.hold)t+=S.eco.hold[g]*EIT[g].v;return t};
-const holdCap=()=>(holdB()?(holdB().l-1)*10000:0)+30000+S.eco.storL*15000+cnt('granary')*2000+cnt('storehouse')*1500;
+const holdCap=()=>(S.eco.tribe||0)+(holdB()?(holdB().l-1)*10000:0)+30000+S.eco.storL*15000+cnt('granary')*2000+cnt('storehouse')*1500;
 const spoilF=()=>(1/(1+.5*S.eco.storL+.1*cnt('granary')+.06*cnt('storehouse')))*(1-Math.min(.4,crN('potter')*.08));
 const mineF=()=>S.eco?(1+.25*S.eco.mineL)*(S.eco.unpaid?.65:1):1;
 const yearLen=()=>ECO_YD*DAYLEN;
@@ -213,7 +214,7 @@ function farmStep(s,kr){const b=farmB(s);if(!b)return;const w=Math.max(1,s.n-Mat
  const night=dayP()>.64&&dayP()<.94;if(night)return;L/=0.7;// work happens in the 70% of the day that is daylight
  const tgt=farmTarget(s),need=s.f.length+s.till.length<tgt;
  // share of the family's labor that goes to building / breaking land (the rest tends sown fields)
- const share=s.ph===0?1:(b.cp?.75:need?(s.ph===1?.55:s.ph===2?.4:.25):0);if(share<=0&&!(s.till.length&&sowSeason()))return;let U=L*Math.max(share,.15);
+ const share=s.ph===0?1:(b.cp?.75:need?(s.ph===1?.55:s.ph===2?.4:.25):0);let U=share<=0&&!(s.till.length&&sowSeason())?0:L*Math.max(share,.15);/* no early return: the stage check below must still run once the fields are in */
  if(b.cp){const hu=U*(s.ph===0?.7:.8);U-=hu;s.hw+=hu;const c=b.cp;c.wd=s.hw;c.w=s.hn;c.p=Math.min(1,s.hw/s.hn);
   if(s.ph===0&&c.p>.3&&!s.felled){s.felled=1;let n=0;for(const k of s.hs||[])if(TER[k]===T_FOREST){TER[k]=T_GRASS;n++;try{dirtyTile(k%MW,k/MW|0)}catch(e){}}if(n){s.bt=Math.min(40,(s.bt||0)+n*4)}}
   if(s.hw>=s.hn)farmStageUp(s,b)}
@@ -280,7 +281,7 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
  {const C=cap();if(S.res.food<C*.7){let want=C*.7-S.res.food;for(const g of['bread','fish','dairy','grain']){const h=Math.max(0,(E.hold[g]||0)-(g==='grain'?wsRes():0)),u=Math.min(h,want);if(u>0){E.hold[g]-=u;S.res.food+=u;want-=u;S.ft=S.ft||{};S.ft[g]=(S.ft[g]||0)+u}}}
   if(S.res.wood<C*.5&&E.hold.timber>0){const u=Math.min(E.hold.timber,C*.5-S.res.wood);E.hold.timber-=u;S.res.wood+=u}}
  // spoilage everywhere (slowed by proper storage)
- {const sf=spoilF(),cp=holdCap(),tot=holdTot(),over=tot>cp?(tot-cp)/tot:0;for(const g in E.hold){const h=E.hold[g];if(h<=0){delete E.hold[g];continue}const r=EIT[g].rot*sf*k+over*.0003*k;if(r>0){const l=h*Math.min(.5,r);E.hold[g]=h-l;led.spoil+=l*EIT[g].v}}
+ {if(E.tribe)E.tribe=Math.min(E.tribe,E.hold.grain||0)|0;/* the tribe's carried grain sits in sacks outside the store: its room shrinks as it is eaten, and it was dried and sealed in jars for the trek so it barely rots */const sf=spoilF(),cp=holdCap(),tot=holdTot(),over=tot>cp?(tot-cp)/tot:0;for(const g in E.hold){const h=E.hold[g];if(h<=0){delete E.hold[g];continue}const r=EIT[g].rot*sf*k+over*.0003*k;if(r>0){const l=(g==='grain'&&E.tribe?Math.max(0,h-E.tribe):h)*Math.min(.5,r);E.hold[g]=h-l;led.spoil+=l*EIT[g].v}}
   // 0.17: Holding bread feeds the town store; beer goes to the town's beer stock (happiness)
    {const C2=cap(),br=E.hold.bread||0;if(br>0&&S.res.food<C2){const u=Math.min(br,(C2-S.res.food)/1.3,2*k);E.hold.bread=br-u;S.res.food+=u*1.3;led.toTown=(led.toTown||0)+u}else if(br>0&&(S._brR||0)<S.pop*.4*k){/* store full: bread goes out as daily rations instead (eaten in place of store food) */const u=Math.min(br,k*.5+S.pop*.02*k);E.hold.bread=br-u;S._brR=(S._brR||0)+u*1.3;led.toTown=(led.toTown||0)+u}const be=E.hold.beer||0;S.gd=S.gd||{beer:0};if(be>0&&S.gd.beer<S.pop*3){const u=Math.min(be,k*.5);E.hold.beer=be-u;S.gd.beer+=u}}
   for(const g in E.mkt){const r=EIT[g].rot*2.2*k;if(r){const l=E.mkt[g]*r;E.mkt[g]-=l;led.spoilM=(led.spoilM||0)+l*EIT[g].v}}
@@ -816,7 +817,7 @@ function renderAdmin(V){const E=S.eco;if(!E){V.textContent='…';return}const tb
   if(E.pet.length){const nm=!cqLot('mz');W.insertAdjacentHTML('beforeend','<h4>Merchant charter petitions</h4>'+(nm?'<p class="small" style="color:#ffb070">No free Market lot — approved merchants will wait for one.</p>':''));for(const id of E.pet.slice()){const c=E.cr.find(c=>c.id===id);if(!c)continue;const F=famOfLink('craft',c.id);const r=document.createElement('div');r.className='row';r.innerHTML='<span><b>'+CRAFT[c.c].n+'</b> · '+(F?F.sn+' family · ':'')+'skill '+c.sk.toFixed(1)+' · '+fmtS(c.ag)+' silver</span>';r.appendChild(btn('Approve',()=>{grantCharter(id);renderView()},E.mh.length>=E.charters,'pri'));r.appendChild(btn('Deny',()=>{refuseCharter(id);renderView()}));W.appendChild(r)}}}
  else{const L=S.fam?S.fam.L:[];let k=0,a=0,o=0;for(const F of L)for(const m of F.m){if(m.a<14)k++;else if(m.a>=60)o++;else a++}const mx=Math.max(1,k,a,o),bar=(n,v,c)=>'<div class="cbar"><span>'+n+'</span><i style="width:'+(v/mx*100)+'%;background:'+c+'"></i><b>'+v+'</b></div>';
   const cc={};for(const c of E.cr)cc[c.c]=(cc[c.c]||0)+1;const last=E.last||{};
-  W.innerHTML='<div class="taxgrid"><div><b>'+S.pop+'</b><span>people</span></div><div><b>'+L.length+'</b><span>families</span></div><div><b>'+(E.led.born||0)+' / '+(last.born||0)+'</b><span>births this / last year</span></div><div><b>'+((E.led.starve||0)+(E.led.left||0))+' / '+((last.starve||0)+(last.left||0))+'</b><span>deaths & departures</span></div></div><h4>Ages</h4>'+bar('Children',k,'#9fc070')+bar('Adults',a,'#d8b850')+bar('Elders',o,'#b0a090')+
+  W.innerHTML='<div class="taxgrid"><div><b>'+S.pop+'</b><span>people</span></div><div><b>'+L.length+'</b><span>families</span></div><div><b>'+(E.led.born||0)+' / '+(last.born||0)+'</b><span>births this / last year</span></div><div><b>'+((E.led.starve||0)+(E.led.left||0)+(E.led.deaths||0))+' / '+(last.deaths||0)+'</b><span>deaths & departures</span></div></div><h4>Ages</h4>'+bar('Children',k,'#9fc070')+bar('Adults',a,'#d8b850')+bar('Elders',o,'#b0a090')+
    '<h4>Families by status</h4><p class="small">Waiting for land: '+L.filter(F=>F.st==='pend').length+' ('+L.filter(F=>F.st==='pend').reduce((x,F)=>x+F.m.length,0)+' people) · Steads: '+E.steads.length+' · Crafters: '+(Object.keys(cc).map(c=>cc[c]+' '+CRAFT[c].n.toLowerCase()).join(', ')||'none')+' · Merchant houses: '+E.mh.length+' · Soldiers: '+soldN()+(E.cqWait?' · crafters waiting for a lot':'')+(E.mwait&&E.mwait.length?' · '+E.mwait.length+' merchants waiting for a lot':'')+'</p>'+
    (E.hist.length>1?(()=>{const Wd=300,HG=60,vs=E.hist.map(r=>r.pop),mx2=Math.max(1,...vs);return '<h4>Population over the years</h4><svg width="100%" viewBox="0 0 '+Wd+' '+HG+'" class="taxsvg"><polyline fill="none" stroke="#8ab0e0" stroke-width="2" points="'+vs.map((v,i)=>(i/(vs.length-1)*Wd).toFixed(1)+','+(HG-3-v/mx2*(HG-8)).toFixed(1)).join(' ')+'"/></svg>'})():'')}}
 function sel_(i){sel={i};showInsp()}
