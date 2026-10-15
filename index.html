@@ -173,7 +173,7 @@ const mineF=()=>S.eco?(1+.25*S.eco.mineL)*(S.eco.unpaid?.65:1):1;
 const yearLen=()=>ECO_YD*DAYLEN;
 const fmtS=v=>v>=1000?(v/1000).toFixed(1)+'k':v>=10?Math.round(v)+'':v.toFixed(1);
 function ecoHousing(){return S.eco?serfN()+townN()+soldN():0}
-let ECOF=null;function ecoFields(){if(ECOF&&ECOF.length===MW*MH)return ECOF;ECOF=new Uint8Array(MW*MH);if(S.eco)for(const s of S.eco.steads)for(const i of s.f)ECOF[i]=1;return ECOF}
+let ECOF=null;function ecoFields(){if(ECOF&&ECOF.length===MW*MH)return ECOF;ECOF=new Uint8Array(MW*MH);if(S.eco)for(const s of S.eco.steads){for(const i of s.f)ECOF[i]=1;if(s.claim)for(const i of s.claim)ECOF[i]=1}return ECOF}
 // ---- procedural stead layout ----
 function steadScan(x,y,F){const c={w:0,f:0,h:0,s:0,g:0},cand=[];for(let dy=-6;dy<=7;dy++)for(let dx=-6;dx<=7;dx++){const X=x+dx,Y=y+dy;if(X<1||Y<1||X>=MW-1||Y>=MH-1)continue;const d=Math.hypot(dx-.5,(dy-.5)*1.1);if(d>6.2)continue;const i=Y*MW+X,t=TER[i];
   if(t===T_WATER){c.w++;continue}if(t===T_FOREST){c.f++;continue}if(t===T_CU||t===T_SN||t===T_ROCK)continue;if(t===T_HILL)c.h++;else if(t===T_SAND)c.s++;else c.g++;
@@ -186,9 +186,68 @@ function steadSite(){const E=S.eco,c=S.center,R0=RAD[S.tier]+2,F=ecoFields();let
   let near=0;for(const s of E.steads){const d=Math.abs(s.x-x)+Math.abs(s.y-y);if(d<9){near=1;break}}if(near)continue;const L=steadScan(x,y,F);if(L.free<16)continue;
   const sc=L.free+Math.min(10,L.water)*1.5-r*.25+Math.random()*5;if(sc>bs){bs=sc;best={x,y,L}}}return best}
 function foundStead(n,why){const E=S.eco,st=steadSite();if(!st)return null;const b={t:'stead',l:1,x:st.x,y:st.y};S.bl.push(b);rebuildOcc();try{autoRoadFor(b)}catch(e){}
- const s={id:++E.sid,x:st.x,y:st.y,land:st.L.land,f:st.L.fields,n,main:'auto',st:{grain:n*400},sv:5,sk:{},don:0,cart:0,hap:60,ow:0,away:0,an:0,prod:0,hun:0};const F=ecoFields();for(const i of s.f)F[i]=1;E.steads.push(s);E._wc=1;ECOFC.delete(s.id);return s}
+ const s={id:++E.sid,x:st.x,y:st.y,land:st.L.land,f:[],claim:st.L.fields,hs:[],n,main:'auto',st:{grain:n*100},sv:5,sk:{},don:0,cart:0,hap:60,ow:0,away:0,an:0,prod:0,hun:0};const F=ecoFields();for(const i of s.claim)F[i]=1;E.steads.push(s);farmInit(s,b);E._wc=1;ECOFC.delete(s.id);return s}
 // no Holding: families keep farming, the tithe cannot be delivered and is waived (stays with them), with a clear warning
 function ecoNoHold(){const E=S.eco,k=ECO_K*YSC,hm=Math.max(.6,Math.min(1.2,hapMul()));for(const s of E.steads){const w=Math.max(1,s.n-Math.floor(s.n*.35)),L=steadOut(s);for(const g in L)s.st[g]=(s.st[g]||0)+L[g]*w*hm*k*.8;let need=s.n*.4*k;for(const g of ECOFOOD){const h=s.st[g]||0,u=Math.min(h,need);s.st[g]=h-u;need-=u}}E.yt+=ECO_K;if(E.yt>=yearLen()){E.yt=0;E.yr++;for(const s of E.steads)s.prod=0;log('⚠ Tithe Day: there is no Imperial Holding, so the tithe could not be delivered. Build or move one in (Architect → Storage & Treasury).')}}
+// ===== #17 staged farms: the family builds its stead on site, one coherent unit through stages =====
+// stage 0 Camp: tent + fire pit + a few garden plots while they raise the farmhouse (a family construction site)
+// stage 1 Farmhouse: ~10 fields, bread oven · stage 2 Grown farm: bigger house, ~25 fields, animal pen, shed · stage 3 Established: fields up to what the family can work
+// Labor is the family's own (adults, split between building and farming). Fields go clear → plough → sow, one tile at a time; sowing only in Spring/Autumn and costs grain.
+const FST=[{n:'Camp',fld:4},{n:'Farmhouse',fld:10},{n:'Grown farm',fld:25},{n:'Established farm',fld:999}],FHW=[10,0,10,0],FSOW=6,FKIT_D=6,FKIT_T=20;
+function farmB(s){return S.bl.find(b=>b.t==='stead'&&b.x===s.x&&b.y===s.y)}
+function farmYard(s){const SZ=bsz('stead'),hs=new Set(s.hs||[]),cl=new Set(s.claim||[]);const rows=[[s.y+SZ,s.y+SZ+1],[s.y-2,s.y-1]];let best=null,bn=-1;for(const r of rows){let n=0;for(const y of r)for(let x=s.x;x<s.x+SZ;x++)if(cl.has(y*MW+x))n++;if(n>bn){bn=n;best=r}}const o=[];for(const y of best)for(let x=s.x;x<s.x+SZ;x++)o.push(y*MW+x);return{y0:best[0],t:o}}
+function farmInit(s,b){const E=S.eco,SZ=bsz('stead');s.ph=0;s.till=[];s.pf=null;s.hw=0;s.hn=FHW[0];s.yd=farmYard(s);s.t0=S.t;
+ // crown starter kit from the Imperial Holding: food (grain) for about FKIT_D days and lumber for the first house
+ const day=s.n*.4*DAYLEN*YSC,wg=day*FKIT_D,hg=Math.max(0,(E.hold.grain||0)-(typeof wsRes==='function'?wsRes():0)),g=Math.min(wg,hg*.5);if(g>0){E.hold.grain-=g;s.st.grain=(s.st.grain||0)+g}
+ let t=Math.min(FKIT_T,E.hold.timber||0);if(t>0)E.hold.timber-=t;const tw=Math.min(FKIT_T-t,Math.max(0,S.res.wood||0));if(tw>0){S.res.wood-=tw;t+=tw}s.bt=Math.max(0,t-15);s.kit={g,t};/* 15 timber goes into the first farmhouse */E.led.kit=(E.led.kit||0)+g;
+ b.cp={p:0,ft:[],clr:[],cw:0,cd:0,mt:1,md:1,w:1,wd:0,y:{},fam:1}}
+function farmTarget(s){const w=Math.max(1,s.n-Math.floor(s.n*.35));const cap=8+w*5+6;return Math.min(FST[s.ph].fld,cap,(s.claim||[]).length)}
+function farmCand(s){const hs=new Set(s.hs||[]),yd=new Set(s.yd?s.yd.t:[]),fs=new Set(s.f),ts=new Set(s.till),SZ=bsz('stead'),cx=s.x+SZ/2,cy=s.y+SZ/2;let best=null,bd=1e9;
+ for(const i of s.claim||[]){if(hs.has(i)||yd.has(i)||fs.has(i)||ts.has(i))continue;const t=TER[i];if(t===T_WATER||t===T_CU||t===T_SN||occ[i]||roadSet[i])continue;const x=i%MW,y=i/MW|0;if(x>=s.x&&x<s.x+SZ&&y>=s.y&&y<s.y+SZ)continue;const d=Math.hypot(x+.5-cx,y+.5-cy)+(t===T_FOREST?3:0)+(t===T_ROCK||t===T_HILL?1.5:0);if(d<bd){bd=d;best=i}}return best}
+function farmPropAt(i){const x=i%MW,y=i/MW|0;for(let k=0;k<props.length;k++){const q=props[k];if((q.gx|0)===x&&(q.gy|0)===y)return k}return -1}
+function farmWorkOf(i){const t=TER[i];return t===T_FOREST?2.4:(t===T_ROCK||t===T_HILL)?1.2:farmPropAt(i)>=0?.8:.35}
+const sowSeason=()=>{const q=seasI();return q===0||q===2};
+// one ECO_K step of family development work
+function farmStep(s,kr){const b=farmB(s);if(!b)return;const w=Math.max(1,s.n-Math.floor(s.n*.35)),away=s.away>S.t?Math.min(w-.5,s.an||0):0,hun=s.hun>s.n*.4*DAYLEN*YSC*.5?.7:1;
+ let L=(w-away)*kr/DAYLEN*hun*(s.dm||1);// adult-days of work this step
+ const night=dayP()>.64&&dayP()<.94;if(night)return;L/=0.7;// work happens in the 70% of the day that is daylight
+ const tgt=farmTarget(s),need=s.f.length+s.till.length<tgt;
+ // share of the family's labor that goes to building / breaking land (the rest tends sown fields)
+ const share=s.ph===0?1:(b.cp?.75:need?(s.ph===1?.55:s.ph===2?.4:.25):0);if(share<=0&&!(s.till.length&&sowSeason()))return;let U=L*Math.max(share,.15);
+ if(b.cp){const hu=U*(s.ph===0?.7:.8);U-=hu;s.hw+=hu;const c=b.cp;c.wd=s.hw;c.w=s.hn;c.p=Math.min(1,s.hw/s.hn);
+  if(s.ph===0&&c.p>.3&&!s.felled){s.felled=1;let n=0;for(const k of s.hs||[])if(TER[k]===T_FOREST){TER[k]=T_GRASS;n++;try{dirtyTile(k%MW,k/MW|0)}catch(e){}}if(n){s.bt=Math.min(40,(s.bt||0)+n*4)}}
+  if(s.hw>=s.hn)farmStageUp(s,b)}
+ // sowing (in season): tilled ground is sown with grain from the family's own stores
+ while(U>0&&s.till.length&&sowSeason()&&(s.st.grain||0)>=FSOW-.01){const i=s.till[0];s.sw=(s.sw||0)+U;const need2=.2;if(s.sw<need2){U=0;break}s.sw-=need2;U-=need2;s.till.shift();s.st.grain=Math.max(0,s.st.grain-FSOW);s.f.push(i);s.sown=(s.sown||0)+1;S.eco.led.seed=(S.eco.led.seed||0)+FSOW;ECOF=null}
+ // breaking new land: clear (trees/bush/rock) then plough, one tile at a time
+ while(U>0&&s.f.length+s.till.length<tgt){if(!s.pf){const i=farmCand(s);if(i==null)break;s.pf={i,k:farmWorkOf(i)>.5?'clear':'plough',w:0,n:farmWorkOf(i)}}const P=s.pf,d=Math.min(U,P.n-P.w);P.w+=d;U-=d;if(P.w<P.n-1e-6)break;
+  if(P.k==='clear'){const i=P.i,t=TER[i];if(t===T_FOREST){TER[i]=T_GRASS;const u=Math.min(6,40-(s.bt||0));s.bt=(s.bt||0)+Math.max(0,u);s.st.timber=(s.st.timber||0)+6-Math.max(0,u)}const k=farmPropAt(i);if(k>=0){const q=props[k];props.splice(k,1);try{visProps.src=null}catch(e){}if(q.k==='rock')s.st.clay=(s.st.clay||0);else s.st.timber=(s.st.timber||0)+1}try{chunkDirty(i%MW,i/MW|0)}catch(e){}s.cleared=(s.cleared||0)+1;s.pf={i,k:'plough',w:0,n:.35}}
+  else{s.till.push(P.i);s.pf=null}}
+ // next stage when the fields of this stage are in and the family can afford the next step
+ if(!b.cp){if(s.ph===1&&s.f.length>=FST[1].fld&&S.t-s.t0>DAYLEN*4&&(s.bt||0)<12){/* no trees on the land: buy lumber from the crown with savings (or a little on credit) */const E=S.eco,nd=12-(s.bt||0),av=Math.min(nd,(E.hold.timber||0)+Math.max(0,S.res.wood||0));if(av>=nd){let r=nd;const u1=Math.min(r,E.hold.timber||0);E.hold.timber=(E.hold.timber||0)-u1;r-=u1;S.res.wood-=r;s.bt=(s.bt||0)+nd;const pz=nd*.5;s.sv=(s.sv||0)-pz;E.silver+=pz;if(s.sv<0){s.ow=(s.ow||0)-s.sv;s.sv=0}}}
+  if(s.ph===1&&s.f.length>=FST[1].fld&&(s.bt||0)>=12&&S.t-s.t0>DAYLEN*4){s.bt-=12;s.ph1b=1;s.hw=0;s.hn=FHW[2];b.cp={p:0,ft:[],clr:[],cw:0,cd:0,mt:1,md:1,w:s.hn,wd:0,y:{},fam:1};qlog('The '+((famOf(s)||{}).sn||'farm')+' family started enlarging their farmhouse.')}
+  else if(s.ph===2&&s.f.length>=FST[2].fld&&(s.n>=6||s.sv>=40||S.t-s.t0>yearLen()*1.5))farmStageUp(s,b)}}
+function farmStageUp(s,b){const fam=(famOf(s)||{}).sn||'A';if(b.cp){delete b.cp}s.ph=Math.min(3,s.ph+1);s.hw=0;
+ if(s.ph===1){try{autoRoadFor(b)}catch(e){}qlog('The '+fam+' family finished their farmhouse and moved in from the tent.')}
+ else if(s.ph===2){b.l=2;qlog('The '+fam+' family enlarged their farmhouse and built an animal pen and a shed.')}
+ else if(s.ph===3){qlog('The '+fam+' farm is fully established.')}
+ if(s.ph>=3)s.ph=3;S.eco._wc=1;rosterSig='';try{SPR&&Object.keys(SPR).forEach(k=>{if(k.startsWith('Fstead'))delete SPR[k]})}catch(e){}}
+// yard pieces and tilled ground, drawn on the ground layer
+function farmDraw(s,z){if(s.ph==null)return;const SZ=bsz('stead'),yd=s.yd;if(!yd)return;const Y=yd.y0*TS,X=s.x*TS,b=farmB(s),bc=b&&b.cp;
+ // tilled (ploughed, waiting to be sown) and the tile being worked
+ for(const i of s.till){const x=(i%MW)*TS,y=((i/MW)|0)*TS;vx.fillStyle='#7a5434';vx.fillRect(x+1,y+1,TS-2,TS-2);vx.strokeStyle='#5a3a20';vx.lineWidth=1.5;vx.beginPath();for(let k=5;k<TS;k+=7){vx.moveTo(x+3,y+k);vx.lineTo(x+TS-3,y+k)}vx.stroke()}
+ if(s.pf){const x=(s.pf.i%MW)*TS,y=((s.pf.i/MW)|0)*TS,f=s.pf.w/s.pf.n;if(s.pf.k==='plough'){vx.fillStyle='rgba(122,84,52,'+(.25+.6*f)+')';vx.fillRect(x+1,y+1,TS-2,TS-2)}vx.strokeStyle='rgba(255,230,160,.8)';vx.setLineDash([4,3]);vx.lineWidth=1.5;vx.strokeRect(x+1,y+1,TS-2,TS-2);vx.setLineDash([])}
+ if(z<.35)return;const P=(dx,dy)=>[X+dx*TS,Y+dy*TS];
+ // fire pit (camp onward)
+ {const[x,y]=P(2.5,1);vx.fillStyle='#5a5048';for(let k=0;k<7;k++){const a=k/7*TAU;vx.beginPath();vx.arc(x+Math.cos(a)*9,y+Math.sin(a)*6,3,0,TAU);vx.fill()}vx.fillStyle='#2a1a10';vx.beginPath();vx.ellipse(x,y,7,4.5,0,0,TAU);vx.fill();if(s.ph===0||night()){const fl=Math.sin(performance.now()/120)*1.5;vx.fillStyle='#ffb040';vx.beginPath();vx.moveTo(x-4,y);vx.lineTo(x,y-9-fl);vx.lineTo(x+4,y);vx.fill();vx.fillStyle='#fff0a0';vx.beginPath();vx.moveTo(x-2,y);vx.lineTo(x,y-5-fl);vx.lineTo(x+2,y);vx.fill()}}
+ // family tent while the farmhouse is going up
+ if(s.ph===0){const sp=bspr('tent',1);vx.drawImage(sp.c,X-6,Y-6,2*TS+12,2*TS+12)}
+ // bread oven (farmhouse stage)
+ if(s.ph>=1){const[x,y]=P(3.6,1);vx.fillStyle='#b8743c';vx.strokeStyle='#5a3418';vx.lineWidth=1.5;vx.beginPath();vx.arc(x,y,9,Math.PI,0);vx.lineTo(x+9,y+4);vx.lineTo(x-9,y+4);vx.closePath();vx.fill();vx.stroke();vx.fillStyle='#2a1408';vx.beginPath();vx.arc(x,y+1,3.5,Math.PI,0);vx.fill()}
+ // shed + animal pen (grown farm)
+ if(s.ph>=2){let[x,y]=P(4.5,.25);vx.fillStyle='#9a7a4e';vx.strokeStyle='#4a3218';vx.lineWidth=1.5;vx.fillRect(x,y,1.6*TS,1.4*TS);vx.strokeRect(x,y,1.6*TS,1.4*TS);vx.fillStyle='#c8a868';vx.fillRect(x-3,y-4,1.6*TS+6,10);vx.strokeRect(x-3,y-4,1.6*TS+6,10);
+  [x,y]=P(6.2,.15);vx.strokeStyle='#6a4a26';vx.lineWidth=2;vx.strokeRect(x,y,1.7*TS,1.7*TS);for(let k=0;k<=4;k++){vx.beginPath();vx.moveTo(x+k*1.7*TS/4,y-3);vx.lineTo(x+k*1.7*TS/4,y+1.7*TS);vx.stroke()}if(z>=.5){const g=critSpr(steadKind(s)==='pasture'?'goat':'goat',Math.floor(performance.now()/600+s.id)%2);vx.drawImage(g,x+8,y+14,26,22);if(s.ph>=3)vx.drawImage(critSpr('cow',0),x+24,y+4,26,22)}}}
+function farmStageTxt(s){if(s.ph==null)return '';const b=farmB(s),t=farmTarget(s);let h='<b>Farm stage:</b> '+FST[s.ph].n+(b&&b.cp?' · '+(s.ph===0?'building the farmhouse':'enlarging the farmhouse')+' '+Math.round(b.cp.p*100)+'%':'')+'<br>Fields: '+s.f.length+' sown · '+s.till.length+' ploughed (sown in '+(sowSeason()?'this season':'Spring/Autumn')+') · goal this stage '+t+(s.pf?'<br>Now working: '+(s.pf.k==='clear'?'clearing':'ploughing')+' a plot ('+Math.round(s.pf.w/s.pf.n*100)+'%)':'');if(s.kit)h+='<br><span class="small">Crown starter kit: '+Math.round(s.kit.g)+' grain, '+Math.round(s.kit.t)+' timber</span>';if(s.bt)h+='<br><span class="small">Building timber: '+Math.round(s.bt)+'</span>';return h}
 // ---- tick ----
 function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();delete S.newFam}if(TER&&(!S.fam||S.t%20===0))try{famSync()}catch(e){console.warn(e)}
  {const sn=soldN();if(E._sol!=null&&sn<E._sol)S.pop=Math.max(1,S.pop-(E._sol-sn));E._sol=sn}
@@ -196,9 +255,9 @@ function ecoTick(){if(!S.eco)return;const E=S.eco;if(S.newFam&&!S.fam){famNew();
  if(S.t%60===0){ecoSync();try{wsAdopt()}catch(e){console.warn(e)}}
  // steads produce & eat (families use everything on their land except ore)
  if(S.t%DAYLEN<kr){{/* #13: civil laborers get a daily grain ration from the Holding (half their food) */const ln=landlessN(),need=ln*.4*DAYLEN*.5,av=Math.max(0,(E.hold.grain||0)-wsRes()),u=Math.min(av,need);if(u>0)E.hold.grain-=u;led.rations=(led.rations||0)+u;E.labFed=need>0?u/need:1;if(S.t>yearLen()&&E.labFed<.5&&ln>4&&S.t%(DAYLEN*3)<kr)qlog('⚠ The Holding cannot feed the civil laborers their grain ration: they work slower and have fewer children.')}for(const s of E.steads)steadClear(s);try{mzSettle()}catch(e){}try{if(((S.t/DAYLEN|0)%MKT_EVERY)===0)mktDay();crownBuy()}catch(e){console.error('mkt',e)}}
- for(const s of E.steads){const kids=Math.floor(s.n*.35),w=Math.max(1,s.n-kids),aw=s.away>S.t?Math.min(w-.5,s.an):0,wk=Math.min(s.f.length,(w-aw)*7+4),fm=1+Math.min(.3,.06*(s.fy||0));// 0.17: output = fields actually worked (each worker tends ~7) x field maturity (+6%/yr tilled, to +30%) x skill
+ for(const s of E.steads){if(s.ph!=null&&s.ph<9)try{farmStep(s,kr)}catch(e){console.warn('farm',e)}const kids=Math.floor(s.n*.35),w=Math.max(1,s.n-kids),aw=s.away>S.t?Math.min(w-.5,s.an):0,wk=Math.min(s.f.length,(w-aw)*7+4),fm=1+Math.min(.3,.06*(s.fy||0));// 0.17: output = fields actually worked (each worker tends ~7) x field maturity (+6%/yr tilled, to +30%) x skill
   const lab=Math.max(.5,wk/7)*fm*hm*k*seasF()*(s.skf||1)*(s.ow>0?.95:1)*(s.oven?.95:1),L=steadOut(s);for(const g in L){const q=L[g]*lab*(g==='grain'||g==='flax'?EM.farm:1);s.st[g]=(s.st[g]||0)+q;s.prod+=q*EIT[g].v}steadBake(s,k);
-  let need=s.n*.4*k;for(const g of ECOFOOD){const h=s.st[g]||0,fv=g==='bread'?1.25:1,u=Math.min(h,need*(g==='grain'||g==='bread'?1:.5)/fv);s.st[g]=h-u;need-=u*fv}if(need>0){const h=s.st.grain||0,u=Math.min(h,need);s.st.grain=h-u;need-=u}if(need>.01){for(const src of [E.mkt,E.hold])for(const g of ['bread','grain','fish','dairy']){if(need<=.01)break;const h=src[g]||0,u=Math.min(h,need);if(u>0){src[g]=h-u;need-=u;const pz=u*EIT[g].v*(src===E.mkt?1:.8);s.sv=Math.max(0,(s.sv||0)-pz);if(src===E.hold){E.silver+=pz*.5}}}}if(need>.01)s.hun+=need;
+  let need=s.n*.4*k;const sr=s.ph!=null?FSOW*Math.min(6,s.till.length+(s.pf?1:0))+.5:0;/* #17: seed grain for ploughed plots is kept back from the pot */for(const g of ECOFOOD){const h=Math.max(0,(s.st[g]||0)-(g==='grain'?sr:0)),fv=g==='bread'?1.25:1,u=Math.min(h,need*(g==='grain'||g==='bread'?1:.5)/fv);s.st[g]=(s.st[g]||0)-u;need-=u*fv}if(need>0){const h=Math.max(0,(s.st.grain||0)-sr),u=Math.min(h,need);s.st.grain=(s.st.grain||0)-u;need-=u}if(need>.01){for(const src of [E.mkt,E.hold])for(const g of ['bread','grain','fish','dairy']){if(need<=.01)break;const h=src[g]||0,u=Math.min(h,need);if(u>0){src[g]=h-u;need-=u;const pz=u*EIT[g].v*(src===E.mkt?1:.8);s.sv=Math.max(0,(s.sv||0)-pz);if(src===E.hold){E.silver+=pz*.5}}}}if(need>.01)s.hun+=need;
   for(const g of['wool','flax','timber','clay'])if(s.st[g])s.st[g]-=Math.min(s.st[g],s.n*.025*k);
   for(const g in s.st){const r=EIT[g].rot;if(r)s.st[g]*=1-r*1.4*k}}
  // tithe carriers arrive at the Holding
@@ -335,11 +394,11 @@ function steadCanvas(s){let e=ECOFC.get(s.id);if(e&&e.n===s.f.length&&e.sig===ch
   else if(cp==='clay'){g.fillStyle=C[1];g.fillRect(X+3,Y+3,6,5);g.fillStyle=C[2];g.fillRect(X+9,Y+9,4,4)}else{g.fillStyle=C[2];if(hsh(x,y,3)<.35){g.globalAlpha=.9;g.beginPath();g.ellipse(X+8,Y+8,3,2,0,0,7);g.fill()}}g.globalAlpha=1}
  g.strokeStyle='#6a4a2a';g.lineWidth=1.5;g.beginPath();for(const i of s.f){const x=i%MW,y=i/MW|0,X=(x-x0)*P,Y=(y-y0)*P;if(!set.has(i-MW)){g.moveTo(X,Y+.75);g.lineTo(X+P,Y+.75)}if(!set.has(i+MW)){g.moveTo(X,Y+P-.75);g.lineTo(X+P,Y+P-.75)}if(!set.has(i-1)){g.moveTo(X+.75,Y);g.lineTo(X+.75,Y+P)}if(!set.has(i+1)){g.moveTo(X+P-.75,Y);g.lineTo(X+P-.75,Y+P)}}g.stroke();
  e={c,x0,y0,w:x1-x0+1,h:y1-y0+1,n:s.f.length,sig:chunkSig};ECOFC.set(s.id,e);if(ECOFC.size>160){const k=ECOFC.keys().next().value;ECOFC.delete(k)}return e}
-function ecoDrawFields(vl,vr,vt,vb,z){if(!S.eco||!S.eco.steads.length)return;let bud=6;for(const s of S.eco.steads){const X=(s.x-7)*TS,Y=(s.y-7)*TS;if(X>vr||X+15*TS<vl||Y>vb||Y+15*TS<vt)continue;let e=ECOFC.get(s.id);if(!e||e.n!==s.f.length||e.sig!==chunkSig){if(bud--<=0&&e){}else e=steadCanvas(s)}if(!e)continue;vx.globalAlpha=.92;vx.drawImage(e.c,e.x0*TS,e.y0*TS,e.w*TS,e.h*TS);vx.globalAlpha=1}}
+function ecoDrawFields(vl,vr,vt,vb,z){if(!S.eco||!S.eco.steads.length)return;let bud=6;for(const s of S.eco.steads){const X=(s.x-24)*TS,Y=(s.y-24)*TS;if(X>vr||X+56*TS<vl||Y>vb||Y+56*TS<vt)continue;let e=ECOFC.get(s.id);if(!e||e.n!==s.f.length||e.sig!==chunkSig){if(bud--<=0&&e){}else e=steadCanvas(s)}if(e){vx.globalAlpha=.92;vx.drawImage(e.c,e.x0*TS,e.y0*TS,e.w*TS,e.h*TS);vx.globalAlpha=1}if(s.ph!=null)try{farmDraw(s,z)}catch(er){}}}
 // ---- inspector ----
 let STAB='fam';
 function ecoInsp(b,d,r){const E=S.eco;if(!E)return;const ad=h=>d.insertAdjacentHTML('beforeend',h);
- if(b.t==='stead'){r.innerHTML='';const s=E.steads.find(s=>s.x===b.x&&s.y===b.y);if(!s)return;const m=ecoMainItem(s),F=famOf(s);
+ if(b.t==='stead'){r.innerHTML='';const s=E.steads.find(s=>s.x===b.x&&s.y===b.y);if(!s)return;if(s.ph!=null)ad('<div style="margin:4px 0">'+farmStageTxt(s)+'</div>');const m=ecoMainItem(s),F=famOf(s);
   // 0.17 step 7: tabbed farm panel
   ad('<br><b>'+(F?'The '+F.sn+' family':'Family')+' ('+s.n+')</b> · '+LAND[s.land].n+' · '+s.f.length+' field tiles'+(HAPPINESS?' · mood '+Math.round(s.hap)+'%':''));
   const T=document.createElement('div');T.className='row';T.style.margin='4px 0';for(const [k,n] of [['fam','Family'],['sk','Skills'],['eco','Economy'],['inv','Inventory']])T.appendChild(btn(n,()=>{STAB=k;showInsp()},0,STAB===k?'sel':''));d.appendChild(T);
@@ -360,7 +419,7 @@ const BAKE_HOME=.7;CRAFT.builder={n:'Master builder',g:'tools',need:null,build:1
 // stead field expansion: crop steads clear their own grant a few tiles at a time (keep ~12% as shade/orchard trees)
 const CROPS={grain:1,flax:1,bread:1};
 function chunkDirty(gx,gy){const cx=(gx/CS)|0,cy=(gy/CS)|0;delete CH[cx+','+cy];if(typeof LOWdone!=='undefined'&&LOWdone)LOWdone[cy*(MW/CS)+cx]=0;if(typeof PBK!=='undefined')delete PBK[cx+','+cy]}
-function steadClear(s){if(!s.claim||!(CROPS[ecoMainItem(s)]||steadKind(s)==='grain'))return 0;const w=Math.max(1,s.n-Math.floor(s.n*.35));if(s.f.length>=8+w*5+6)return 0;const fs=new Set(s.f),hs=new Set();for(let y=s.y;y<s.y+2;y++)for(let x=s.x;x<s.x+2;x++)hs.add(y*MW+x);
+function steadClear(s){if(s.ph!=null)return 0;if(!s.claim||!(CROPS[ecoMainItem(s)]||steadKind(s)==='grain'))return 0;const w=Math.max(1,s.n-Math.floor(s.n*.35));if(s.f.length>=8+w*5+6)return 0;const fs=new Set(s.f),hs=new Set();for(let y=s.y;y<s.y+2;y++)for(let x=s.x;x<s.x+2;x++)hs.add(y*MW+x);
  let pi=null;let n=0;for(const i of s.claim){if(n>=2)break;if(fs.has(i)||hs.has(i))continue;const x=i%MW,y=(i/MW)|0;if(hsh(x,y,123)<.12)continue;const t=TER[i];if(t===T_WATER||t===T_CU||t===T_SN)continue;
   if(!pi){pi=new Map();for(let k=0;k<props.length;k++){const p=props[k];if(p.gx>=s.gr[0]-1&&p.gx<s.gr[2]+1&&p.gy>=s.gr[1]-1&&p.gy<s.gr[3]+1)pi.set(((p.gy|0)*MW+(p.gx|0)),k)}}
   let got=0;if(t===T_FOREST){TER[i]=T_GRASS;s.st.timber=(s.st.timber||0)+6;got=1}else if(t===T_ROCK||t===T_HILL){s.st.clay=(s.st.clay||0)+0;got=1}
@@ -547,7 +606,7 @@ function famSplit(F,sd){const g=F.m.filter(m=>m.r!=='head'&&m.r!=='spouse'&&m.a>
  const ks=F.m.filter(m=>m.r==='child'&&m.a<12).slice(0,1+(Math.random()*2|0));for(const k of ks){F.m.splice(F.m.indexOf(k),1);N.m.push(k)}N.from=F.sn;N.split=1;
  const moved=1+ks.length,L=F.st==='stead'?sd[F.l]:null;if(L){L.n=Math.max(1,L.n-moved);const sh=(L.sv||0)*.25;L.sv-=sh;N.sv=sh}else{const sh=(F.sv||0)*.25;F.sv=(F.sv||0)-sh;N.sv=sh}S.pop+=1;// the new spouse marries in
  famFixHead(F);log('Family split: '+a.n+' of the '+F.sn+' family married '+sp.n+' and founded '+(first?'a new line, the '+N.sn+' family (first of their name)':'a branch, the '+N.sn+' family')+'. They pitch a tent and wait for a Land Grant.')}
-function famYear(){if(!S.fam)return;try{builderRise()}catch(e){console.warn(e)}for(const F of S.fam.L)if(F.st==='pend')F.sy=(F.sy||0)+1;{/* old age: elders pass away (keeps families under 9 turning over) */const E=S.eco;let dd=0;for(const F of S.fam.L){if(F.st!=='stead'&&F.st!=='pend')continue;const s0=F.st==='stead'&&E?E.steads.find(q=>q.id===F.l):null;for(let i=F.m.length-1;i>=0;i--){const m=F.m[i];if(m.a>=55&&F.m.length>1&&Math.random()<(m.a-50)*.012){const nm=m.n;F.m.splice(i,1);famFixHead(F);dd++;if(s0)s0.n=Math.max(1,s0.n-1);S.pop=Math.max(1,S.pop-1);if(dd<=3)qlog(nm+' of the '+F.sn+' family died of old age, aged '+m.a+'.')}}}if(dd&&E)E.led.deaths=(E.led.deaths||0)+dd}{const sd={};if(S.eco)S.eco.steads.forEach(s=>sd[s.id]=s);for(const F of S.fam.L.slice())if(F.st==='stead'&&Math.random()<(F.m.length>=FAM_MAX?.5:.12))try{famSplit(F,sd)}catch(e){}/* grown children marry and leave to serve as civil laborers */}for(const F of S.fam.L)for(const m of F.m){m.a++;if(m.r==='child'&&m.a>=16&&F.m.length>=6&&Math.random()<.25&&F.st!=='pend'){/* grown child stays as kin */m.r='kin'}}try{skYear()}catch(e){console.warn(e)}}
+function famYear(){if(!S.fam)return;try{builderRise()}catch(e){console.warn(e)}for(const F of S.fam.L)if(F.st==='pend')F.sy=(F.sy||0)+1;{/* old age: elders pass away (keeps families under 9 turning over) */const E=S.eco;let dd=0;for(const F of S.fam.L){if(F.st!=='stead'&&F.st!=='pend')continue;const s0=F.st==='stead'&&E?E.steads.find(q=>q.id===F.l):null;for(let i=F.m.length-1;i>=0;i--){const m=F.m[i];if(m.a>=55&&F.m.length>1&&Math.random()<(m.a-50)*.012){const nm=m.n;F.m.splice(i,1);famFixHead(F);dd++;if(s0)s0.n=Math.max(1,s0.n-1);S.pop=Math.max(1,S.pop-1);if(dd<=3)qlog(nm+' of the '+F.sn+' family died of old age, aged '+m.a+'.')}}}if(dd&&E){const h=E.hist[E.hist.length-1];if(h)h.deaths=(h.deaths||0)+dd;else E.led.deaths=(E.led.deaths||0)+dd}}{const sd={};if(S.eco)S.eco.steads.forEach(s=>sd[s.id]=s);for(const F of S.fam.L.slice())if(F.st==='stead'&&Math.random()<(F.m.length>=FAM_MAX?.5:.12))try{famSplit(F,sd)}catch(e){}/* grown children marry and leave to serve as civil laborers */}for(const F of S.fam.L)for(const m of F.m){m.a++;if(m.r==='child'&&m.a>=16&&F.m.length>=6&&Math.random()<.25&&F.st!=='pend'){/* grown child stays as kin */m.r='kin'}}try{skYear()}catch(e){console.warn(e)}}
 function famNextPend(){return S.fam?S.fam.L.filter(F=>F.st==='pend'&&F.m.length&&famEarned(F)).sort((a,b)=>a.t0-b.t0||b.m.length-a.m.length)[0]:null}
 function tentClearGround(b){const s4=bsz('tent');let ch=0;for(let y=b.y-1;y<b.y+s4+1;y++)for(let x=b.x-1;x<b.x+s4+1;x++){const i=y*MW+x;if(TER[i]===T_FOREST){TER[i]=T_GRASS;ch=1}}for(let k=props.length-1;k>=0;k--){const q=props[k];if(q.gx>=b.x-1&&q.gx<b.x+s4+1&&q.gy>=b.y-1&&q.gy<b.y+s4+1){props.splice(k,1);ch=1}}if(ch){try{visProps.src=null}catch(e){}for(let y=b.y-1;y<b.y+s4+1;y+=1)for(let x=b.x-1;x<b.x+s4+1;x+=1)try{chunkDirty(x,y)}catch(e){}}}
 function famTentRm(F){const i=S.bl.findIndex(b=>b.t==='tent'&&b.fam===F.id);if(i>=0){S.bl.splice(i,1);rebuildOcc();if(S.eco)S.eco._wc=1}}
@@ -638,13 +697,13 @@ function grantEval(a,b){const x0=Math.min(a.gx,b.gx),x1=Math.max(a.gx,b.gx),y0=M
 function grantMake(g){const E=S.eco;if(pendFam()<1){log(S.fam&&S.fam.L.some(F=>F.st==='pend')?'No family has earned a land grant yet: landless families serve the crown as civil laborers for a year first.':'No family is waiting for land.');return false}
  // farmstead compound (shape-mask footprint): best free spot inside the grant, nearest the town; masked-out corners may be forest/field
  const set=new Set(g.tiles),SZ=bsz('stead');let hb=null,bd=1e9,hs=null;const FLD=ecoFields();const free=k=>{const t=TER[k];return !occ[k]&&!FLD[k]&&t!==T_WATER&&t!==T_CU&&t!==T_SN&&!(CLIFF&&CLIFF[k])};for(let y=g.y0-SZ+2;y<=g.y1-1;y++)for(let x=g.x0-SZ+2;x<=g.x1-1;x++){if(x<1||y<1||x+SZ>=MW||y+SZ>=MH)continue;let inG=0;const M=fpMask('stead',bfp({t:'stead',x,y}));const ii=[];let ok=true;for(let j=0;j<SZ&&ok;j++)for(let i=0;i<SZ;i++){if(M&&!M[j*SZ+i])continue;const k=(y+j)*MW+x+i;if(!free(k)){ok=false;break}if(set.has(k))inG++;ii.push(k)}if(!ok||inG<ii.length*.5)continue;const d=Math.hypot(x-S.center.x,y-S.center.y);if(d<bd){bd=d;hb={x,y};hs=new Set(ii)}}
- if(hb)for(const k of hs)if(TER[k]===T_FOREST){TER[k]=T_GRASS;try{dirtyTile(k%MW,k/MW|0)}catch(e){}}// the family clears the trees under its farmstead
+ // #17: trees under the farmstead are felled by the family while they build it (farmStep), not at grant time
  if(!hb){log('No room for a farmstead in that grant (needs about '+SZ+'×'+SZ+' clear tiles).');return false}
  // take the family: waiting family first, else 3 idle; otherwise from the least important jobs
  const FF=famNextPend();let take=FF?Math.max(1,FF.m.length):3;let idle=S.pop-employed();if(idle<take){let need=take-Math.max(0,idle);const ks=Object.keys(S.jobs).filter(j=>S.jobs[j]>0).sort((a,b)=>(S.prio&&S.prio[b]||3)-(S.prio&&S.prio[a]||3));for(const j of ks){while(need>0&&S.jobs[j]>0){S.jobs[j]--;need--}}if(need>0)S.pop+=need}
- const b={t:'stead',l:1,x:hb.x,y:hb.y};S.bl.push(b);rebuildOcc();try{autoRoadFor(b)}catch(e){}
- const s={id:++E.sid,x:hb.x,y:hb.y,land:g.land,f:g.tiles.filter(i=>!hs.has(i)&&TER[i]!==T_FOREST),n:take,main:'auto',st:{grain:take*400},sv:5,sk:{},don:0,cart:0,hap:60,ow:0,away:0,an:0,prod:0,hun:0,gr:[g.x0,g.y0,g.x1,g.y1]};
- const F=ecoFields();for(const i of g.tiles)F[i]=1;s.claim=g.tiles;E.steads.push(s);if(FF){FF.st='stead';FF.l=s.id;famTentRm(FF);qlog('The '+FF.sn+' family took down their tent and moved to their new stead.')}worldChanged();qlog('Land granted: a '+LAND[g.land].n.toLowerCase()+' stead of '+s.f.length+' fields. Pick its main tithe item by tapping the farmhouse.');try{AU.sfx('chime')}catch(e){}return true}
+ const b={t:'stead',l:1,x:hb.x,y:hb.y};S.bl.push(b);rebuildOcc();
+ const s={id:++E.sid,x:hb.x,y:hb.y,land:g.land,f:[],n:take,main:'auto',st:{grain:take*100},sv:5,sk:{},don:0,cart:0,hap:60,ow:0,away:0,an:0,prod:0,hun:0,gr:[g.x0,g.y0,g.x1,g.y1]};
+ const F=ecoFields();for(const i of g.tiles)F[i]=1;s.claim=g.tiles;s.hs=[...hs];E.steads.push(s);farmInit(s,b);if(FF){FF.st='stead';FF.l=s.id;famTentRm(FF);qlog('The '+FF.sn+' family packed their tent and walked out to their land: they camp there and build the farm themselves.')}worldChanged();qlog('Land granted ('+LAND[g.land].n.toLowerCase()+', '+g.tiles.length+' tiles). The crown gave '+Math.round(s.kit.g)+' grain and '+Math.round(s.kit.t)+' timber from the Holding. The family will build a farmhouse and break the fields one by one.');try{AU.sfx('chime')}catch(e){}return true}
 // #14 shared farm: a large grant is split into one homestead per household (each with its own farmhouse, yard and fields)
 function grantMakeMulti(g){const k=Math.max(1,Math.min(4,pendFam(),Math.floor(g.tiles.length/FARM_HH)));if(k<=1)return grantMake(g);const E=S.eco,gid=++E.sid,horiz=g.w>=g.h,parts=[];
  for(let j=0;j<k;j++){const a=horiz?{gx:g.x0+Math.floor(g.w*j/k),gy:g.y0}:{gx:g.x0,gy:g.y0+Math.floor(g.h*j/k)},b=horiz?{gx:g.x0+Math.floor(g.w*(j+1)/k)-1,gy:g.y1}:{gx:g.x1,gy:g.y0+Math.floor(g.h*(j+1)/k)-1};const sg=grantEval(a,b);if(!sg.err)parts.push(sg)}
@@ -1039,14 +1098,14 @@ function siteInit(b){if(b.t==='campfire'||b.t==='wall'||b.t==='gate')return;cons
  const ft=[];for(let y=b.y;y<b.y+s;y++)for(let x=b.x;x<b.x+s;x++){const i=y*MW+x;if(TER[i]===T_FOREST){ft.push(i);y0.wood+=6}}
  const c=bcost(b.t,0);let tot=0;for(const r in c)if(r!=='silver')tot+=c[r];b.cp={p:0,ft,clr:cl.slice(0,24),cw:cl.length*2+ft.length*3,cd:0,mt:Math.max(1,Math.ceil(tot/25)),md:0,w:Math.max(12,s*s*1.4),wd:0,y:y0}}
 function sitePhase(b){const c=b.cp;if(c.cd<c.cw)return 0;if(c.md<c.mt)return 1;return 2}
-function siteTick(){let ch=0;const NB=bldN();let first=true;for(const b of S.bl){const c=b.cp;if(!c)continue;const crew=agents.filter(a=>a.bsite===b&&a.state==='work'&&!a.route.length);const mb=crew.filter(a=>a.role==='builder').length,near=crew.length-mb+mb*2.5+(first&&NB&&!mb?NB*.5:0);c.crew=[crew.length-mb,mb];first=false;S.bxp=(S.bxp||0)+(crew.length-mb)*.01;const ph=sitePhase(b);
+function siteTick(){let ch=0;const NB=bldN();let first=true;for(const b of S.bl){const c=b.cp;if(!c||b.t==='stead')continue;const crew=agents.filter(a=>a.bsite===b&&a.state==='work'&&!a.route.length);const mb=crew.filter(a=>a.role==='builder').length,near=crew.length-mb+mb*2.5+(first&&NB&&!mb?NB*.5:0);c.crew=[crew.length-mb,mb];first=false;S.bxp=(S.bxp||0)+(crew.length-mb)*.01;const ph=sitePhase(b);
   if(ph===0){c.cd+=near*1+.5;if(c.cd>=c.cw){const k=bid(b),o=(S.stk=S.stk||{})[k]||(S.stk[k]={});for(const r in c.y)if(c.y[r])o[r]=(o[r]||0)+c.y[r];c.clr=[];if(c.ft&&c.ft.length){for(const i of c.ft)if(TER[i]===T_FOREST)TER[i]=T_GRASS;c.ft=[];ch=1}if(c.cw)qlog('Plot cleared for the '+BLD[b.t].n+' (yields go to storage).')}}
   else if(ph===1){c.md+=.08}
   else{c.wd+=near*1+.3}
   c.p=Math.min(1,(c.cw?.15*Math.min(1,c.cd/c.cw):.15)+.25*Math.min(1,c.md/c.mt)+.6*Math.min(1,c.wd/c.w));
   if(c.wd>=c.w){delete b.cp;ch=1;log(BLD[b.t].n+' completed!');burst(b.x+bsz(b.t)/2,b.y+bsz(b.t)/2,'#e8d8a8',24);agents.forEach(a=>{if(a.bsite===b){a.bsite=null;a.bclr=0;a.carry=null}})}}
  if(ch){worldChanged();rosterSig=''}}
-function buildThink(a){const sites=S.bl.filter(b=>b.cp);if(a.bsite&&!sites.includes(a.bsite)){a.bsite=null;a.bclr=0}if(!sites.length)return false;
+function buildThink(a){const sites=S.bl.filter(b=>b.cp&&b.t!=='stead');if(a.bsite&&!sites.includes(a.bsite)){a.bsite=null;a.bclr=0}if(!sites.length)return false;
  if(a.state==='bfetch'&&a.bsite){a.carry=a.bmat||'log';const d=doorOf(a.bsite);go(a,{x:d.x+(Math.random()-.5),y:d.y+(Math.random()-.5)*.4},'bdeliver');return true}
  if(a.state==='bdeliver'&&a.bsite){a.bsite.cp.md+=1;a.carry=null}
  let b=a.bsite;if(!b){const X=ax(),crew=x=>X.bsite.get(x)||0;b=sites.sort((p,q)=>crew(p)-crew(q))[0];if(crew(b)>=4&&a.role!=='builder')return false;a.bsite=b;X.bsite.set(b,crew(b)+1)}
@@ -1264,7 +1323,7 @@ function ffAge(hard){if(hard){FF.clear();FFN.clear();return}for(const[k,F]of FF)
 
 function walkSnap(to){const tx=to.x|0,ty=to.y|0;if(walkC(tx,ty))return to;let best=null,bd=1e9;for(let r=1;r<=4&&!best;r++)for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r||!walkC(tx+dx,ty+dy))continue;const d=Math.hypot(tx+dx+.5-to.x,ty+dy+.5-to.y);if(d<bd){bd=d;best={x:tx+dx+.5+(to.x%1-.5)*.3,y:ty+dy+.5+(to.y%1-.5)*.3}}}return best||to}
 function pathTo(a,to){to=walkSnap(to);const k=(a.x|0)+','+(a.y|0)+'>'+(to.x|0)+','+(to.y|0);let p=PC.get(k);if(p===undefined){const F=ffGet(to.x|0,to.y|0);if(F)p=ffPath(F,a.x,a.y);if(p===undefined||p===null&&!F)p=astar(a.x,a.y,to.x,to.y);if(p===undefined)p=null;if(PC.size>6000)PC.clear();PC.set(k,p)}if(!p)return[];const r=p.map(q=>({x:q.x,y:q.y}));r.push({x:to.x,y:to.y});return r}
-function syncRoster(){const pop=S.pop,wsc=S.eco?S.eco.cr.filter(c=>WS_CR[c.c]).slice(0,6):[],stw=steadWant(),sig=JSON.stringify([S.jobs,pop,bgSig,armyN(),wsc.map(c=>c.id+':'+c.n),stw.map(q=>q[0])]);if(sig===rosterSig)return;rosterSig=sig;spotCache={forest:nearSpots([T_FOREST],20),water:nearSpots([T_WATER],12)};
+function syncRoster(){const pop=S.pop,wsc=S.eco?S.eco.cr.filter(c=>WS_CR[c.c]).slice(0,6):[],stw=steadWant(),sig=JSON.stringify([S.jobs,pop,bgSig,armyN(),wsc.map(c=>c.id+':'+c.n),stw.map(q=>q[0]+q[5])]);if(sig===rosterSig)return;rosterSig=sig;spotCache={forest:nearSpots([T_FOREST],20),water:nearSpots([T_WATER],12)};
  const sc=Math.min(1,MAXW/Math.max(1,pop)),want=[];for(const j in S.jobs){const n=Math.round((S.jobs[j]||0)*sc);for(let k=0;k<n;k++)want.push(j+'#'+k)}
  const idle=Math.round(Math.max(0,pop-employed())*sc);for(let k=0;k<idle;k++)want.push('idle#'+k);for(let k=0;k<Math.min(12,armyN());k++)want.push('soldier#'+k);for(let k=0;k<Math.min(8,bldN()*2);k++)want.push('builder#'+k);for(let k=0;k<Math.min(6,Math.floor(pop/6));k++)want.push('kid#'+k);for(const c of wsc)for(let j=0;j<Math.min(2,c.n);j++)want.push('crafter#'+(c.id*2+j));const SW={};for(const q of stw){want.push(q[0]);SW[q[0]]=q}
  const keep={};agents.forEach(a=>keep[a.key]=a);const h=hubT(),homes=blds('house').concat(blds('tent'));
@@ -1276,9 +1335,9 @@ function syncRoster(){const pop=S.pop,wsc=S.eco?S.eco.cr.filter(c=>WS_CR[c.c]).s
 
 // ---- #5/#11: stead families are real pawns living at their farmstead; every pawn has a stable home ----
 const STEAD_AG_MAX=160;
-function steadWant(){const o=[];if(!S.eco||!S.fam)return o;let tot=0;for(const s of S.eco.steads){const F=famOf(s);if(!F)continue;const ms=F.m.slice(0,9);for(let j=0;j<ms.length&&tot<STEAD_AG_MAX;j++,tot++)o.push(['stead#'+(s.id*16+j),s.id,F.id,ms[j].i,ms[j].a])}return o}
+function steadWant(){const o=[];if(!S.eco||!S.fam)return o;let tot=0;for(const s of S.eco.steads){const F=famOf(s);if(!F)continue;const ms=F.m.slice(0,9);for(let j=0;j<ms.length&&tot<STEAD_AG_MAX;j++,tot++)o.push(['stead#'+(s.id*16+j),s.id,F.id,ms[j].i,ms[j].a,s.ph==null?9:s.ph])}return o}
 function steadBld(s){return S.bl.find(b=>b.t==='stead'&&b.x===s.x&&b.y===s.y)}
-function rosterHome(a,q,homes,h,n){if(q){a.st=q[1];a.fid=q[2];a.mi=q[3];a.age=q[4];if(a.age<12){a.o.kid=1}const s=S.eco.steads.find(x=>x.id===q[1]),b=s&&steadBld(s);a.home=b?inSpot({b,gx:b.x,gy:b.y,s:bsz('stead')},a.idx,1):h;return}
+function rosterHome(a,q,homes,h,n){if(q){a.st=q[1];a.fid=q[2];a.mi=q[3];a.age=q[4];if(a.age<12){a.o.kid=1}const s=S.eco.steads.find(x=>x.id===q[1]),b=s&&steadBld(s);if(s&&s.ph===0&&s.yd){a.home={x:s.x+1+(a.idx%3)*.3,y:s.yd.y0+1.1};return}a.home=b?inSpot({b,gx:b.x,gy:b.y,s:bsz('stead')},a.idx,1):h;return}
  // landless: home is their own family tent (FAMK), else a stable pick (no random re-roll)
  let hb=null;const r=FAMK[a.key];if(r){const tb=S.bl.find(b=>b.t==='tent'&&b.fam===r[0]);if(tb)hb={b:tb,gx:tb.x,gy:tb.y,s:bsz('tent')}}if(!hb&&homes.length)hb=homes[(a.idx+n)%homes.length];a.home=hb?inSpot(hb,a.idx+n,1):h}
 // #15: each pawn has its own daily routine (role, age and a personal offset): wake, work, meals, leisure, sleep
@@ -1294,6 +1353,9 @@ function steadThink(a,h,n){const E=S.eco,s=E&&E.steads.find(q=>q.id===a.st);if(!
  if(s.away>S.t&&(a.idx%16)<(s.an||0)&&age>=14){a.t=6;if(a.state!=='home')go(a,a.home,'home');return}/* the tithe carriers are on the road (shown as the carrier party) */
  if(age>=62&&Math.random()<.5){const d=hm.door||hm;go(a,{x:d.x+(Math.random()-.5)*1.4,y:d.y+.6},'chat');a.t=5+Math.random()*5;return}
  if(a.state==='work'&&age>=12&&Math.random()<.25){go(a,hm,'carry');a.carry=age<14?'sack':'sack';return}if(a.state==='carry'){a.carry=null}
+ a.bsite=null;if(s.ph!=null&&age>=12){const b=steadBld(s),day=Math.floor(S.t/DAYLEN),r=hsh(a.idx,day,17);
+  if(b&&b.cp&&r<(s.ph===0?.7:.6)&&age>=14){a.bsite=b;const sp=inSpot({b,gx:b.x,gy:b.y,s:bsz('stead')},a.idx+day,0);go(a,{x:sp.x,y:sp.y},'towork');return}
+  const tg=s.pf?s.pf.i:(s.till.length&&sowSeason()?s.till[0]:null);if(tg!=null&&(r<.8||!s.f.length)){go(a,{x:tg%MW+.2+Math.random()*.6,y:(tg/MW|0)+.2+Math.random()*.6},'towork');return}}
  if(!s.f.length){go(a,{x:hm.x+(Math.random()-.5)*3,y:hm.y+2},'towork');return}const k=s.f[(Math.abs(hsh(a.idx,Math.floor(S.t/DAYLEN),3)*997|0)+(Math.random()*4|0))%s.f.length];go(a,{x:k%MW+.3+Math.random()*.4,y:(k/MW|0)+.3+Math.random()*.4},'towork')}
 // #13: civil laborers (landless) work for the crown: build, haul, harvest marked areas, else log / quarry for the town stores
 function laborThink(a,h){if(buildThink(a))return true;if(harvestThink(a,4))return true;if(haulThink(a))return true;
