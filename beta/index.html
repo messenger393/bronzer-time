@@ -92,6 +92,7 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <script>
 "use strict";
 const GFX=Object.assign({master:.8,music:.6,sfx:.8,q:'med',parts:true,edge:false,pan:1},(()=>{try{return JSON.parse(localStorage.getItem('bnbSettings')||'{}')}catch(e){return{}}})());const gfxSave=()=>localStorage.setItem('bnbSettings',JSON.stringify(GFX));
+/* audio folder resolved from the page path: works at /, /beta/, /beta (no slash) and file:// */const AUDB=/\/beta(\/|$)/.test(location.pathname)?location.pathname.replace(/\/beta(\/.*)?$/,'/')+'audio/':'audio/';
 /* beta build served from /beta/: keep its saves and settings apart from the main game's */if(/\/beta\//.test(location.pathname)){const P=Storage.prototype,g=P.getItem,st=P.setItem,rm=P.removeItem;P.getItem=function(k){return g.call(this,'beta:'+k)};P.setItem=function(k,v){return st.call(this,'beta:'+k,v)};P.removeItem=function(k){return rm.call(this,'beta:'+k)}}
 const KEY='bronzeAndBloodSave',OLDKEY='bronzerTimeSave';
 /* System #1 scale (beta): SCL 2 = 1 tile is 2.5 m, buildings at real sizes, walking ~5 km/h. Chosen per game at page load; old saves (no scl) keep scale 1. */
@@ -750,20 +751,20 @@ const BSAL={stead:['house',1],craft:['house',2],holding:['granary',3]};
 // Three original procedurally-synthesized Bronze Age tracks (composed in code, WebAudio; no samples, no third-party audio — free to use).
 // Recorded music (all CC0, see CREDITS.md / Settings > Credits). Streamed lazily from audio/, one track at a time.
 const RTRACKS=[
- {n:'Desert Settlement',f:'../audio/music-settlement.ogg',a:'vitalezzz',u:'https://opengameart.org/content/desert-settlement'},
- {n:'Blow the Day with a Darbuka',f:'../audio/music-darbuka.ogg',a:'Adiutorium',u:'https://opengameart.org/content/darbuka-delight'},
- {n:'Shalibah',f:'../audio/music-shalibah.ogg',a:'Tozan',u:'https://opengameart.org/content/shalibah'},
- {n:'Shakkar',f:'../audio/music-shakkar.ogg',a:'Zesona',u:'https://opengameart.org/content/shakkar'},
- {n:'Desert Mystic',f:'../audio/music-mystic.ogg',a:'polygondan',u:'https://opengameart.org/content/desertmystic-dynastic-egyptian-theme-cc0'}];
+ {n:'Desert Settlement',f:AUDB+'music-settlement.ogg',a:'vitalezzz',u:'https://opengameart.org/content/desert-settlement'},
+ {n:'Blow the Day with a Darbuka',f:AUDB+'music-darbuka.ogg',a:'Adiutorium',u:'https://opengameart.org/content/darbuka-delight'},
+ {n:'Shalibah',f:AUDB+'music-shalibah.ogg',a:'Tozan',u:'https://opengameart.org/content/shalibah'},
+ {n:'Shakkar',f:AUDB+'music-shakkar.ogg',a:'Zesona',u:'https://opengameart.org/content/shakkar'},
+ {n:'Desert Mystic',f:AUDB+'music-mystic.ogg',a:'polygondan',u:'https://opengameart.org/content/desertmystic-dynastic-egyptian-theme-cc0'}];
 const RAMB=[
- {k:'birds',f:'../audio/amb-birds.ogg',a:'isaiah658',u:'https://opengameart.org/content/ambient-bird-sounds'},
- {k:'crickets',f:'../audio/amb-crickets.ogg',a:'wolfgang',u:'https://opengameart.org/content/crickets-ambient-noise-loopable'},
- {k:'fire',f:'../audio/amb-fire.ogg',a:'pagdev',u:'https://opengameart.org/content/fireplace-sound-loop'},
- {k:'wind',f:'../audio/amb-wind.ogg',a:'generated for this game (filtered noise)',u:''},
- {k:'river',f:'../audio/amb-river.ogg',a:'hippodevelopment',u:'https://opengameart.org/content/running-water-background-noise',l:'CC-BY 3.0'},
- {k:'village',f:'../audio/amb-village.ogg',a:'starninjas',u:'https://opengameart.org/content/crowd-shoutingspeaking-ambience'},
- {k:'chop',f:'../audio/work-chop.ogg',a:'Kurt',u:'https://opengameart.org/content/chopping-tree',l:'CC-BY 3.0'},
- {k:'hammer',f:'../audio/work-hammer.ogg',a:'themightyglider',u:'https://opengameart.org/content/hammer-on-anvil'}];
+ {k:'birds',f:AUDB+'amb-birds.ogg',a:'isaiah658',u:'https://opengameart.org/content/ambient-bird-sounds'},
+ {k:'crickets',f:AUDB+'amb-crickets.ogg',a:'wolfgang',u:'https://opengameart.org/content/crickets-ambient-noise-loopable'},
+ {k:'fire',f:AUDB+'amb-fire.ogg',a:'pagdev',u:'https://opengameart.org/content/fireplace-sound-loop'},
+ {k:'wind',f:AUDB+'amb-wind.ogg',a:'generated for this game (filtered noise)',u:''},
+ {k:'river',f:AUDB+'amb-river.ogg',a:'hippodevelopment',u:'https://opengameart.org/content/running-water-background-noise',l:'CC-BY 3.0'},
+ {k:'village',f:AUDB+'amb-village.ogg',a:'starninjas',u:'https://opengameart.org/content/crowd-shoutingspeaking-ambience'},
+ {k:'chop',f:AUDB+'work-chop.ogg',a:'Kurt',u:'https://opengameart.org/content/chopping-tree',l:'CC-BY 3.0'},
+ {k:'hammer',f:AUDB+'work-hammer.ogg',a:'themightyglider',u:'https://opengameart.org/content/hammer-on-anvil'}];
 const RSFX=[{n:'UI clicks (wooden game pieces)',a:'aidanwalker',u:'https://opengameart.org/content/boardgame-piece-wobbles'}];
 const MTRACKS_SYNTH=[
  {n:'Hymn of the Ziggurat',root:293.66,scale:[-5,-4,0,1,4,5,7,8,10,12],drone:[[0,.05],[7,.03]],lead:'lyre',second:null,bpm:66,drum:'D.......t...k...D.......t.t.k...',rest:.3,seed:1907,dur:170},
@@ -2920,8 +2921,8 @@ const AU={ctx:null,vol:{master:.8,music:.5,sfx:.8,amb:.5},muted:false,
  // recorded one-shots (cached elements, cloned per play)
  samp(f,v){const P=this._sp||(this._sp={});let el=P[f];if(!el){el=P[f]=new Audio(f);el.preload='auto'}const c=el.cloneNode();c.volume=Math.min(1,v*this._vol('sfx'));c.play().catch(()=>{})},
  sfx(n,k){if(!this.ctx||this.muted)return;const c=this.ctx,t=c.currentTime;
-  if(n==='click'){this.samp('../audio/ui-click'+(1+(Math.random()*2|0))+'.ogg',.7)}
-  else if(n==='hammer'){this.samp('../audio/work-hammer.ogg',.5)}
+  if(n==='click'){this.samp(AUDB+'ui-click'+(1+(Math.random()*2|0))+'.ogg',.7)}
+  else if(n==='hammer'){this.samp(AUDB+'work-hammer.ogg',.5)}
   else if(n==='chime'){[523,659,784].forEach((f,j)=>this.tone(f,1.2,.14,'sine',t+j*.09))}
   else if(n==='alarm'){[392,370,392].forEach((f,j)=>this.tone(f,.5,.12,'sawtooth',t+j*.22))}
   else if(n==='hammer'){this.tone(1800+Math.random()*400,.25,.12,'triangle',t);this.tone(2900,.12,.05,'sine',t);this.noise(.04,4000,2,.12)}
@@ -3795,7 +3796,7 @@ function rvStart(){const T=$('title');T.classList.add('launch');const old=$('tc'
  new MutationObserver(()=>{const on=T.style.display!=='none';if(on&&!RV.run){RV.run=true;requestAnimationFrame(rvFrame)}if(!on)RV.run=false;AU.torch(on)}).observe(T,{attributes:true,attributeFilter:['style']})}
 title=function(){rvStart()};
 // ===== Opening scene + main menu (0.18). Horn-blower at dawn, field workers, palace, unfinished lion. Click/Esc skips. =====
-const TITLE_MUSIC='../audio/title-theme.ogg';// Weston's Suno title theme (loops on the menu); set to null to fall back to the CC0 track below
+const TITLE_MUSIC=AUDB+'title-theme.ogg';// Weston's Suno title theme (loops on the menu); set to null to fall back to the CC0 track below
 const IN_HORN=2.5,IN_SUN0=6,IN_SUN1=22,IN_MENU=24;// synced to the theme: horn hit ~2.5 s, build 20-25 s, menu on the drop
 const TITLE_MUSIC_FB=4;// RTRACKS index: Desert Mystic (polygondan, CC0)
 RSFX.push({n:'Ram\u2019s horn (Small Shofar)',a:'Sauron974',u:'https://freesound.org/people/Sauron974/sounds/223368/'});
@@ -3803,7 +3804,7 @@ const IN={t:0,last:0,run:false,skip:false,menu:false,blown:false,chips:[],dust:[
 function auTitle(){if(AU.rec&&AU.rec.title)return;try{const sv=JSON.parse(localStorage.getItem('bnbAudio')||'null');if(sv&&!AU.ctx){AU.vol=sv.vol||AU.vol;AU.muted=!!sv.muted}}catch(e){}
  const old=AU.rec;if(old)old.fade=-1;const el=new Audio(TITLE_MUSIC||RTRACKS[TITLE_MUSIC_FB].f);el.loop=true;el.preload='auto';el.volume=0;const r={el,f:0,fade:1,title:1};
  el.onerror=()=>{el.onerror=null;el.src=RTRACKS[TITLE_MUSIC_FB].f;el.play().catch(()=>{})};el.play().catch(()=>{});AU.rec=r;(AU.olds=AU.olds||[]).push(...(old?[old]:[]));AU._fadeLoop()}
-function auHorn(){if(AU.rec&&AU.rec.title&&TITLE_MUSIC&&!AU.rec.el.error&&AU.rec.el.currentTime>0)return;/* the theme carries its own horn hit */try{const el=new Audio('../audio/sfx-ramhorn.ogg');el.volume=Math.min(1,AU._vol('sfx')*1.1);el.play().catch(()=>{})}catch(e){}}
+function auHorn(){if(AU.rec&&AU.rec.title&&TITLE_MUSIC&&!AU.rec.el.error&&AU.rec.el.currentTime>0)return;/* the theme carries its own horn hit */try{const el=new Audio(AUDB+'sfx-ramhorn.ogg');el.volume=Math.min(1,AU._vol('sfx')*1.1);el.play().catch(()=>{})}catch(e){}}
 {const _m=AU.music.bind(AU);AU.music=function(){if($('ic')&&$('title').style.display!=='none')auTitle();else _m()};const _to=AU.torch.bind(AU);AU.torch=function(on){_to(on&&!$('ic'))}}
 const INP={horn:{sk:'#a8703e',t:'#e6d6b0',g:'kilt',hs:'long',beard:'full',sex:'m',hat:null,sash:'#a83a22'},
  chis:{sk:'#b27a48',t:'#d8c49a',g:'kilt',hs:'shaved',beard:null,sex:'m',apron:1},
