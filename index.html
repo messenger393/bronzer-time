@@ -214,7 +214,9 @@ function farmInit(s,b){const E=S.eco,SZ=bsz('stead');s.ph=0;s.till=[];s.pf=null;
  // crown starter kit from the Imperial Stockyard: food (grain) for about FKIT_D days and lumber for the first house
  const day=s.n*.4*DAYLEN*YSC,wg=day*FKIT_D,hg=Math.max(0,(E.hold.grain||0)-(typeof wsRes==='function'?wsRes():0)),g=Math.min(wg,hg*.5);if(g>0){E.hold.grain-=g;s.st.grain=(s.st.grain||0)+g}
  let t=Math.min(FKIT_T,E.hold.timber||0);if(t>0)E.hold.timber-=t;/* kit logs come from the Stockyard stock only (S.res.wood is a view of it) */s.bt=Math.max(0,t-15);s.kit={g,t};/* 15 timber goes into the first farmhouse */E.led.kit=(E.led.kit||0)+g;
- b.cp={p:0,ft:[],clr:[],cw:0,cd:0,mt:1,md:1,w:1,wd:0,y:{},fam:1}}
+ b.cp={p:0,ft:[],clr:[],cw:0,cd:0,mt:1,md:1,w:1,wd:0,y:{},fam:1};
+ /* new families start with 8 plots already broken (cleared + ploughed) inside their grant, waiting for seed at the next sowing */s.pl={};s.sc=0;s.shf={};for(let n=0;n<FARM_START;n++){const i=farmCand(s);if(i==null)break;for(const j of fBlk(i)){if(TER[j]===T_FOREST)TER[j]=T_GRASS;const k=farmPropAt(j);if(k>=0){props.splice(k,1);try{visProps.src=null}catch(e){}}try{chunkDirty(j%MW,j/MW|0)}catch(e){}}s.f.push(i)}s.f0=s.f.length;ECOF=null}
+const FARM_START=8;
 function farmTarget(s){const w=Math.max(1,s.n-Math.floor(s.n*.35));const cap=8+w*5+6;return Math.min(FST[s.ph].fld,cap,Math.floor((s.claim||[]).length/(FB*FB)))}
 function farmCand(s){const hs=new Set(s.hs||[]),yd=new Set(s.yd?s.yd.t:[]),fs=new Set(s.f),ts=new Set(s.till),SZ=bsz('stead'),cx=s.x+SZ/2,cy=s.y+SZ/2;let best=null,bd=1e9;
  const cl=FB>1?new Set(s.claim||[]):null,bad=j=>{if(hs.has(j)||yd.has(j))return 1;const t=TER[j];if(t===T_WATER||t===T_CU||t===T_SN||occ[j]||roadSet[j])return 1;const x=j%MW,y=j/MW|0;return x>=s.x&&x<s.x+SZ&&y>=s.y&&y<s.y+SZ};
