@@ -90,6 +90,140 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <div id="modal"><div class="panel glass" id="mbody"></div></div>
 
 <script>
+/* family tent art (art-studio/tent/family/tent-family.js, approved) */
+/* Bronze and Blood: FAMILY TENT (final C, 3x3 proposal) + doorway prop variants + interior. See the FAMILY TENT header below for sizes.
+ * The section right below describes drawTentCore, the shared tent-space (32-unit) routine that drawTent scales up.
+ *
+ * VARIANTS  drawTent(ctx, t, {burn, variant}) with variant 0 plain, 1 cook fire (animated flicker + smoke wisp),
+ *           2 clothing line (cloths sway), 3 crockery on a mat (static). Props sit south-east of the doorway
+ *           (tent space x~26.3-34.9, y~27.5-35, scaled to .85), clear of the door wedge (x 10.6-21.4), the 8 guy ropes and the 80px canvas edge (36).
+ *           All motion uses the same TENT_PERIOD loop. Suggested pick (art note only): variant = 1 + (x*7 + y*13) % 3 from the tent's tile x,y
+ *           (or (x*7+y*13)%4 to let some tents stay plain). Burn darkens the props too and freezes them; the fire is drawn out (embers only) when burnt.
+ *
+ * SIZE      2x2 tiles (64px footprint), bsz('tent')=2, BLD.tent.osz=1. Sprite canvas 80x80 logical (the game's mkW makes it 160x160).
+ * ANCHOR    top-left tile. Blit the 80x80 sprite at screen (x*32-8, y*32-8), i.e. an 8px overhang on every side.
+ *           drawTent() draws in the game's tent space: before calling, do ctx.translate(8,8); ctx.scale(2,2). That gives
+ *           32x32 units over the footprint, tent centre at (16,16), body radius 15 (enlarged from the game's base 12 to fill the 2x2 footprint; o.r overrides it, for comparison only).
+ *           Guy-rope pegs reach radius ~17.4+0.7 (x/y -2.1..34.1), the shadow reaches 35, the pennant tip x~22.3, and props x 26.3..34.9, y 27.5..35;
+ *           everything stays inside the 80px canvas (tent space -4..36).
+ * LOOP      period TENT_PERIOD = 2400 ms. The door flap swings once per loop and the pennant flutters twice (the fringe ripples slightly).
+ *           t = ms; any monotonically increasing clock (performance.now(), or S.t*1000) works. drawTent(ctx,0) is the rest pose.
+ * PER FRAME the game caches building sprites (SPR key 'Btent1...'), so a cached sprite stays at the rest pose. To animate:
+ *           (a) draw live each frame: ctx.save(); ctx.translate(X,Y); ctx.translate(8,8); ctx.scale(2,2); drawTent(ctx, now); ctx.restore();
+ *           (b) or pre-render TENT_FRAMES (24) 80x80 frames once and pick frames[((now % TENT_PERIOD)/TENT_PERIOD*24)|0].
+ * BURN      same behaviour as the game's v==='burn' branch: after the tent, fill the whole W x W tent-space square
+ *           (0,0,32,32 = the full 64px footprint) with rgba(30,20,10,.35). Pass {burn:true}. The pennant and flap freeze (no motion when burnt).
+ * OUTL/SH   the game's outline colour '#2b2118' and shadow 'rgba(20,14,8,.30)'. Helpers below are copies of the game's rr/circ/ell/ln.
+ */
+(function(G){
+const OUTL='#2b2118',SH='rgba(20,14,8,.30)',TENT_PERIOD=2400,TENT_FRAMES=24,R=15,D0=1.2,D1=1.95;
+function rr(g,x,y,w,h,r,fill,stroke,lw){g.beginPath();if(g.roundRect)g.roundRect(x,y,w,h,r);else g.rect(x,y,w,h);if(fill){g.fillStyle=fill;g.fill()}if(stroke){g.lineWidth=lw||1;g.strokeStyle=stroke;g.stroke()}}
+function circ(g,x,y,r,fill,stroke,lw){g.beginPath();g.arc(x,y,r,0,6.2832);if(fill){g.fillStyle=fill;g.fill()}if(stroke){g.lineWidth=lw||1;g.strokeStyle=stroke;g.stroke()}}
+function ell(g,x,y,rx,ry,fill,rot){g.beginPath();g.ellipse(x,y,rx,ry,rot||0,0,6.2832);g.fillStyle=fill;g.fill()}
+function ln(g,x1,y1,x2,y2,col,w){g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.strokeStyle=col;g.lineWidth=w||1;g.stroke()}
+const inDoor=a=>{a=((a%6.2832)+6.2832)%6.2832;return a>D0-.15&&a<D1+.15};
+
+/* ---- doorway props (drawn after the tent, so they sit in front of it) ---- */
+function propFire(g,ph,burn){const x=25.5,y=30.2;ell(g,x+1,y+1.2,3.6,2.2,SH);
+ for(let i=0;i<7;i++){const a=i/7*6.2832+.3;circ(g,x+Math.cos(a)*2.6,y+Math.sin(a)*1.9,.85,i%2?'#8a8478':'#9a9488',OUTL,.35)}
+ ln(g,x-1.6,y-.6,x+1.6,y+.7,'#6a4626',.9);ln(g,x-1.5,y+.7,x+1.5,y-.6,'#7a5232',.9);
+ if(burn){circ(g,x,y,.8,'#5a2a14');return}
+ const f=.5+.5*Math.sin(ph*3)*Math.sin(ph*5+1),h=2.2+f*1.1;
+ g.beginPath();g.moveTo(x-1.3,y+.2);g.quadraticCurveTo(x-1.1+Math.sin(ph*4)*.3,y-h*.6,x+Math.sin(ph*6)*.35,y-h);g.quadraticCurveTo(x+1.1,y-h*.5,x+1.3,y+.2);g.closePath();g.fillStyle='#e8702a';g.fill();
+ g.beginPath();g.moveTo(x-.6,y+.1);g.quadraticCurveTo(x,y-h*.55,x+Math.sin(ph*6)*.2,y-h*.65);g.quadraticCurveTo(x+.5,y-h*.3,x+.6,y+.1);g.closePath();g.fillStyle='#fce890';g.fill();
+ g.globalAlpha=.10+.08*f;circ(g,x,y-.6,4.2,'#f8b048');g.globalAlpha=1;
+ for(let k=0;k<3;k++){const q=((ph/6.2832)+k/3)%1,sx=x+Math.sin(q*6.2832*1.5+k)*1.2+q*2.2,sy=y-h-q*6.5;g.globalAlpha=.32*(1-q);circ(g,sx,sy,.9+q*1.6,'#d8d0c0');g.globalAlpha=1}}
+function propLine(g,ph,burn){const x0=21.6,x1=30.4,y=29.6,top=y-4.6;
+ for(const x of[x0,x1]){ell(g,x+.6,y+.5,1,.5,SH);ln(g,x,y,x,top,'#6a4626',.8);circ(g,x,top,.35,'#5a3a20')}
+ const sag=t=>top+.4+Math.sin(t*Math.PI)*1.1;g.beginPath();g.moveTo(x0,top+.2);g.quadraticCurveTo((x0+x1)/2,top+2.4,x1,top+.2);g.strokeStyle='rgba(232,214,170,.95)';g.lineWidth=.35;g.stroke();
+ const C=[[.22,2.2,3.2,'#d8c69a','#b8a678'],[.5,1.8,2.6,'#c04a2c','#9a3a22'],[.77,2.2,3.0,'#7a8ab0','#5a6a90']];
+ C.forEach(([u,w,h,c1,c2],i)=>{const cx=x0+(x1-x0)*u,cy=sag(u),sw=burn?0:Math.sin(ph+i*1.3)*.45;g.save();g.translate(cx,cy);
+  g.beginPath();g.moveTo(-w/2,0);g.lineTo(w/2,0);g.lineTo(w/2+sw*.9,h);g.quadraticCurveTo(sw,h+.5,-w/2+sw*.9,h);g.closePath();g.fillStyle=c1;g.fill();g.strokeStyle=OUTL;g.lineWidth=.35;g.stroke();
+  g.beginPath();g.moveTo(-w/2+.5,.3);g.lineTo(-w/2+.5+sw*.4,h-.4);g.strokeStyle=c2;g.lineWidth=.4;g.stroke();
+  circ(g,-w/2+.35,0,.28,'#6a4626');circ(g,w/2-.35,0,.28,'#6a4626');g.restore()})}
+function propPots(g){const x=26,y=30.6;rr(g,x-5,y-2.4,10,5,1,'#b89a5e',OUTL,.4);g.save();g.beginPath();g.rect(x-5,y-2.4,10,5);g.clip();for(let i=-5;i<6;i+=1.2)ln(g,x+i,y-2.4,x+i,y+2.6,'rgba(120,90,46,.45)',.3);g.restore();
+ /* tall jar */ell(g,x-2.4,y+.4,1.9,1.1,SH);circ(g,x-3,y-.6,1.7,'#b8643a',OUTL,.4);circ(g,x-3,y-.6,.75,'#4a2814');ln(g,x-4.1,y-1.3,x-3.6,y-1.9,'rgba(255,220,180,.5)',.35);
+ /* round pot */circ(g,x-.3,y+.6,1.35,'#a8562e',OUTL,.4);circ(g,x-.3,y+.6,.6,'#3a2010');rr(g,x-1.5,y+.6,2.4,.35,.1,'rgba(240,200,150,.35)');
+ /* bowl */ell(g,x+2.6,y-.3,1.6,1.05,'#c8784a');g.beginPath();g.ellipse(x+2.6,y-.3,1.6,1.05,0,0,6.2832);g.strokeStyle=OUTL;g.lineWidth=.4;g.stroke();ell(g,x+2.6,y-.4,1.05,.6,'#6a3a1c');ell(g,x+2.4,y-.5,.5,.25,'#d8b444');
+ /* small cup */circ(g,x+2.8,y+1.6,.75,'#b8643a',OUTL,.35);circ(g,x+2.8,y+1.6,.3,'#4a2814')}
+function drawTentCore(g,t,o){o=o||{};const burn=!!o.burn,ph=burn?0:((t||0)%TENT_PERIOD)/TENT_PERIOD*6.2832,r=o.r||R,PR=o.r?3.2:2.4;
+ {const so=o.sh||[4,5];ell(g,16+so[0],16+so[1],r,r*.9,SH)}
+ /* guy ropes + pegs (8, skipping the door) */
+ for(let i=0;i<8;i++){const a=.4+i/8*6.2832;if(inDoor(a))continue;const c=Math.cos(a),s=Math.sin(a);ln(g,16+c*(r-.5),16+s*(r-.5),16+c*(r+PR),16+s*(r+PR),'rgba(232,214,170,.9)',.45);rr(g,16+c*(r+PR)-.7,16+s*(r+PR)-.7,1.4,1.4,.3,'#6a4626',OUTL,.3)}
+ /* hide gores, two tones, lit top-left like the game's radial gradient */
+ for(let i=0;i<8;i++){g.beginPath();g.moveTo(16,16);g.arc(16,16,r,i/8*6.2832,(i+1)/8*6.2832);g.closePath();g.fillStyle=i%2?'#c9a272':'#b08658';g.fill()}
+ {const gr=g.createRadialGradient(12,11,1,16,16,r);gr.addColorStop(0,'rgba(255,240,210,.32)');gr.addColorStop(.55,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(40,24,10,.38)');circ(g,16,16,r,gr)}
+ circ(g,16,16,r,null,OUTL,1);
+ /* stitching on seams + hem */
+ g.save();g.setLineDash([.9,.8]);for(let i=0;i<8;i++){const a=i/8*6.2832;ln(g,16+Math.cos(a)*2.6,16+Math.sin(a)*2.6,16+Math.cos(a)*(r-.8),16+Math.sin(a)*(r-.8),'rgba(240,220,180,.75)',.4)}g.beginPath();g.arc(16,16,r-1.3,0,6.2832);g.strokeStyle='rgba(240,220,180,.6)';g.lineWidth=.4;g.stroke();g.restore();
+ /* modest fringe: 20 short tassels, slight ripple */
+ for(let i=0;i<20;i++){const a=i/20*6.2832+.08+Math.sin(ph+i*.9)*.025;if(inDoor(a))continue;ln(g,16+Math.cos(a)*(r-.1),16+Math.sin(a)*(r-.1),16+Math.cos(a)*(r+.9),16+Math.sin(a)*(r+.9),'#7a5232',.4)}
+ /* two painted marks (the old red-dot motif, now decoration) */
+ for(const a of[2,4]){g.save();g.translate(16+Math.cos(a)*r*.6,16+Math.sin(a)*r*.6);g.rotate(a);rr(g,-1.3,-1,2.6,2,.6,'#c04a2c','rgba(60,20,10,.6)',.3);g.restore()}
+ /* doorway + tied flap that swings (open 0.45..0.75) */
+ g.beginPath();g.moveTo(16,16);g.arc(16,16,r,D0,D1);g.closePath();g.fillStyle='#3a2414';g.fill();
+ {const open=.6+Math.sin(ph)*.15,m=(D0+D1)/2,w=(D1-D0)/2*(1-open*.55),a=m+(D1-m)*open*.9;g.beginPath();g.moveTo(16,16);g.arc(16,16,r+.4,a-w*.55,a+w*.55);g.closePath();g.fillStyle='#b58a5a';g.fill();g.strokeStyle=OUTL;g.lineWidth=.5;g.stroke();circ(g,16+Math.cos(a)*r*.7,16+Math.sin(a)*r*.7,.6,'#7a5232')}
+ /* smoke hole */
+ circ(g,16,16,2.6,'#6a4628',OUTL,.5);circ(g,16,16,1.5,'#2a1a0e');
+ /* pennant on the centre pole */
+ {const w=Math.sin(ph*2)*1.1;g.beginPath();g.moveTo(16,15);g.quadraticCurveTo(19,13.5+w,22+w*.3,14.2+w*.6);g.quadraticCurveTo(19,15.6+w*.4,16,16.6);g.closePath();g.fillStyle='#c04a2c';g.fill();g.strokeStyle=OUTL;g.lineWidth=.35;g.stroke();circ(g,16,16,.8,'#5a3a20')}
+ const v=o.variant|0;if(v){{const P=o.prop||[30.6,31.8,.85];g.save();g.translate(P[0],P[1]);g.scale(P[2],P[2])};g.translate(-26,-30);/* props authored around (26,30); placed in the SE corner beside the doorway */if(v===1)propFire(g,ph,burn);else if(v===2)propLine(g,ph,burn);else if(v===3)propPots(g);g.restore()}
+ if(burn&&!o.noBurnFill){g.fillStyle='rgba(30,20,10,.35)';g.fillRect(0,0,32,32)}}
+/* art note: deterministic per-tent pick from tile position */
+function tentVariant(x,y){return 1+((x*7+y*13)%3)}
+/* convenience: an 80x80 (x scale) sprite canvas for time t, laid out exactly like the game's bspr('tent',1) */
+
+G.drawTentCore=drawTentCore;
+
+/* ======================= FAMILY TENT (3x3 proposal) =======================
+ * WHY       Live game (index.html, 2026-10-16): tentFurn caps bedrolls at 3*l = 3 (tents are always l=1); tentIntSpr draws a 64px interior
+ *           (r = 0.46*64 = 29.4px) with 9x15px bedrolls, while intDraw lays a sleeping pawn as a 16x22px sprite (pawnSpr drawn at -11,-8,16,22,
+ *           rotated bed angle + PI/2) and standing pawns are 24x32 scaled by PSC=0.72 (about 17x23px). A family is up to FAM_MAX=9; 4-6 is typical.
+ *           Six 13x24px bedrolls around a hearth need a floor radius of about 38px, which is more than a 2x2 tile (32px half width) can hold.
+ * FOOTPRINT 3x3 tiles (96px). PROPOSAL ONLY: the footprint change (BLD.tent.sz / SZFIX, placement, famTents, occupancy, walk grid) is Hammurabi's call.
+ * SPRITE    112x112 world px (96 + 8px overhang each side). Draw it at (x*32-8, y*32-8); the anchor is the top-left tile. Centre (56,56) = footprint centre.
+ *           All coordinates below are sprite-local world px (subtract 8 for footprint-local).
+ * EXTERIOR  drawTent(ctx, t, {burn, variant 0..3}): body radius 42px, pegs to ~49px, props (same world size as the 2x2 versions) in the SE corner
+ *           around (95,97). Loop period TENT_PERIOD = 2400 ms; draw live per frame or pre-render 24 frames. Burn: 35% dark wash over the 96px footprint.
+ * INTERIOR  drawTentInterior(ctx, {beds 1..6 (default 6), seed}): the cut-away floor (replaces tentIntSpr's art, same role: shown at zoom>=2.2 or when selected).
+ *           Floor radius 40, hide wall ring at 42, door gap at the bottom (angle PI/2), central hearth at (56,56) with radius ~7.
+ *           TENT_BED_SLOTS[i] = {x,y,a}: bedroll centre (sprite px) and its angle a (radial, from the centre). Draw the bedroll and the sleeping pawn
+ *           exactly like the game: translate(x,y); rotate(a+PI/2); the pillow is at local -y (toward the wall). Sleeping pawn: pawnSpr(o,1,2) at (-11,-8,16,22) after
+ *           the same transform but with its centre on the bed: use translate(x,y) rotate(a+PI/2) drawImage(sp,-8,-9,16,22).
+ *           tentBedSlots(n) returns the slots to use for n bedrolls (spread evenly: 4 -> slots 0,2,3,5).
+ *           TENT_SEAT_SLOTS: 6 sitting spots around the hearth (pawn feet position).
+ */
+const FT={S:112,C:56,R:42,K:42/15};
+function drawTent(g,t,o){o=o||{};g.save();g.translate(FT.C,FT.C);g.scale(FT.K,FT.K);g.translate(-16,-16);
+ drawTentCore(g,t,Object.assign({},o,{sh:[1.1,1.3],noBurnFill:1,prop:[16+(95-FT.C)/FT.K,16+(97-FT.C)/FT.K,.85*2/FT.K]}));g.restore();
+ if(o.burn){g.fillStyle='rgba(30,20,10,.35)';g.fillRect(8,8,96,96)}}
+const BEDS=6,BED_W=13,BED_L=24,BED_D=24;
+const TENT_BED_SLOTS=[...Array(BEDS)].map((_,i)=>{const a=Math.PI/2+(i+1)*2*Math.PI/7;return{x:+(FT.C+Math.cos(a)*BED_D).toFixed(1),y:+(FT.C+Math.sin(a)*BED_D).toFixed(1),a:+a.toFixed(3)}});
+const BED_PICK={1:[2],2:[2,3],3:[0,2,4],4:[0,2,3,5],5:[0,1,2,4,5],6:[0,1,2,3,4,5]};
+const tentBedSlots=n=>BED_PICK[Math.max(1,Math.min(6,n))].map(i=>TENT_BED_SLOTS[i]);/* slots used for a household of n (spread evenly) */
+const TENT_SEAT_SLOTS=[...Array(6)].map((_,i)=>{const a=Math.PI/2+(i+.5)*2*Math.PI/6.4+.25;return{x:+(FT.C+Math.cos(a)*11.5).toFixed(1),y:+(FT.C+Math.sin(a)*10).toFixed(1)}});
+const hs=(a,b)=>{const v=Math.sin(a*127.1+b*311.7)*43758.5453;return v-Math.floor(v)};
+function drawTentInterior(g,o){o=o||{};const n=Math.max(1,Math.min(6,o.beds==null?6:o.beds)),sd=o.seed||1,C=FT.C,R=FT.R,fr=40;
+ ell(g,C+3,C+4,R+1,(R+1)*.92,SH);
+ g.save();g.beginPath();g.arc(C,C,fr,0,6.2832);g.clip();g.fillStyle='#9a7a54';g.fillRect(0,0,FT.S,FT.S);
+ for(let i=0;i<60;i++){g.fillStyle='rgba(60,40,20,'+(.05+hs(i,sd)*.08)+')';g.beginPath();g.arc(16+hs(i,sd+1)*80,16+hs(i,sd+2)*80,1+hs(i,sd+3)*3,0,6.3);g.fill()}
+ ell(g,C,C,fr*.8,fr*.72,'rgba(200,170,120,.35)');
+ /* woven rug under the hearth side */g.save();g.translate(C,C-2);rr(g,-15,-10,30,20,2,'#8a2a2a');g.strokeStyle='#d8b060';g.lineWidth=1.2;g.strokeRect(-12.5,-7.5,25,15);for(let i=-2;i<=2;i++){g.fillStyle='#d8b060';g.fillRect(i*5-1,-1,2,2)}g.restore();
+ /* bedrolls */const BC=['#c8b090','#9a6a4a','#b85a3a','#6a7a9a','#d8c8a0','#7a5a8a'];
+ tentBedSlots(n).forEach((s,i)=>{g.save();g.translate(s.x,s.y);g.rotate(s.a+Math.PI/2);rr(g,-BED_W/2+1,-BED_L/2+1.5,BED_W,BED_L,2.5,'rgba(0,0,0,.22)');rr(g,-BED_W/2,-BED_L/2,BED_W,BED_L,2.5,BC[(i+sd)%6],OUTL,.6);
+  g.fillStyle='rgba(255,255,255,.16)';g.fillRect(-BED_W/2+1,-BED_L/2+1,BED_W-2,2.5);ln(g,-BED_W/2+1.5,BED_L*.12,BED_W/2-1.5,BED_L*.12,'rgba(40,24,10,.3)',.6);ell(g,0,-BED_L/2+4,4.2,2.3,'#e8dcc0');g.restore()})
+ /* jars and a basket by the wall (back, away from the door) */for(let i=0;i<4;i++){const a=-Math.PI/2+(i-1.5)*.28,x=C+Math.cos(a)*34.5,y=C+Math.sin(a)*34.5;ell(g,x+.7,y+1.1,3,1.8,'rgba(0,0,0,.25)');circ(g,x,y,2.8,i%2?'#b8683a':'#c88a4a',OUTL,.5);circ(g,x,y,1.1,'#5a3418')}
+ /* hearth */for(let i=0;i<9;i++){const a=i/9*6.2832;circ(g,C+Math.cos(a)*5.6,C+Math.sin(a)*5.6,2,i%2?'#8a8478':'#a8a294',OUTL,.4)}circ(g,C,C,3.6,'#3a2414');circ(g,C,C,2,'#e87a2a');circ(g,C,C,1,'#fce890');
+ g.restore();
+ /* wall ring, poles and doorway */g.strokeStyle='#6a4626';g.lineWidth=3;g.beginPath();g.arc(C,C,R-1,Math.PI/2+.22,Math.PI/2-.22+6.2832);g.stroke();g.strokeStyle='#c89a6a';g.lineWidth=1.2;g.beginPath();g.arc(C,C,R-3,Math.PI/2+.22,Math.PI/2-.22+6.2832);g.stroke();
+ for(let i=0;i<10;i++){const a=Math.PI/2+.4+i/10*(6.2832-.8);circ(g,C+Math.cos(a)*(R-1.5),C+Math.sin(a)*(R-1.5),1.6,'#5a3a1a')}
+ rr(g,C-6,C+R-5,12,7,1,'#9a7a54');circ(g,C-7,C+R-1,1.8,'#5a3a1a');circ(g,C+7,C+R-1,1.8,'#5a3a1a')}
+function tentSprite(t,o,scale,interior){scale=scale||2;const c=document.createElement('canvas');c.width=c.height=FT.S*scale;const g=c.getContext('2d');g.scale(scale,scale);if(interior)drawTentInterior(g,o);else drawTent(g,t,o);return c}
+G.drawTent=drawTent;G.drawTentInterior=drawTentInterior;G.tentSprite=tentSprite;G.TENT_BED_SLOTS=TENT_BED_SLOTS;G.TENT_SEAT_SLOTS=TENT_SEAT_SLOTS;G.tentBedSlots=tentBedSlots;G.TENT_FAMILY={footprint:3,sprite:112,anchor:'(x*32-8, y*32-8)',centre:[56,56],bodyR:42,floorR:40,bed:[BED_W,BED_L]};
+G.tentVariant=tentVariant;G.TENT_PERIOD=TENT_PERIOD;G.TENT_FRAMES=TENT_FRAMES;
+})(typeof window!=='undefined'?window:globalThis);
+
+
 "use strict";
 const GFX=Object.assign({master:.8,music:.6,sfx:.8,q:'med',parts:true,edge:false,pan:1},(()=>{try{return JSON.parse(localStorage.getItem('bnbSettings')||'{}')}catch(e){return{}}})());const gfxSave=()=>localStorage.setItem('bnbSettings',JSON.stringify(GFX));
 /* audio folder resolved from the page path: works at /, /beta/, /beta (no slash) and file:// */const AUDB=/\/beta(\/|$)/.test(location.pathname)?location.pathname.replace(/\/beta(\/.*)?$/,'/')+'audio/':'audio/';
@@ -340,7 +474,7 @@ function plYieldTxt(s){let exp=0;if(s.pl)for(const i in s.pl)for(let k=0;k<PL_N;
 /* item 2: the bakery is real pawn work. A baker walks grain in from the Stockyard (two 600-grain sacks on a yoke), kneads (3 work spells), loads the oven and tends it, takes out 600 loaves (from 1,200 grain), and carries bread out (up to 600 loaves) to sell to the Stockyard, or to the market stall when the crown cannot pay */
 const BK_G=1200,BK_L=600,BK_T=30,BK_CAR=600;
 function bkOven(b){const s=bsz(b.t);return{x:b.x+s+.35,y:b.y+s-.9}}
-function bkSell(c,n){const E=S.eco,pr=mval('bread')*.9;/* the bread goes into the Stockyard store; the crown pays for it as far as its silver goes (first settling the grain the Stockyard fronted) */E.hold.bread=(E.hold.bread||0)+n;c.toY=(c.toY||0)+n;const pay=Math.min(n*pr,Math.max(0,E.silver));if(pay>0){E.silver-=pay;E.led.sOut=(E.led.sOut||0)+pay;c.ag=(c.ag||0)+pay}}
+function bkSell(c,n){const E=S.eco,pr=mval('bread')*.9;/* the bread goes into the Stockyard store; the crown pays for it as far as its silver goes */E.hold.bread=(E.hold.bread||0)+n;c.toY=(c.toY||0)+n;const pay=Math.min(n*pr,Math.max(0,E.silver));if(pay>0){E.silver-=pay;E.led.sOut=(E.led.sOut||0)+pay;c.ag=(c.ag||0)+pay}}
 function bkThink(a,c,b,hm){const E=S.eco,j=a.bj,ov=bkOven(b),stand={x:ov.x-.15,y:ov.y+.75};
  if(j){if(j.k==='sell'){if(a.route.length){a.carry='sack';a.t=1;return true}bkSell(c,j.n);a.carry=null;a.bj=null;a.state='idle';a.t=.8;return true}
   if(j.k==='bake'){if(a.route.length){a.t=1;return true}if(Math.hypot(a.x-stand.x,a.y-stand.y)>1.5&&(j.tr||0)<3){j.tr=(j.tr||0)+1;go(a,stand,'fgo');a.t=1;return true}a.dir=1;a.state='work';a.hvTool=null;c.bkAT=S.t;
@@ -375,7 +509,7 @@ function steadYardDraw(s,z){if(s.ph==null)return;const SZ=bsz('stead'),yd=s.yd;i
  // fire pit (camp onward)
  {const[x,y]=P(2.5,1);vx.fillStyle='#5a5048';for(let k=0;k<7;k++){const a=k/7*(Math.PI*2);vx.beginPath();vx.arc(x+Math.cos(a)*9,y+Math.sin(a)*6,3,0,(Math.PI*2));vx.fill()}vx.fillStyle='#2a1a10';vx.beginPath();vx.ellipse(x,y,7,4.5,0,0,(Math.PI*2));vx.fill();if(s.ph===0||night()){const fl=Math.sin(performance.now()/120)*1.5;vx.fillStyle='#ffb040';vx.beginPath();vx.moveTo(x-4,y);vx.lineTo(x,y-9-fl);vx.lineTo(x+4,y);vx.fill();vx.fillStyle='#fff0a0';vx.beginPath();vx.moveTo(x-2,y);vx.lineTo(x,y-5-fl);vx.lineTo(x+2,y);vx.fill()}}
  // family tent while the farmhouse is going up
- if(s.ph===0){const sp=bspr('tent',1);vx.drawImage(sp.c,X-6,Y-6,2*TS+12,2*TS+12)}
+ if(s.ph===0){const sp=bspr('tent',1);vx.drawImage(sp.c,X-8,Y-8,bsz('tent')*TS+16,bsz('tent')*TS+16)}
  // bread oven (farmhouse stage)
  if(s.ph>=1){const[x,y]=P(3.6,1);vx.fillStyle='#b8743c';vx.strokeStyle='#5a3418';vx.lineWidth=1.5;vx.beginPath();vx.arc(x,y,9,Math.PI,0);vx.lineTo(x+9,y+4);vx.lineTo(x-9,y+4);vx.closePath();vx.fill();vx.stroke();vx.fillStyle='#2a1408';vx.beginPath();vx.arc(x,y+1,3.5,Math.PI,0);vx.fill()}
  // shed + animal pen (grown farm)
@@ -685,7 +819,7 @@ const crSack=c=>c.c==='baker'?1200:CR_SACK,crMax=c=>c.c==='baker'?2400:CR_MAXG,c
 function wsRes0(){const E=S.eco,Y=yearLen(),f=Math.max(.05,(Y-(E.yt||0))/Y);let r=0;for(const c of E.cr)if(WS_CR[c.c])r+=crMax(c)*(c.c==='baker'?8:4);return r*f}
 /* C15: the Stockyard keeps back the laborer family's food wage until the next tithe, before kits, crafters, city stores or merchants take grain */function yardRes(){const E=S.eco;if(!E||!E.yard)return 0;let n=0;for(const id of E.yard.f){const F=famById(id);if(F)n+=F.m.length}const Y=yearLen(),left=(Y-(E.yt||0))/DAYLEN+2;return n*FOOD_DAY()*WAGE_X*left}
 function wsRes(){return wsRes0()+yardRes()}
-function crBuy(c,want){const E=S.eco,v=mval('grain');/* the crown charges the market's grain value and sells at most a share of what is left, so the tithe lasts the year */const left=Math.max(DAYLEN,yearLen()-(E.yt||0)),day=S.t/DAYLEN|0;if(c.gdD!==day){c.gdD=day;c.gdA=Math.max(CR_SACK,(E.hold.grain||0)*Math.min(1,DAYLEN*1.3/left)/Math.max(1,E.cr.filter(x=>WS_CR[x.c]).length))}/* a daily allowance */const q=Math.floor(Math.min(want,c.gdA,Math.max(0,crMax(c)-(c.gr||0)),Math.max(0,(E.hold.grain||0)-yardRes()),(c.c==='baker'?1e9:Math.max(0,c.ag+(c.stk||0)*EIT[CRAFT[c.c].g].v+CR_SACK*2*v)/v))/* item 2: the Stockyard fronts the bakery its grain; the bakers pay it back from bread sales */);/* the Stockyard fronts up to two sacks on credit */if(q<1)return 0;E.hold.grain-=q;c.gdA-=q;const pz=q*v;crPay(c,pz,1);E.led.crG=(E.led.crG||0)+q;c.gy=(c.gy||0)+q;c.trips=(c.trips||0)+1;return q}
+function crBuy(c,want){const E=S.eco,v=mval('grain');/* the crown charges the market's grain value and sells at most a share of what is left, so the tithe lasts the year */const left=Math.max(DAYLEN,yearLen()-(E.yt||0)),day=S.t/DAYLEN|0;if(c.gdD!==day){c.gdD=day;c.gdA=Math.max(CR_SACK,(E.hold.grain||0)*Math.min(1,DAYLEN*1.3/left)/Math.max(1,E.cr.filter(x=>WS_CR[x.c]).length))}/* a daily allowance */const q=Math.floor(Math.min(want,c.gdA,Math.max(0,crMax(c)-(c.gr||0)),Math.max(0,(E.hold.grain||0)-yardRes()),(c.c==='baker'?Math.max(0,c.ag)/v:Math.max(0,c.ag+(c.stk||0)*EIT[CRAFT[c.c].g].v+CR_SACK*2*v)/v))/* no Stockyard credit for bakers: they pay in silver (their share from the parent family, then bread sales) */);/* the Stockyard fronts up to two sacks on credit */if(q<1)return 0;E.hold.grain-=q;c.gdA-=q;const pz=q*v;crPay(c,pz,1);E.led.crG=(E.led.crG||0)+q;c.gy=(c.gy||0)+q;c.trips=(c.trips||0)+1;return q}
 // ===== 0.17 barter market =====
 // The painted Market zone is the barter point. Each morning families and crafters with goods to spare set up a stall there,
 // trade goods for goods at the day's values, and pack up. No silver changes hands at the market.
@@ -776,9 +910,11 @@ function crTrip(c){const hb=holdB();if(!hb)return 99;return Math.abs(hb.x-c.x)+M
 function wsAdopt(){const E=S.eco;if(!E||!S.fam)return;for(const b of S.bl){if((b.t!=='bakery'&&b.t!=='brewery')||b.cr||b.bp)continue;const c0=b.t==='bakery'?'baker':'brewer';
   const F=S.fam.L.filter(F=>F.st==='pend'&&F.m.some(m=>m.a>=16&&m.a<60)).sort((p,q)=>famBest(q).b.cook-famBest(p).b.cook)[0];if(!F){if(S.t-(b._wl||-1e9)>DAYLEN*4){b._wl=S.t;log('The '+BLD[b.t].n+' stands empty: no waiting family to run it.')}continue}
   const fb=famBest(F),id=++E.sid;E.cr.push({id,c:c0,n:F.m.length,sk:Math.min(5,1+(fb.adv[c0]||0)/20+fb.b.cook/50),ag:20,stk:0,x:b.x,y:b.y,hun:0,ref:0,from:null,fromFam:F.id,direct:1,gr:0});b.cr=id;F.st='craft';F.l=id;S.fam._d=1;qlog('The '+F.sn+' family took over the new '+BLD[b.t].n+'.')}}
+/* a household splitting off takes its share (members leaving / family size) of the parent's grain and other food (as wheat-equivalent food value) */
+function crShare(s,k){let g=0;if(!s||!s.st)return 0;for(const q in s.st){const e=EIT[q];if(!e||!e.food||!(s.st[q]>0))continue;const u=s.st[q]*k;s.st[q]-=u;g+=u*(q==='grain'?1:(q==='bread'?BREAD_FV:e.food))}return Math.floor(g)}
 function riseApprove(i){const E=S.eco,p=E.rp[i];if(!p)return;const cand=E.steads.find(s=>s.id===p.s),c=p.c;if(!cand||cand.n<2){E.rp.splice(i,1);return}const t=ecoTown()||(typeof DEVO!=='undefined'&&DEVO.on?devLot(WS_CR[c]||'craft'):null);if(!t){log('No free lot in the Crafter Quarter — paint more Crafter Quarter tiles.');return}E.rp.splice(i,1);
  let rm=null;{const F=famOf(cand);if(F&&p.m!=null){const k=F.m.findIndex(m=>m.i===p.m);if(k>=0&&F.m.length>1){rm=F.m[k];F.m.splice(k,1)}}}
- const nid=E.sid+1,b=WS_CR[c]?{t:WS_CR[c],l:1,x:t.X,y:t.Y,cr:nid}:{t:'craft',l:1,x:t.X,y:t.Y};S.bl.push(b);rebuildOcc();E._wc=1;cand.n--;const ag=cand.sv*.5;cand.sv-=ag;E.cr.push({id:++E.sid,c,n:2,sk:Math.min(5,rm&&rm.adv&&rm.adv[c]?3+rm.adv[c]/25:(cand.sk[c]||3)),ag,stk:0,x:t.X,y:t.Y,hun:0,ref:0,from:cand.id,who:rm?{n:rm.n,a:rm.a,sk:rm.sk,adv:rm.adv,amb:ambRoll(rm.amb||0),amb0:rm.amb||0}:null});cand.sk[c]=1;S.pop++;E.led.risers++;qlog('Approved: a '+CRAFT[c].n.toLowerCase()+' household is building in the Crafter Quarter.')}
+ const nid=E.sid+1,b=WS_CR[c]?{t:WS_CR[c],l:1,x:t.X,y:t.Y,cr:nid}:{t:'craft',l:1,x:t.X,y:t.Y};S.bl.push(b);rebuildOcc();E._wc=1;const _k=1/Math.max(1,cand.n);cand.n--;const ag=(cand.sv||0)*_k;cand.sv-=ag;const _gr=crShare(cand,_k);E.cr.push({id:++E.sid,gr:_gr,c,n:2,sk:Math.min(5,rm&&rm.adv&&rm.adv[c]?3+rm.adv[c]/25:(cand.sk[c]||3)),ag,stk:0,x:t.X,y:t.Y,hun:0,ref:0,from:cand.id,who:rm?{n:rm.n,a:rm.a,sk:rm.sk,adv:rm.adv,amb:ambRoll(rm.amb||0),amb0:rm.amb||0}:null});cand.sk[c]=1;S.pop++;E.led.risers++;qlog('Approved: a '+CRAFT[c].n.toLowerCase()+' household is building in the Crafter Quarter.')}
 function bldN(){return S.eco?S.eco.cr.filter(c=>c.c==='builder').length:0}
 function builderRise(){const E=S.eco;if(!E||!S.fam)return;const nb=bldN();if((S.bxp||0)<300*(1+nb))return;const bq=m=>m.a>=18&&m.r!=='head'&&((m.adv&&m.adv.builder)||(m.sk&&m.sk.craft>=ADV_TH));const F=S.fam.L.filter(F=>F.st==='pend'&&F.m.some(bq)).sort((a,b)=>b.m.length-a.m.length)[0];if(!F)return;const t=ecoTown();if(!t)return;
  const b={t:'craft',l:1,x:t.X,y:t.Y};S.bl.push(b);rebuildOcc();E._wc=1;E.cr.push({id:++E.sid,c:'builder',n:2,sk:3,ag:0,stk:0,x:t.X,y:t.Y,hun:0,ref:0,from:null,fromFam:F.id});S.pop++;S.bxp=0;log('A skilled labourer of the '+F.sn+' family set up as a master builder in town — first of their name.')}
@@ -1680,7 +1816,7 @@ const SPR={};
 const SZFIX={shrine:3};const bsz=t=>SZFIX[t]||(BLD[t]&&BLD[t].sz)||1;
 // realistic proportions: buildings at true scale vs ~0.65-tile people (art drawn at design size then scaled)
 
-const NSZ_A={holding:8,stead:5,craft:5,tavern:5,shrine:2,senet:2,plaza:6,trainingcamp:8,spearschool:6,archery:8,slingfield:6,axehall:5,stables:7,gatherhut:3,storehouse:6,bakery:4,brewery:4,tent:2,campfire:1,stockpile:3,garden:4,farm:8,house:4,lodge:4,lumber:5,quarry:6,barracks:8,granary:6,well:1,copper:6,tin:6,smelter:5,temple:14,market:10,palace:28,statue:2};
+const NSZ_A={holding:8,stead:5,craft:5,tavern:5,shrine:2,senet:2,plaza:6,trainingcamp:8,spearschool:6,archery:8,slingfield:6,axehall:5,stables:7,gatherhut:3,storehouse:6,bakery:4,brewery:4,tent:3,campfire:1,stockpile:3,garden:4,farm:8,house:4,lodge:4,lumber:5,quarry:6,barracks:8,granary:6,well:1,copper:6,tin:6,smelter:5,temple:14,market:10,palace:28,statue:2};
 const NSZ1={holding:8,stead:8,craft:7,tavern:8,shrine:3,senet:2,plaza:5,trainingcamp:7,spearschool:6,archery:7,slingfield:6,axehall:6,stables:7,gatherhut:6,storehouse:8,bakery:7,brewery:7,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:9,lodge:6,lumber:6,quarry:6,barracks:10,granary:8,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:3};
 const NSZ=SCLA?NSZ_A:NSZ1;
 const BCOSTX={house:1.4,barracks:1.4,granary:1.4,temple:1.4,palace:1.3,market:1.3,smelter:1.3,lodge:1.2,lumber:1.2};
@@ -2150,7 +2286,7 @@ function stall(g,x,y,c1,c2,goods){rr(g,x+2,y+3,14,12,1,SH);rr(g,x,y+6,14,8,1,'#8
 function bspr(t,l,v){if(BSAL[t]){l=t==='craft'&&l>=3?3:BSAL[t][1];t=BSAL[t][0]}const r=_bsprA(t,l,v),m=r.m;if(!m._sc){m._sc=1;const K=bsz(t)/((BLD[t]&&BLD[t].osz)||bsz(t));if(K!==1){const f=q=>{if(Array.isArray(q)){q[0]*=K;q[1]*=K}else if(q){q.x*=K;q.y*=K}};(m.lights||[]).forEach(f);(m.smoke||[]).forEach(f);f(m.fire)}}return r}
 function _bsprA(t,l,v){l=Math.min(l||1,5);const key='B'+t+l+(v||'')+(S&&S.tier>=3?'s':'')+((S&&S.civ)||'');if(SPR[key])return SPR[key];const s0=bsz(t),o0=(BLD[t]&&BLD[t].osz)||s0,K=s0/o0,s=o0,W=s*32,[c,g]=mkW(s0*32+16,s0*32+16);g.translate(8,8);g.scale(K,K);
  const m={lights:[],smoke:[],fire:null,flat:!!FLATB[t],s:s0,walled:false};const stoneAge=S&&S.tier>=3,wm=stoneAge?'stone':'mud';if(DEC[t]){DEC[t].f(g,W);if(DEC[t].light)m.lights=[[16,6]];return SPR[key]={c,m}}if(t==='temple'||t==='palace'){m.walled=true;X_legacyBig(c,g,t,W,K,m,l,key);if(v==='burn'){g.fillStyle='rgba(30,20,10,.35)';g.fillRect(0,0,W,W)}return SPR[key]={c,m}}if(civBuilding(g,t,l,W,m)){if(v==='burn'){g.fillStyle='rgba(30,20,10,.35)';g.fillRect(0,0,W,W)}return SPR[key]={c,m}}
- if(t==='tent'){const r=11+l;ell(g,16+4,16+5,r,r*.9,SH);const gr=g.createRadialGradient(12,11,2,16,16,r);gr.addColorStop(0,'#d8b688');gr.addColorStop(1,'#946c44');circ(g,16,16,r,null);g.fillStyle=gr;g.fill();g.strokeStyle=OUTL;g.lineWidth=1;g.stroke();
+ if(t==='tent'&&s0===3){g.scale(1/K,1/K);g.translate(-8,-8);drawTent(g,0,{burn:v==='burn'});return SPR[key]={c,m}}if(t==='tent'){const r=11+l;ell(g,16+4,16+5,r,r*.9,SH);const gr=g.createRadialGradient(12,11,2,16,16,r);gr.addColorStop(0,'#d8b688');gr.addColorStop(1,'#946c44');circ(g,16,16,r,null);g.fillStyle=gr;g.fill();g.strokeStyle=OUTL;g.lineWidth=1;g.stroke();
   for(let i=0;i<8;i++){const a=i/8*6.28;ln(g,16,16,16+Math.cos(a)*r,16+Math.sin(a)*r,'rgba(90,60,34,.55)',.7)}g.beginPath();g.moveTo(16,16);g.arc(16,16,r,1.2,1.95);g.closePath();g.fillStyle='#3a2414';g.fill();circ(g,16,16,1.8,'#5a3a20');if(l>1)for(let i=0;i<l;i++)circ(g,16+Math.cos(i*2)*r*.6,16+Math.sin(i*2)*r*.6,1.2,'#c04a2c')}
  else if(t==='campfire'){for(let i=0;i<10;i++){const a=i/10*6.28;circ(g,16+Math.cos(a)*7,16+Math.sin(a)*7,2.2,'#8a8478',OUTL,.6)}ln(g,11,13,21,19,'#6a4626',2.4);ln(g,11,19,21,13,'#7a5232',2.4);circ(g,16,16,3.4,'#e8702a');circ(g,16,16,1.8,'#fce890');m.fire={x:16,y:14};m.lights.push({x:16,y:16});for(let i=0;i<4;i++)circ(g,4+i*7,29,1.6,'#7a5232')}
  else if(t==='farm'||t==='garden'||t==='stockpile'){const zc=t==='farm'?'90,170,60':t==='garden'?'200,140,200':'150,170,200';
@@ -2477,6 +2613,8 @@ let PBV=0;let PB_ON=0;const PBJ={};function propBake(vl,vr,vt,vb,now){if(PBsrc!=
 let PCH={};function visProps(vl,vr,vt,vb){if(visProps.src!==props){PCH={};props.forEach(p=>{const k=((p.gx/CS)|0)+','+((p.gy/CS)|0);(PCH[k]=PCH[k]||[]).push(p)});visProps.src=props}const o=[],W=CS*TS;for(let cy=Math.max(0,Math.floor(vt/W));cy<=Math.min(MH/CS-1,Math.floor(vb/W));cy++)for(let cx=Math.max(0,Math.floor(vl/W));cx<=Math.min(MW/CS-1,Math.floor(vr/W));cx++){const a=PCH[cx+','+cy];if(a)for(const p of a)o.push(p)}return o}
 // ---- interiors: each pawn inside a building owns one use spot (occupancy 1), walks to it over the room grid (walls and furniture block), then uses it ----
 const ISP=new WeakMap();
+/* family tent: 4 variants x 24 frames (2400ms loop), burn = one frozen frame with the 35% wash + embers */
+const TFR={};function tentBlit(b,X,Y,burn,now){const v=tentVariant(b.x,b.y)%4,f=burn?0:(((now%TENT_PERIOD)/TENT_PERIOD*TENT_FRAMES)|0),k=v+(burn?'b':'')+f;let c=TFR[k];if(!c){c=mk(224,224)[0];const g=c.getContext('2d');g.scale(2,2);drawTent(g,burn?0:f/TENT_FRAMES*TENT_PERIOD,{burn,variant:v});TFR[k]=c}vx.drawImage(c,X-8,Y-8,112,112)}
 function bSpr(b){try{return b.t==='wall'?null:bfp(b)?fpSpr(b,''):bspr(b.t,b.l)}catch(e){return null}}
 function intGrid(m){if(m._wg)return m._wg;const R=m.R;if(!R)return null;const n=R.n,w=new Uint8Array(n*n);for(let k=0;k<n*n;k++)w[k]=R.cls[k]&&!R.used[k]?1:0;return m._wg={n,C:R.C*(m.Rk||1),w}}
 function intCell(G,x,y){const i=Math.max(0,Math.min(G.n-1,x/G.C|0)),j=Math.max(0,Math.min(G.n-1,y/G.C|0));return j*G.n+i}
@@ -2566,7 +2704,7 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
  const wt=now/1000;if(z>=.5){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){if(hsh(gx,gy,9)>.18||!isWat(RT[gy*MW+gx]))continue;const X=(gx+hsh(gx,gy,4))*TS,Y=(gy+hsh(gx,gy,5))*TS,ph=(wt*.9+hsh(gx,gy,3)*6)%3;if(ph<1.6){vx.globalAlpha=Math.sin(ph/1.6*Math.PI)*.5;ln(vx,X+ph*5,Y,X+ph*5+7,Y,'#d8eef6',1);vx.globalAlpha=1}}}
  const D=[],blist=blds(),flats=[];FPB.on=1;FPB.n=1;
  blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):bspr(b.t,b.l,v);
-  const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.cp?()=>siteDraw(b,sp,X,Y,s,now):b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{{const cb=z<=.8&&sp.m.walled?roofCombo(b,o.i,sp,z,dt):null;if(cb){vx.drawImage(cMip(cb,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);return}}vx.drawImage(cMip(sp.c,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
+  const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.cp?()=>siteDraw(b,sp,X,Y,s,now):b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{{const cb=z<=.8&&sp.m.walled?roofCombo(b,o.i,sp,z,dt):null;if(cb){vx.drawImage(cMip(cb,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);return}}if(b.t==='tent'&&s===3){tentBlit(b,X,Y,v==='burn',now);return}vx.drawImage(cMip(sp.c,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
  ecoDrawFields(vl,vr,vt,vb,z);FPB.on=0;flats.forEach(e=>e.f());if(z>=.45&&S.stk)blist.forEach(o=>{const b=o.b;if(S.stk[bid(b)])stkDraw(b,o.gx*TS,o.gy*TS,o.s)});
  if(z<.3){propBake.up=[];propBake.on=1}else if(z<(GFX.q==='high'?.85:GFX.q==='low'?1.6:PBZ)){propBake(vl,vr,vt,vb,now);propBake.on=1}else visProps(vl,vr,vt,vb).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS;if(!inV(X,Y))return;const vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';const sw=big?Math.sin(wt*1.3+pr.gx)*.6:0;D.push({k:Y+(big?10:2),f:()=>rnDrawProp(pr,X,Y,sp,sw,big)})});
  critters.forEach(c=>{c.t-=dt;if(c.t<=0){const rg=c.k==='deer'?2.5:1.4;c.tx=c.hx+(Math.random()-.5)*rg*2;c.ty=c.hy+(Math.random()-.5)*rg;if(!walkC(c.tx|0,c.ty|0)&&c.k!=='deer'){c.tx=c.x;c.ty=c.y}c.t=1+Math.random()*3}
@@ -4122,6 +4260,9 @@ function relayoutTown(){genWorld(S.seed||7);const old=(S.bl||[]).slice();S.bl=[]
  for(const b of old){if(BLD[b.t]&&(b.t==='wall'||b.t==='gate'||b.t==='bridge'||b.t==='sbridge'||b.t==='dock')&&!placeErrBase(b.t,b.x,b.y,true)){S.bl.push(b);rebuildOcc();continue}if(!autoPlace(b.t,b.l,false)&&!autoPlace(b.t,b.l,true))lost++}
  delete S.roads;computeRoads.S=null;if(lost)S.log&&S.log.unshift('Town re-planned at true scale ('+lost+' structure(s) could not fit and were refunded).')}
 const _mig17w=migrate;migrate=function(){_mig17w();if(!S.wsv){S.wsv=1;if(S.jobs){S.jobs.baker=0;S.jobs.brewer=0}}};
+const _mig7=migrate;migrate=function(){_mig7();if(!S.tent3&&S.bl){S.tent3=1;rebuildOcc();const bad=new Set();S.bl.forEach((b,i)=>{if(b.t!=='tent')return;const s=bsz('tent');for(let y=b.y;y<b.y+s;y++)for(let x=b.x;x<b.x+s;x++){if(x<0||y<0||x>=MW||y>=MH||(occ[y*MW+x]&&occ[y*MW+x]-1!==i&&S.bl[occ[y*MW+x]-1].t!=='tent'?1:0)||(typeof TER!=='undefined'&&TER&&TER[y*MW+x]===0&&0)){bad.add(b);return}}});
+ /* tent-vs-tent overlap: keep the first */S.bl.forEach((b,i)=>{if(b.t!=='tent'||bad.has(b))return;S.bl.forEach((o,j)=>{if(j<=i||o.t!=='tent'||bad.has(o))return;if(Math.abs(o.x-b.x)<3&&Math.abs(o.y-b.y)<3)bad.add(o)})});
+ if(bad.size){S.bl=S.bl.filter(b=>!bad.has(b));rebuildOcc()}}};
 const _mig5=migrate;migrate=function(){_mig5();if(!S.propV){S.propV=1;if((S.bl||[]).length>3||S.bl.some(b=>b.t!=='campfire'&&b.t!=='tent'))relayoutTown();else{const c=S.center;S.bl=[{t:'campfire',l:1,x:c.x-1,y:c.y-1},{t:'tent',l:1,x:c.x-7,y:c.y-5},{t:'tent',l:1,x:c.x+4,y:c.y-5}]}}};
 const _fresh2=fresh;fresh=function(){const s=_fresh2();const c=s.center;s.bl=[{t:'campfire',l:1,x:c.x-1,y:c.y-1},{t:'tent',l:1,x:c.x-7,y:c.y-5},{t:'tent',l:1,x:c.x+4,y:c.y-5},{t:'tent',l:1,x:c.x-2,y:c.y+4}];s.propV=1;
  // humble start (new games only): 6 people, 3 tents, small stock, no metals
@@ -4648,11 +4789,15 @@ function wvLegend(g){const N=Object.keys(S.wm.nat).filter(k=>{const n=S.wm.nat[k
 
 // ---------- tent interiors: identical exterior, furnishings differ per household ----------
 const TINT={};const TOOLR={woodcutter:'axe',quarrier:'pick',coppermin:'pick',tinmin:'pick',hunter:'bow',gatherer:'basket',farmer:'sickle',fisher:'net',smith:'hammer',herder:'crook',soldier:'spear',builder:'hammer'};
+/* 3x3 family tent interior: drawTentInterior at 96px; bed/seat spots = art slots minus the 8px overhang; walk grid rebuilt for the 40px floor */
+function tentInt3(b,F){const W=96,[c,g]=mk(W*2,W*2);g.scale(2,2);g.save();g.translate(-8,-8);drawTentInterior(g,{beds:F.beds,seed:1+((b.x*7+b.y*13)%6)});g.restore();
+ const cx=48,cy=48,C=4,n=W/C,w=new Uint8Array(n*n),sp=[];for(let j=0;j<n;j++)for(let i=0;i<n;i++){const x=(i+.5)*C,y=(j+.5)*C,d=Math.hypot(x-cx,y-cy);w[j*n+i]=(d<35&&d>9)||(Math.abs(x-cx)<6&&y>cy+30&&y<W)?1:0}
+ tentBedSlots(F.beds).forEach(q=>sp.push({k:'bed',x:q.x-8,y:q.y-8,r:q.a}));TENT_SEAT_SLOTS.forEach(q=>sp.push({k:'seat',x:q.x-8,y:q.y-8}));c.m={R:1,spots:sp,_wg:{n,C,w}};return c}
 function tentOcc(b){return agents.filter(a=>a.home&&a.home.b===b)}
-function tentFurn(b){const occ=tentOcc(b),R=k=>hsh(b.x*3+k,b.y*5-k,77+k);const cap=3*(b.l||1);const beds=Math.max(1,Math.min(cap,occ.length||Math.round(1+R(1)*2)));
+function tentFurn(b){const occ=tentOcc(b),R=k=>hsh(b.x*3+k,b.y*5-k,77+k);const cap=bsz('tent')>=3?6:3*(b.l||1);const beds=Math.max(1,Math.min(cap,occ.length||Math.round(1+R(1)*2)));
  const tools=[...new Set(occ.map(a=>TOOLR[a.role]).filter(Boolean))];const jars=1+Math.floor(R(2)*4),rug=R(3)<.75,hearth=R(4)<.5?'center':'side',layout=['ring','pair','row'][Math.floor(R(5)*3)];
  return{beds,tools,jars,rug,hearth,layout,rugC:[['#8a2a2a','#d8b060'],['#2a4a7a','#e8dcc0'],['#6a3a1a','#c8783a'],['#3a5a2a','#d8c890']][Math.floor(R(6)*4)],key:beds+'|'+tools.join(',')+'|'+(b.l||1)}}
-function tentIntSpr(b){const F=tentFurn(b),k=b.x+','+b.y+'|'+F.key;if(TINT[k])return TINT[k];const s=bsz('tent'),W=s*TS*2,[c,g]=mk(W,W);g.scale(2,2);const r=s*TS*.46,cx=s*TS/2,cy=s*TS/2,R=q=>hsh(b.x*7+q,b.y*11+q,91);
+function tentIntSpr(b){const F=tentFurn(b),k=b.x+','+b.y+'|'+F.key;if(TINT[k])return TINT[k];if(bsz('tent')===3)return TINT[k]=tentInt3(b,F);const s=bsz('tent'),W=s*TS*2,[c,g]=mk(W,W);g.scale(2,2);const r=s*TS*.46,cx=s*TS/2,cy=s*TS/2,R=q=>hsh(b.x*7+q,b.y*11+q,91);
  g.save();g.beginPath();g.arc(cx,cy,r,0,6.29);g.clip();g.fillStyle='#9a7a54';g.fillRect(0,0,W,W);for(let i=0;i<40;i++){g.fillStyle='rgba(60,40,20,'+(.05+R(i)*.08)+')';g.beginPath();g.arc(R(i+100)*s*TS,R(i+200)*s*TS,1+R(i+300)*3,0,6.3);g.fill()}
  // hide floor + rug
  g.fillStyle='rgba(200,170,120,.35)';g.beginPath();g.ellipse(cx,cy,r*.8,r*.7,0,0,6.3);g.fill();
@@ -4792,7 +4937,7 @@ function devPanel(){let P=$('devp');if(!DEVO.on){if(P)P.style.display='none';ret
  add('Log farm report',()=>{for(const r of devFarmRep())log('Dev: '+r.fam+' ('+r.n+'): '+r.plots+' plots, '+r.sown+' sown, harvest '+r.harvest+', food '+r.food+' days'+(r.hard?' · HARD TIMES':''))});
  hd('Economy & time');
  const spawnWS=c0=>{const E=S.eco;if(!E)return;const t=WS_CR[c0];let L=cqLot('cq',t)||devLot(t);if(!L){log('Dev: no room for a '+BLD[t].n);return}
-  const id=++E.sid;S.bl.push({t,l:1,x:L.X,y:L.Y,cr:id});E.cr.push({id,c:c0,n:2,sk:3,ag:60,stk:0,x:L.X,y:L.Y,hun:0,ref:0,from:null,gr:0,dev:1});S.pop+=2;rebuildOcc();E._wc=1;try{famSync()}catch(e){}log('Dev: spawned a '+CRAFT[c0].n.toLowerCase()+' household at '+L.X+','+L.Y)};
+  const id=++E.sid;S.bl.push({t,l:1,x:L.X,y:L.Y,cr:id});/* dev spawn: same rule as a real split, 2 members leave the largest farm family */const P0=E.steads.filter(s=>!s.camp&&s.n>=3).sort((a,b)=>b.n-a.n)[0];let ag0=0,gr0=0;if(P0){const k=2/P0.n;ag0=(P0.sv||0)*k;P0.sv-=ag0;gr0=crShare(P0,k)}E.cr.push({id,c:c0,n:2,sk:3,ag:ag0,stk:0,x:L.X,y:L.Y,hun:0,ref:0,from:P0?P0.id:null,gr:gr0,dev:1});if(P0)log('Dev: the '+c0+' household took 2/'+P0.n+' of a farm family: '+Math.round(ag0)+' silver, '+gr0+' wheat-equiv.');S.pop+=2;rebuildOcc();E._wc=1;try{famSync()}catch(e){}log('Dev: spawned a '+CRAFT[c0].n.toLowerCase()+' household at '+L.X+','+L.Y)};
  add('Spawn a baker household',()=>spawnWS('baker'));
  add('Spawn a brewer household',()=>spawnWS('brewer'));
  add('Force baker + brewer petitions',()=>{const E=S.eco;if(!E||!E.steads.length)return;for(const c0 of ['baker','brewer']){const s=E.steads.slice().sort((a,b)=>b.n-a.n)[0];const F=famOf(s);const m=F&&F.m.find(m=>m.r!=='head'&&m.a>=16&&m.a<=55);if(!m){log('Dev: no adult to petition');continue}m.adv=m.adv||{};m.adv[c0]=Math.max(m.adv[c0]||0,40);s.n=Math.max(s.n,4);s.sv=Math.max(s.sv||0,30);(E.rp=E.rp||[]).push({c:c0,s:s.id,m:m.i,yr:E.yr})}log('Dev: petitions added (Administration › Petitions)')});
