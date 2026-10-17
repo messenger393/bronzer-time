@@ -811,7 +811,9 @@ function plYieldTxt(s){let exp=0;if(s.pl)for(const i in s.pl)for(let k=0;k<PL_N;
 
 /* item 2: the bakery is real pawn work. A baker walks grain in from the Stockyard (two 600-grain sacks on a yoke), kneads (3 work spells), loads the oven and tends it, takes out 600 loaves (from 1,200 grain), and carries bread out (up to 600 loaves) to sell to the Stockyard, or to the market stall when the crown cannot pay */
 const BK_G=1200,BK_L=600,BK_T=30,BK_CAR=600;
-function bkOven(b){const s=bsz(b.t);return{x:b.x+s+.35,y:b.y+s-.9}}
+const BKOV=new WeakMap();function bkOven(b){const s=bsz(b.t),k=S.bl.length+':'+(occ&&occ.length);const cc=BKOV.get(b);if(cc&&cc.k===k)return cc.o;/* the outdoor oven sits by the bakery's east wall; if a neighbour (e.g. the Stockyard) covers that spot, it goes on the nearest free side the bakers can walk to from the door */
+ const d=doorOf(b),C=[[s+.35,s-.9],[d.x-b.x+1.15,d.y-b.y-.75],[d.x-b.x-.85,d.y-b.y-.75],[s/2+.15,s+.1],[-.65,s-.9],[s/2+.15,-1.6],[s+.35,.1]];let o=null,bl=1e9;for(let n=0;n<C.length;n++){const x=b.x+C[n][0],y=b.y+C[n][1],X=(x-.15)|0,Y=(y+.75)|0;if(!walkC(X,Y)||occ[Y*MW+X]===S.bl.indexOf(b)+1)continue;const r=pathTo({x:d.x,y:d.y},{x:x-.15,y:y+.75});let L=0,px=d.x,py=d.y;for(const q of r){L+=Math.hypot(q.x-px,q.y-py);px=q.x;py=q.y}if(!r.length)L=Math.hypot(d.x-x,d.y-y)<1.5?0:1e9;if(n===0&&L<=8){o={x,y};break}if(L<bl){bl=L;o={x,y}}}
+ if(!o)o={x:b.x+s+.35,y:b.y+s-.9};BKOV.set(b,{k,o});return o}
 function bkSell(c,n){/* barter loop: only the tithe goes to the Stockyard, unpaid */const E=S.eco;E.hold.bread=(E.hold.bread||0)+n;c.toY=(c.toY||0)+n;c.tOwe=Math.max(0,(c.tOwe||0)-n);E.led.titB=(E.led.titB||0)+n}
 function bkThink(a,c,b,hm){const E=S.eco,j=a.bj,ov=bkOven(b),stand={x:ov.x-.15,y:ov.y+.75};
  if(j){if(j.k==='sell'){if(a.route.length){a.carry='sack';a.t=1;return true}bkSell(c,j.n);a.carry=null;a.bj=null;a.state='idle';a.t=.8;return true}
