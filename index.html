@@ -1623,7 +1623,7 @@ function ghBooked(k,a){const o=CAMPT.get(k);if(!o||o===a.key)return false;const 
 /* stand beside the bush (west/east first so the picker is seen side-on, then south, north) */
 function ghStand(n){for(const[dx,dy]of[[-1,0],[1,0],[0,1],[0,-1]]){const x=n.x+dx,y=n.y+dy;if(walkC(x,y)&&!occ[y*MW+x])return{x:n.x+.5+dx*.62,y:n.y+.62+dy*.55}}return null}
 function ghRipe(k){return rnAmt(k)>1&&!(S.rn.bg&&S.rn.bg[k])}
-function ghBush(a,s,cx,cy){const Z=s.wz;let best=null,bd=1e9;for(const n of RN.list.b||[]){if(Z&&(n.x<Z[0]||n.x>Z[2]||n.y<Z[1]||n.y>Z[3]))continue;if(occ[n.y*MW+n.x]||!ghRipe(n.k))continue;const d=Math.hypot(n.x+.5-cx,n.y+.5-cy);if(d>=bd||ghBooked(n.k,a))continue;const st=ghStand(n);if(!st)continue;best={n,st};bd=d}return best}
+function ghBush(a,s,cx,cy){const Z=s.wz;if((a.bk||0)>=1){cx=a.x;cy=a.y}/* basket partly full: nearest ripe bush from where the picker stands; the first pick of a trip is closest to the hut */let best=null,bd=1e9;for(const n of RN.list.b||[]){if(Z&&(n.x<Z[0]||n.x>Z[2]||n.y<Z[1]||n.y>Z[3]))continue;if(occ[n.y*MW+n.x]||!ghRipe(n.k))continue;const d=Math.hypot(n.x+.5-cx,n.y+.5-cy);if(d>=bd||ghBooked(n.k,a))continue;const st=ghStand(n);if(!st)continue;best={n,st};bd=d}return best}
 function ghDeposit(a,s){const u=Math.min(a.bk||0,Math.max(0,GH_STORE-(s.st.berries||0)));if(u<=0)return 0;a.bk-=u;s.st.berries=(s.st.berries||0)+u;s.cpdG=s.cpdG||{};s.cpdG.berries=(s.cpdG.berries||0)+u;s.prod=(s.prod||0)+u*EIT.berries.v;berLed().g+=u;s.berY=(s.berY||0)+u;return u}
 function gatherThink(a,s,b,cx,cy){const ST=doorOf(b),j=a.gj;/* the hut store is by the door */a.bk=a.bk||0;
  if(a.route.length){a.t=.5;return}
