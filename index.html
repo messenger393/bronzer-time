@@ -735,12 +735,13 @@ function plFindShf(a,s){let best=null,bd=1e9;for(const q of plGrp(s))for(const i
 function plFindSow(a,s){if(!sowSeason()||(s.st.grain||0)<PL_SEED*PL_N)return null;let best=null,bd=1e9;for(const q of plGrp(s))for(const i of q.f){if(q.pl[i]||plTaken('s'+i,a))continue;const d=Math.hypot(i%MW+FB/2-a.x,(i/MW|0)+FB/2-a.y);if(d<bd){bd=d;best={q:q.id,i}}}return best}
 const plQ=id=>S.eco.steads.find(q=>q.id===id);
 function plDoor(s,a){const b=steadBld(s);const d=b?doorOf(b):null;return d?{x:d.x+.5,y:d.y+.5}:a.home}
-function plCarry(a,s){a.fj={k:'car'};a.carry='sack';const p=plSpot(s);go(a,p?{x:p.x,y:p.y+.3}:plDoor(s,a),'carry');a.t=1}
+const plPLen=(a,t)=>{const r=pathTo(a,t);if(!r.length)return 1e9;let L=0,x=a.x,y=a.y;for(const q of r){L+=Math.hypot(q.x-x,q.y-y);x=q.x;y=q.y}return L};
+function plCarry(a,s){a.fj={k:'car'};a.carry='sack';const p=plSpot(s),dr=plDoor(s,a);/* Weston item 5: when home is about as close as the stockpile, the sack goes straight home (no second haul) */if(p&&dr){const hp=plPLen(a,dr),sp=plPLen(a,{x:p.x,y:p.y+.3});if(hp<1e9&&hp<=sp*1.25)a.fj.hm=1}go(a,a.fj.hm||!p?dr:{x:p.x,y:p.y+.3},'carry');a.t=1}
 /* the sheaves reach the farmhouse store: THIS is the harvest */
 function plDeposit(a,s){const g=a.fc||0;a.fc=0;a.carry=null;if(g<=0)return;const E=S.eco;s.st.grain=(s.st.grain||0)+g;if(s.hard)s.hprod=(s.hprod||0)+g*EIT.grain.v;else s.prod=(s.prod||0)+g*EIT.grain.v;s.hvY=(s.hvY||0)+g;s.hvT=(s.hvT||0)+g;E.led.harvest=(E.led.harvest||0)+g}
 function plThink(a,s){const j=a.fj;
  if(j){const q=j.q!=null?plQ(j.q):null;
-  if(j.k==='car'){if(a.route.length){a.carry='sack';a.t=1;return true}{const d=plSpot(s)||plDoor(s,a);if(Math.hypot(a.x-d.x,a.y-d.y)>2.5&&!j.tr){j.tr=1;go(a,{x:d.x,y:d.y+.3},'carry');a.t=1;return true}}plDrop(a,s);a.fj=null;a.state='idle';a.t=.8;return true}
+  if(j.k==='car'){if(a.route.length){a.carry='sack';a.t=1;return true}if(j.hm){const d=plDoor(s,a);if(Math.hypot(a.x-d.x,a.y-d.y)>2.5&&!j.tr){j.tr=1;go(a,d,'carry');a.t=1;return true}plDeposit(a,s);a.fj=null;a.state='idle';a.t=.8;return true}{const d=plSpot(s)||plDoor(s,a);if(Math.hypot(a.x-d.x,a.y-d.y)>2.5&&!j.tr){j.tr=1;go(a,{x:d.x,y:d.y+.3},'carry');a.t=1;return true}}plDrop(a,s);a.fj=null;a.state='idle';a.t=.8;return true}
   if(j.k==='haul'){if(a.route.length){a.t=1;if(j.ph==='home'){a.carry='sack'}return true}if(j.ph==='go'){const p=plSpot(s);const u=p?Math.min(p.g,plHaulCap(s)):0;if(p)p.g-=u;FARMP.delete('hp'+s.id);a.hl=u;if(u<=0){a.fj=null;a.t=.3;return true}j.ph='home';a.carry='sack';if(s.hc)a.cartK=s.hcL||0;go(a,plDoor(s,a),'carry');a.t=1;return true}s.st.grain=(s.st.grain||0)+(a.hl||0);s.hauled=(s.hauled||0)+(a.hl||0);a.hl=0;a.carry=null;a.cartK=null;a.fj=null;a.state='idle';a.t=.8;return true}
   if(j.k==='cut'){const r=q&&q.pl&&q.pl[j.i],key='p'+j.i+':'+j.n2;if(!r||((r.h>>j.n2)&1)){FARMP.delete(key);a.fj=null;a.t=.2;return true}
    if(j.ph==='go'){if(a.route.length){a.t=1;return true}if(Math.hypot(a.x-j.p.x+.4,a.y-j.p.y-.25)>1.5){go(a,{x:j.p.x-.4,y:j.p.y+.25},'fgo');a.t=1;j.tr=(j.tr||0)+1;if(j.tr>3){FARMP.delete(key);a.fj=null}return true}j.ph='cut';j.n=0}
