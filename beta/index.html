@@ -717,7 +717,7 @@ function farmStep(s,kr){plMig(s);const b=farmB(s);if(!b)return;const w=steadWork
   else if(s.ph===2&&s.f.length>=FST[2].fld&&(s.n>=6||s.sv>=40||S.t-s.t0>yearLen()*1.5))farmStageUp(s,b)}}
 
 /* G1: per-plant wheat. A sown plot holds 16 real plants; grain only exists once a pawn cuts a plant (2 sickle swings) and carries it (up to 600 a trip) to the farmhouse */
-const PL_N=16,PL_G=300,PL_T=8,PL_SEED=30,PL_CAR=600,PL_SW=2,PL_OVER=3,PL_EARLY=.9,FARMP=new Map();
+const PL_N=16,PL_G=300,PL_T=8,PL_SEED=30,PL_CAR=600,PL_SW=2,PL_OVER=6,PL_EARLY=.9,FARMP=new Map();
 function plLand(s){const L=LAND[s.land];return L&&L.out.grain||.4}
 function plT(i,r,k){return PL_T*DAYLEN*(.85+.3*hsh(i,k,r.c))}
 function plYb(s,i,r,k){return PL_G*plLand(s)*(.8+.4*hsh(i,k+16,r.c))}
@@ -3090,7 +3090,7 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
   const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);if(d>.03){c.x+=dx/d*.4*dt;c.y+=dy/d*.4*dt;c.dir=dx>0?1:-1}if(z<.5||!inV(c.x*TS,c.y*TS))return;D.push({k:c.y*TS,f:()=>critDraw(c,now)})});
  if(!S.rn||!S.herds)rnInit();rnBuild();rnHerdStep(dt);if(z>=.5)rnHerdDraw(D,dt,now,inV);
  const sickP=evOn('plague');
- for(const a of agents){if(a.dnc&&!a.route.length)try{danceStep(a,dt)}catch(e){a.dnc=null}if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?(SCLA?RSPD_A[rl]:RSPD[rl])*Math.max(.35,congF(ri)):1,sp=(SCLA?WALK_A*(a.role==='kid'||(a.o&&a.o.age==='old')?.8:1)*(a.carry?.6:1):(a.role==='kid'?1.4:a.carry?.75:1))*(a.sick?.6:1)*rd*dt;
+ for(const a of agents){if(a.dnc&&!a.route.length)try{danceStep(a,dt)}catch(e){a.dnc=null}if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?(SCLA?RSPD_A[rl]:RSPD[rl])*Math.max(.35,congF(ri)):1,sp=(SCLA?WALK_A*(a.role==='kid'||(a.o&&a.o.age==='old')?.8:1)/* Weston: carrying never slows anyone down */:(a.role==='kid'?1.4:1))*(a.sick?.6:1)*rd*dt;
    if(rl)TR[ri]+=dt*(a.carry&&S.tier>=2?2:1);if(!rl||(rl===1&&WORN&&WORN[ri]))wearStep(ri,dt);if(d>.01)a.dir=dirOf(dx,dy);a.ft+=dt*(a.role==='kid'?10:7);if(d<=sp){a.x=p.x;a.y=p.y;a.route.shift();if(!a.route.length){if(a.state==='towork'){a.state='work';a.t=3+Math.random()*4}else if(a.state==='home')a.t=3}}else{a.x+=dx/d*sp;a.y+=dy/d*sp}}
   else{a.t-=dt;if(a.t<=0){// job/path decisions are spread over frames: at most ~2 ms of thinking per frame (min 3 pawns), the rest wait a frame
  const TB=think.fb!==vframe.t0?(think.fb=vframe.t0,think.n=0,think.dl=performance.now()+2):0;if(think.n<3||performance.now()<think.dl){think.n++;think(a)}}}a.sick=!!sickP&&a.idx%3===0&&a.role!=='soldier';if(a.state==='home'&&!a.route.length&&!a.inB)continue;if(z<.5)continue;let p=isoP(a.x,a.y);if(!inV(p.x,p.y))continue;const mv=a.route.length>0||!!a.dnc;const ip=a.inB&&!mv&&a.inB.t!=='tent'?intPos(a,dt):null;if(ip)p=ip.p;D.push({k:a.inB&&!mv?(a.inB.y+bsz(a.inB.t))*TS:p.y,f:()=>ip?intDraw(a,p,ip,now):drawAgent(a,p,mv,now)})}
