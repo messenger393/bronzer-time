@@ -89,6 +89,188 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <div id="toast"></div><div id="tip"></div><div id="log" hidden></div>
 <div id="modal"><div class="panel glass" id="mbody"></div></div>
 
+<script>/* DEER + BOAR art (art-studio/animals/animals.js, embedded; game: ANI_SPR_SC 4, die frames 11..18, pose in the cache key) */
+/* Bronze and Blood: DEER (Persian fallow, Dama mesopotamica) and WILD BOAR (Sus scrofa) v1, by Ningal.
+ * Style: the procession ONAGER v2 (onager.js): overlapping shaded spheres with a dark outline (PWN.OL), vertical 3-stop gradient
+ * (top / mid / pale belly), tapered two-pass limbs solved by IK (knee forward, hock back), hoof ovals, 3/4 projection
+ * (ground depth x0.62, heights x1), ground shadow along the heading. Art only, self-contained (falls back if game globals are absent).
+ *
+ * SCALE (world px; pawn 24x32 x PSC .72 = ~17x23 px = 1.7 m -> ~13.5 px/m):
+ *   deer  withers 11.5 px (0.85 m), head top ~15.5 px (pawn shoulder), stag antler tips ~22 px; nose-tail ~16 px.
+ *   boar  withers  9.5 px (0.7 m, pawn waist), nose-tail ~16 px. Young (fawn/squeaker) opt.age='young' = x0.6.
+ *
+ * API
+ *   drawBeast(g, x, y, k, tx, ty, ph, opt)  k 'deer'|'boar'. (x,y) = ground point under the barrel centre (= critter c.x*TS,c.y*TS).
+ *       (tx,ty) unit heading (8-way capable; the game only uses E/W: tx=+-1,ty=0). ph = gait phase 0..1 (one full stride cycle).
+ *       opt {mode:'idle'|'walk'|'run'|'graze'|'die'|'dead'|'carry', u: die progress 0..1, sex:'m'|'f', age:'adult'|'young', t: ms (ear/tail idle)}
+ *       returns {head:[x,y], back:[x,y]} in canvas px.
+ *   aniSpr2(k, fr, opt)  DROP-IN for the game's aniSpr(k,fr): 48x36 box at 2x (96x72 canvas), origin (24,26) = feet/ground, side view EAST
+ *       (mirror for west exactly as now). Frames: 0..3 walk (0 also idle), 4 graze (also used for carry), 5..8 run/flee, 9 dead (lying on its side,
+ *       draw WITHOUT the vx.rotate(PI) huntCarcArt does now), 10 carry pose (limp, legs hanging). opt {sex, age}.
+ *   critDraw2(c, now)  DROP-IN for critDraw(c,now): same shadow/bob/mirroring; uses run frames when c.flee>0 (herd H.flee) or speed is high.
+ *   ANI2  palettes.  ANI_SPR_SC  sprite resolution (2 = game's current; 4 = crisp at zoom).
+ */
+(function(G){
+const K=.62;
+const OLf=()=>(typeof PWN!=='undefined'&&PWN.OL)||'#2a1a10';
+const PAL={
+ deer:{top:'#94582e',mid:'#ae703c',pale:'#ead8b4',leg:'#b08048',legD:'#7e5230',upD:'#8a5630',stripe:'#4e2e1a',hoof:'#2e2218',spot:'#f2e4c4',rump:'#f4ecdc',ant:'#d8c49a',antD:'#8a7454',nose:'#2a1a12',ear:'#c89a6a'},
+ boar:{top:'#2a221c',mid:'#463830',pale:'#665646',leg:'#3a2e26',legD:'#221a14',upD:'#2e241e',stripe:'#16100c',hoof:'#18120e',bristle:'#1a140f',tip:'#8a7a62',tusk:'#f2ead8',snout:'#6a4a42',ear:'#3a2e26',young1:'#9a7a52',young2:'#d8c08a'}};
+/* species rigs. BODY/NECK/HEAD [f,h,r(,s)]; GNECK/GHEAD = grazing (head down) */
+const RIG={
+ deer:{BODY:[[-4.7,8.7,2.4],[-3.5,8.4,2.75],[-1.8,8.1,2.9],[0,8.0,3.0],[1.8,8.1,3.05],[3.1,8.5,2.85],[3.9,9.3,2.2],[-3.6,8.4,2.3,.8],[-3.6,8.4,2.3,-.8],[2.4,8.3,2.5,.8],[2.4,8.3,2.5,-.8]],
+  NECK:[[4.4,10.1,1.75],[4.9,11.2,1.55],[5.3,12.3,1.4],[5.7,13.4,1.25]],HEAD:[[6.1,14.3,1.35],[6.9,14.0,1.2],[7.7,13.5,.95],[8.3,13.1,.72]],
+  GNECK:[[4.5,9.3,1.75],[5.2,7.9,1.5],[5.8,6.4,1.35],[6.3,5.0,1.2]],GHEAD:[[6.8,3.7,1.35],[7.3,2.7,1.2],[7.7,1.8,.95],[8.0,1.0,.72]],
+  LEGS:[['LH',-4.0,1.5,0,0],['LF',2.9,1.4,.25,1],['RH',-4.0,-1.5,.5,0],['RF',2.9,-1.4,.75,1]],
+  fr:{sh:[.8,7.7],a:2.0,b:2.75,c:2.3,w:[2.2,1.35,.8,.62,.6,.62]},bk:{hip:[.3,8.7],a:3.1,b:3.0,c:2.9,w:[3.2,2.1,1.0,.66,.6,.62]},stride:1.5,run:2.8,lift:1.6},
+ boar:{BODY:[[-5.0,6.5,2.6],[-3.7,6.6,3.0],[-1.9,6.9,3.3],[0,7.2,3.5],[1.8,7.5,3.75],[3.2,7.5,3.55],[4.1,7.2,3.1],[-3.6,6.6,2.6,1.0],[-3.6,6.6,2.6,-1.0],[2.0,7.2,3.1,1.1],[2.0,7.2,3.1,-1.1],[0,6.5,3.0,.9],[0,6.5,3.0,-.9]],
+  NECK:[[5.0,6.9,2.75]],HEAD:[[5.9,6.5,2.35],[6.9,5.9,2.0],[7.9,5.3,1.6],[8.8,4.8,1.25],[9.5,4.5,1.0]],
+  GNECK:[[5.0,6.2,2.75]],GHEAD:[[5.8,5.4,2.35],[6.6,4.3,2.0],[7.4,3.2,1.6],[8.1,2.3,1.25],[8.6,1.6,1.0]],
+  LEGS:[['LH',-4.1,1.7,0,0],['LF',3.3,1.8,.25,1],['RH',-4.1,-1.7,.5,0],['RF',3.3,-1.8,.75,1]],
+  fr:{sh:[.6,5.4],a:1.5,b:2.05,c:1.3,w:[2.8,1.7,1.0,.8,.75,.8]},bk:{hip:[.3,6.2],a:2.3,b:2.2,c:1.6,w:[3.4,2.3,1.1,.8,.75,.8]},stride:1.0,run:1.9,lift:1.1}};
+const lerp=(a,b,u)=>a+(b-a)*u,sm=u=>u*u*(3-2*u),cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+function hsn(i,s){const x=Math.sin(i*127.1+s*311.7)*43758.5453;return x-Math.floor(x)}
+
+/* GAITS (per cycle ph 0..1). off = footfall phase per leg, duty = stance fraction, A = half stride (px), lift = swing height (px).
+ *  walk: 4-beat lateral sequence LH .00 -> LF .25 -> RH .50 -> RF .75, duty .75 (3 feet down most of the time).
+ *  deer run: bound/rotary gallop: hinds land almost together, then fores; extended suspension (hind push-off -> fore landing) and
+ *            a longer gathered suspension (legs folded under the body) after the fores leave the ground.
+ *  boar run: short choppy trot-gallop: diagonal pairs, slightly split (LH+RF, then RH+LF), duty .45, low suspension.
+ *  Hooves are planted in WORLD space: during stance the body must advance GAIT_DIST px per cycle (2A/duty). Use it to sync the anim rate
+ *  to the critter's speed (frames/sec = speed_px_per_sec / GAIT_DIST * frames_per_cycle) so nothing slides. */
+const GAITS={
+ deer:{walk:{off:{LH:0,LF:.25,RH:.5,RF:.75},duty:.75,A:1.25,lift:1.2},run:{off:{LH:0,RH:.06,LF:.40,RF:.47},duty:.30,A:3.0,lift:2.2}},
+ boar:{walk:{off:{LH:0,LF:.25,RH:.5,RF:.75},duty:.75,A:.85,lift:.75},run:{off:{LH:0,RF:.07,RH:.5,LF:.57},duty:.45,A:1.45,lift:1.0}}};
+const GAIT_DIST=(k,m)=>{const q=GAITS[k][m];return 2*q.A/q.duty};
+function gaitFoot(q,f0,u,front){if(u<q.duty)return{f:f0+q.A-2*q.A*u/q.duty,h:0,down:1,flex:0};const v=(u-q.duty)/(1-q.duty),e=v*v*(3-2*v);
+ /* swing: fast lift early (fetlock folds), forward reach late, set down gently */const hh=q.lift*Math.pow(Math.sin(Math.PI*Math.min(1,v*1.1)),1.3)*(front?1:.85);return{f:f0-q.A+2*q.A*e,h:Math.max(0,hh),down:0,flex:Math.pow(Math.sin(Math.PI*v),.8)}}
+/* body vertical motion: walk = 2 small dips per cycle; run deer = high in suspensions, low at mid-stance; boar = choppy 2 bumps */
+function gaitBob(k,mode,ph){if(mode==='walk')return Math.cos(ph*4*Math.PI)*.18;if(k==='deer'){/* lowest mid hind stance (.15) and mid fore stance (.6) */return .55+Math.cos((ph-.15)*4*Math.PI)*.0+(-Math.exp(-Math.pow((ph-.17)/.1,2))-Math.exp(-Math.pow((ph-.62)/.1,2))+Math.exp(-Math.pow((ph-.88)/.08,2))*.6)*.9}
+ return Math.cos((ph-.25)*4*Math.PI)*.35}
+const DEATH_POSES=[{fs:.55,hs:-.5,bend:.9,head:0,us:1.1},{fs:.25,hs:-.85,bend:.8,head:1,us:.6},{fs:.8,hs:-.25,bend:.95,head:2,us:1.5}];
+function drawBeast(g,x,y,k,tx,ty,ph,opt){opt=opt||{};if((opt.mode==='die'||opt.mode==='dead')&&tx<0){/* lying poses: draw the east-facing pose mirrored, so the belly + legs always face the camera */g.save();g.translate(x,0);g.scale(-1,1);const r=drawBeast(g,0,y,k,-tx,ty,ph,opt);g.restore();return r}const R=RIG[k]||RIG.deer,C=PAL[k]||PAL.deer,OL=OLf(),mode=opt.mode||'idle',t=opt.t||0,young=opt.age==='young',stag=k==='deer'&&opt.sex!=='f'&&!young;
+ const mv=mode==='walk'||mode==='run',run=mode==='run';ph=((ph||0)%1+1)%1;const GQ=mv?GAITS[k][mode]:null;
+ /* ---- death timeline: 0-.15 hit stagger, .15-.45 front legs buckle (chest to ground), .3-.55 hinds sink, .45-.8 roll onto side,
+         .7-1 legs relax out, head drops and settles; dust at chest impact (~.42) and side impact (~.8) ---- */
+ const U=mode==='dead'?1:mode==='die'?cl(opt.u||0,0,1):0,DP=DEATH_POSES[(opt.pose|0)%3];
+ const stg=U>0&&U<.2?Math.sin(U/.2*Math.PI):0;
+ const bodyR=k==='deer'?3.0:3.5,bodyH=k==='deer'?8.1:7.1;
+ const lowerF=sm(cl((U-.15)/.3,0,1))*(bodyH-bodyR-.4),lowerH=sm(cl((U-.3)/.25,0,1))*(bodyH-bodyR-.2);
+ const rf=sm(cl((U-.45)/.35,0,1)),roll=rf*Math.PI/2,relax=sm(cl((U-.55)/.4,0,1)),settle=sm(cl((U-.7)/.3,0,1));
+ const carry=mode==='carry';
+ const gz=mode==='graze'||carry?1:U>0?sm(cl((U-.15)/.3,0,1))*.55*(1-settle*.4):0;
+ const bob=mv?gaitBob(k,mode,ph):0;
+ const pitch=run&&k==='deer'?(Math.exp(-Math.pow((ph-.36)/.06,2))*.10-Math.exp(-Math.pow((ph-.88)/.08,2))*.06):0;
+ const drop=f=>lowerH+(lowerF-lowerH)*cl((f+5)/10,0,1);
+ const piv=k==='deer'?2.9:3.4,cr=Math.cos(roll),sr=-Math.sin(roll),shiftS=rf*(bodyH-lowerH+piv-bodyR);
+ const sg=1;/* lying pose always rolls so the belly + legs face the camera */
+ const P=(f,s,h,body,clamp)=>{let F=f,S=U>0?s*sg:s,H=h;if(body){H=h+f*pitch+bob-drop(f);F-=stg*.7;S+=stg*.5*(1-rf)}
+  if(roll){const s2=piv+(S-piv)*cr-H*sr,h2=(S-piv)*sr+H*cr;S=s2-shiftS;H=h2}if(clamp&&U>0)H=Math.max(clamp,H);
+  if(carry){H-=Math.abs(F)*.15}
+  const wx=tx*F+ty*S,wy=ty*F-tx*S;return[x+wx,y+wy*K-H,wy]};
+ if(young){g.save();g.translate(x,y);g.scale(.6,.6);g.translate(-x,-y)}
+ /* head nod: walk nods twice per cycle (head lowest as each fore hoof bears weight); run nods with the stride; stagger jerks the head up */
+ const nod=mode==='walk'?-Math.cos((ph-.33)*4*Math.PI)*.4:run?(k==='deer'?Math.sin((ph-.1)*2*Math.PI)*.7:Math.cos(ph*4*Math.PI)*.3):Math.sin(t/900)*.12-stg*1.2;
+ const blend=(A,B)=>A.map((a,i)=>{const b=B[i];return[lerp(a[0],b[0],gz),lerp(a[1],b[1],gz),a[2],a[3]||0]});
+ const NK=blend(R.NECK,R.GNECK),HD=blend(R.HEAD,R.GHEAD);
+ /* dead head: the neck curls toward the ground side so the head lies ON the ground (s toward the far/ground side), never hanging in the air */
+ const headS=f=>f>4.3?settle*((f-4.3)/4)*(DP.head===1?3.4:2.6)+rf*((f-4.3)/4)*1.2:0,headF=f=>f>4.3&&DP.head===1?-settle*(f-4.3)*.35:0;
+ const sph=L=>L.map(([f,h,r,s])=>{const n=f>4.3?(f-4.3)/5*nod:0;const q=P(f+headF(f),(s||0)+headS(f)*sg,h+n,1,f>4.3?r*.9:0);return{x:q[0],y:q[1],d:q[2],r,f,h}});
+ const B=sph(R.BODY),N=sph(NK),H=sph(HD);
+ const cols=young&&k==='deer'?[C.mid,'#b87a46',C.pale]:young?[C.young1,C.young2,C.young2]:[C.top,C.mid,C.pale];
+ function union(S,cl3){g.fillStyle=OL;S.forEach(c=>{g.beginPath();g.arc(c.x,c.y,c.r+.65,0,6.283);g.fill()});
+  S.slice().sort((a,b)=>a.d-b.d).forEach(c=>{let gr;if(roll>.7){gr=g.createLinearGradient(c.x,c.y-c.r,c.x+c.r*.4,c.y+c.r)}else gr=g.createLinearGradient(0,c.y-c.r,0,c.y+c.r);gr.addColorStop(0,cl3[0]);gr.addColorStop(.5,cl3[1]);gr.addColorStop(.85,cl3[2]);gr.addColorStop(1,cl3[2]);g.fillStyle=gr;g.beginPath();g.arc(c.x,c.y,c.r,0,6.283);g.fill()})}
+ function cap(pts,ws,col,skip0){g.lineCap='round';g.lineJoin='round';for(let pass=0;pass<2;pass++)for(let i=0;i<pts.length-1;i++){if(skip0&&!pass&&i===0)continue;const w=(ws[i]+ws[i+1])/2;g.strokeStyle=pass?(Array.isArray(col)?col[i]:col):OL;g.lineWidth=pass?w:w+1.3;g.beginPath();g.moveTo(pts[i][0],pts[i][1]);g.lineTo(pts[i+1][0],pts[i+1][1]);g.stroke()}}
+ /* 2-bone IK; sg +1 = joint FORWARD of the line (front carpus), -1 = joint BACKWARD (hind hock). If out of reach the joint is solved at
+    full extension and the hoof is still drawn on its planted target (a sub-pixel stretch instead of a pop/slide). */
+ function ik(T,Hf,a,b,sg){let dx=Hf[0]-T[0],dy=Hf[1]-T[1],d=Math.hypot(dx,dy);const dd=Math.min(d,a+b-.02),ca=cl((a*a+dd*dd-b*b)/(2*a*Math.max(dd,.01)),-1,1),al=Math.acos(ca),ang=Math.atan2(dy,dx)+sg*al;return[T[0]+Math.cos(ang)*a,T[1]+Math.sin(ang)*a]}
+ const depth=(f,s)=>P(f,s,6,1)[2],cD=depth(0,0);const FEET=[];
+ /* LEG ANATOMY (side view, facing +f):
+    hind : hip -> stifle (DOWN + FORWARD, near the belly) -> hock (DOWN + BACK; the backward-pointing "heel", ~40% leg height)
+           -> cannon (near vertical) -> fetlock -> short pastern -> hoof.   Lifting flexes the hock: hoof tucks UP and BACK.
+    front: shoulder -> elbow (tight to the chest, BEHIND the shoulder) -> forearm -> knee/carpus -> cannon -> fetlock -> hoof.
+           Lifting flexes the knee: the cannon folds BACK under the forearm.
+    Solve: the cannon angle phi is set from the gait (flex) / death fold, fetlock above the hoof, the cannon gives the hock/knee, and a
+    2-bone IK from hip/shoulder to that joint places the stifle FORWARD (sg +1) or the elbow BACKWARD (sg -1).
+    All in the animal's local (f,h) frame, so the bend directions are the same in all 8 facings, mirrored west, run, death and dead. */
+ const JN=[];
+ function leg(L,far){const[nm,f0,s,po,fr]=L,S=fr?R.fr:R.bk,top=fr?S.sh:S.hip;let hf,hh,down=1,flex=0;
+  if(mv){const ft=gaitFoot(GQ,f0,((ph-GQ.off[nm])%1+1)%1,fr);hf=ft.f;hh=ft.h;down=ft.down;flex=ft.flex}else{hf=f0+(fr?.3:-.2);hh=0}
+  let sL=s;
+  const TOPp=[f0+top[0],top[1]+(f0+top[0])*pitch+bob-drop(f0)-rf*1.8];
+  /* death: front knees fold as the chest drops, hocks fold as the hindquarters sink; relaxed and nearly straight once lying */
+  const fold=U>0?(fr?lowerF/(bodyH-bodyR-.4):lowerH/(bodyH-bodyR-.2))*(1-relax):0;
+  if(U>0){const len=S.a+S.b+S.c+.5,sp=(fr?DP.fs:DP.hs)+(s>0?0:(fr?.25:-.2))*DP.us,L2=len*DP.bend*(k==='boar'?1.1:1);
+   const ground=s*sg>0;const ex=[TOPp[0]+Math.sin(sp)*L2,TOPp[1]-Math.cos(sp)*L2];hf=lerp(hf,ex[0],relax);hh=lerp(hh,ex[1],relax);sL=lerp(s,sg*(ground?piv-.2:piv-1.3),relax)}
+  let phi=fr?(.03+flex*(run?1.5:1.25)+fold*1.5):(-.24+flex*(run?1.35:1.15)+fold*1.15);
+  if(carry){hh=TOPp[1]-(S.a+S.b+S.c)-.4;phi=fr?.35:.2;hf=f0}
+  if(U>0)phi+=relax*(fr?.2:.15);
+  const Hf=[hf,hh],fet=[hf-(fr?.3:.32),hh+.6];let J2=[fet[0]+S.c*Math.sin(phi),fet[1]+S.c*Math.cos(phi)];
+  /* if the hock/knee is out of reach of hip/shoulder, slide the whole lower leg toward it (keeps joint directions, no flip) */
+  {const dx=J2[0]-TOPp[0],dy=J2[1]-TOPp[1],d=Math.hypot(dx,dy),m=S.a+S.b-.05;if(d>m){const k2=(d-m)/d;J2=[J2[0]-dx*k2,J2[1]-dy*k2];fet[0]-=dx*k2;fet[1]-=dy*k2;Hf[0]-=dx*k2*(mv&&down?0:1);Hf[1]-=dy*k2*(mv&&down?0:1)}}
+  const J1=ik(TOPp,J2,S.a,S.b,fr?-1:1);
+  const hz=[Hf[0]+.3,Math.max(0,Hf[1])];
+  const pts=[TOPp,J1,J2,fet,Hf,hz],ws=S.w;
+  const up=far?C.upD:C.mid,dk=far?C.legD:C.leg;
+  const sp=pts.map(([f,h],i)=>{const ss=i===0?lerp(s,s*.3,rf):i===1?lerp(s,(s+sL)/2,rf):sL;const q=P(f,ss,h,0,i>1?.3:0);return[q[0],q[1]]});
+  cap(sp,ws,young&&k==='boar'?[C.young1,C.young1,'#6a5236','#6a5236','#6a5236']:[up,up,dk,dk,dk],!far);
+  const hp=sp[5];g.fillStyle=OL;g.beginPath();g.ellipse(hp[0],hp[1]-.15,k==='deer'?.85:1.0,.65,0,0,6.283);g.fill();g.fillStyle=C.hoof;g.beginPath();g.ellipse(hp[0],hp[1]-.25,.5,.36,0,0,6.283);g.fill();
+  JN.push({nm,fr,far,pts:sp});
+  FEET.push({nm,x:hp[0],y:hp[1],down:mv?down:1})}
+ /* ground shadow under the barrel (follows the roll) */{const c=P(0,0,0,1);const bc=[c[0],y+(c[2]-0)*0+(c[1]-y+ (bodyH-lowerH+bob)*1)*0];let vx_=tx,vy_=ty*K;const m=Math.hypot(vx_,vy_)||1,a=Math.atan2(vy_,vx_);
+  const gx=roll?P(0,0,0,1)[0]:x+vx_*.4,gy=roll?(()=>{const q=P(0,piv,0,0);return y+(q[1]-y)})():y+vy_*.4;g.fillStyle='rgba(20,14,8,'+(.25-(mv&&bob>.6?.06:0))+')';g.beginPath();g.ellipse(gx,gy,Math.max(3.4,(k==='deer'?7.5:8)*m),3.2+rf*.8,a,0,6.283);g.fill()}
+ let legs=R.LEGS.map(L=>({L,d:depth(L[1],L[2])}));let far=legs.filter(o=>o.d<cD-.01),near=legs.filter(o=>o.d>=cD-.01);
+ if(rf>.5){/* lying: legs splay toward one side of the body; ground-side legs first, the upper pair on top of them */const ld=P(0,piv-1,-1.5,0)[2],bd=P(0,0,bodyH,1)[2];legs.sort((a,b)=>(b.L[2]*sg>0)-(a.L[2]*sg>0));if(ld>bd){far=[];near=legs}else{far=legs.slice().reverse();near=[]}}
+ const headNear=depth(8,0)>cD+.01,tailFar=depth(-6,0)<cD;
+ const h0=HD[0],hN=HD[HD.length-1],ha0=Math.atan2(R.HEAD[R.HEAD.length-1][1]-R.HEAD[0][1],R.HEAD[R.HEAD.length-1][0]-R.HEAD[0][0]),ha=Math.atan2(hN[1]-h0[1],hN[0]-h0[0]),da=ha-ha0,cd=Math.cos(da),sd=Math.sin(da);
+ const HP=(df,s,dh,cl0)=>{const f=h0[0]+df*cd-dh*sd,h=h0[1]+df*sd+dh*cd,n=f>4.3?(f-4.3)/5*nod:0;const q=P(f+headF(f),s+headS(f)*sg,h+n,1,cl0==null?.25:cl0);return[q[0],q[1]]};
+ function tail(){if(k==='deer'){const r=P(-6.4,0,9.6,1),e=P(-6.9,0,7.6,1);/* white rump patch edged black, short black-striped tail */const sw=Math.sin(t/300)*.3;
+   g.fillStyle=OL;g.beginPath();g.ellipse(r[0]-tx*.2,r[1]+1,1.8,2.0,0,0,6.283);g.fill();g.fillStyle=C.rump;g.beginPath();g.ellipse(r[0]-tx*.2,r[1]+1,1.3,1.5,0,0,6.283);g.fill();
+   cap([[r[0],r[1]],[e[0]+sw,e[1]]],[1.0,.8],C.rump);g.strokeStyle=C.stripe;g.lineWidth=.45;g.beginPath();g.moveTo(r[0],r[1]);g.lineTo(e[0]+sw,e[1]);g.stroke()}
+  else{const sw=Math.sin(t/260)*.6+(mv?Math.sin(ph*6.28)*.5:0);const r=P(-7.2,0,7.6,1),m=P(-7.9,sw*.5,6.4,1),e=P(-8.0,sw,5.0,1);cap([[r[0],r[1]],[m[0],m[1]],[e[0],e[1]]],[.6,.5,.45],C.mid);g.strokeStyle=C.bristle;g.lineWidth=1;g.lineCap='round';g.beginPath();g.moveTo(e[0],e[1]);g.lineTo(e[0]+.3,e[1]+1.1);g.stroke()}}
+ function ears(){if(k==='deer'){for(const s of[.9,-.9]){const a=HP(-.3,s,.9),b=HP(-1.4,s*2.2,2.0);cap([a,b],[1.3,.9],C.ear);g.fillStyle='rgba(250,235,215,.7)';g.beginPath();g.arc((a[0]+b[0])/2,(a[1]+b[1])/2,.35,0,6.283);g.fill()}}
+  else{for(const s of[1.0,-1.0]){const a=HP(-.5,s,1.6),b=HP(-.9,s*1.4,3.2);cap([a,b],[1.1,.5],young?C.young1:C.ear)}}}
+ function antlers(){if(!stag)return;const ar=settle*1.15+rf*.35,AP=(df,s,dh)=>HP(df*Math.cos(ar)-dh*Math.sin(ar),s,df*Math.sin(ar)+dh*Math.cos(ar));g.lineCap='round';for(const s of[.7,-.7]){/* beam up-back, brow tine forward, flat palm with points on the back edge */const b0=AP(-.2,s,1.1),b1=AP(-.5,s*1.6,3.4),b2=AP(-.9,s*2.3,5.6),bt=AP(.9,s*1.3,3.0);
+   const p=[AP(-.7,s*2.1,5.0),AP(-2.0,s*3.2,6.9),AP(-1.4,s*3.1,8.0),AP(-.3,s*2.6,7.4)];
+   cap([b0,b1,b2],[.8,.7,.6],C.ant);cap([b1,bt],[.55,.4],C.ant);
+   g.fillStyle=OL;g.beginPath();p.forEach((q,i)=>i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1]));g.closePath();g.lineWidth=1.1;g.strokeStyle=OL;g.stroke();g.fillStyle=C.ant;g.fill();
+   for(let i=0;i<3;i++){const q0=[lerp(p[1][0],p[2][0],i/2.5),lerp(p[1][1],p[2][1],i/2.5)],q1=AP(-2.4+i*.3,s*(3.4+i*.05),7.2+i*.5);cap([q0,q1],[.4,.25],C.ant)}
+   g.strokeStyle=C.antD;g.lineWidth=.3;g.beginPath();g.moveTo(p[0][0],p[0][1]);g.lineTo((p[1][0]+p[2][0])/2,(p[1][1]+p[2][1])/2);g.stroke()}}
+ function head(){union(H,cols);const m=H[H.length-1];
+  if(k==='deer'){g.fillStyle=C.nose;g.beginPath();g.arc(m.x+tx*.4,m.y+.1,.38,0,6.283);g.fill();g.fillStyle='rgba(242,228,200,.8)';g.beginPath();g.arc(m.x,m.y+.45,.4,0,6.283);g.fill()}
+  else{/* snout disc + tusks curving up */const sn=HP(4.2,0,-.3);g.fillStyle=OL;g.beginPath();g.ellipse(sn[0],sn[1],Math.max(.55,Math.abs(tx)*.55+.45),1.0,0,0,6.283);g.fill();g.fillStyle=C.snout;g.beginPath();g.ellipse(sn[0],sn[1],Math.max(.3,Math.abs(tx)*.35+.3),.75,0,0,6.283);g.fill();
+   if(!young)for(const s of[.8,-.8]){if(depth(8,s)<cD-.4&&Math.abs(tx)>.4)continue;const a=HP(3.0,s*1.0,-1.0),b=HP(3.5,s*1.2,-.2),c=HP(3.2,s*1.1,.7);cap([a,b,c],[.75,.55,.3],C.tusk)}}
+  for(const s of[1,-1]){const es=k==='deer'?.95:1.2;if(depth(7,s)<cD-.4&&Math.abs(tx)>.3)continue;const e=HP(k==='deer'?.6:1.2,s*es,k==='deer'?.35:.6);g.fillStyle='#0e0a06';g.beginPath();g.arc(e[0],e[1],U>.8?.2:.38,0,6.283);g.fill();if(U<=.8){g.fillStyle='rgba(255,255,255,.7)';g.fillRect(e[0]-.22,e[1]-.28,.18,.18)}}}
+ /* draw order */
+ far.forEach(o=>leg(o.L,1));if(tailFar)tail();if(!headNear){antlers();ears();head()}
+ union(B.concat(N),cols);
+ /* coat detail */
+ if(k==='deer'){const pts=[[3.8,11.3],[2.0,11.15],[0,11.0],[-2,11.0],[-3.8,11.1],[-5.3,10.6]].map(([f,h])=>P(f,0,h,1));g.strokeStyle=C.stripe;g.lineWidth=.6;g.lineCap='round';g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.stroke();
+  /* fallow dapple: two rows of pale spots on the near flank + the pale flank line */const ns=tx>=0?-1:1;if(roll<.6)for(let i=0;i<11;i++){const f=-4.2+i*.75,row=i%2,q=P(f,ns*(2.2-row*.4),9.6-row*1.1+hsn(i,3)*.3,1);g.fillStyle=C.spot;g.globalAlpha=young?.95:.75;g.beginPath();g.arc(q[0],q[1],young?.42:.32,0,6.283);g.fill()}g.globalAlpha=1;
+  if(roll<.6){const fl=[-4.5,-2.5,0,2.2].map(f=>P(f,ns*2.6,6.9,1));g.strokeStyle='rgba(242,228,196,.6)';g.lineWidth=.45;g.beginPath();fl.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.stroke()}}
+ else{/* bristly dorsal ridge (crest highest over the withers), grizzled tips, coarse coat strokes */const ridge=[];for(let i=0;i<=16;i++){const f=5.4-i*.62,hgt=(f>1?1.25:f>-2?.9:.5)*(young?.5:1);const rr=B.reduce((m,c)=>Math.abs(c.f-f)<1.2?Math.max(m,c.h+c.r):m,0)||7;ridge.push([P(f,0,(f>4.6?7.6:rr)-.2,1),hgt,i])}
+  g.lineCap='round';for(const[p,hgt,i]of ridge){const lean=-tx*.5;g.strokeStyle=OL;g.lineWidth=1.0;g.beginPath();g.moveTo(p[0],p[1]+.3);g.lineTo(p[0]+lean,p[1]-hgt-.2);g.stroke()}
+  for(const[p,hgt,i]of ridge){const lean=-tx*.5;g.strokeStyle=young?'#5a4430':C.bristle;g.lineWidth=.55;g.beginPath();g.moveTo(p[0],p[1]+.3);g.lineTo(p[0]+lean,p[1]-hgt);g.stroke();if(i%2&&!young){g.fillStyle=C.tip;g.fillRect(p[0]+lean-.15,p[1]-hgt-.15,.3,.3)}}
+  const ns=tx>=0?-1:1;if(young&&roll<.6){for(const hs of[1.6,0.2,-1.2]){const L=[-4.5,-2,0.5,3].map(f=>P(f,ns*2.6,7.6+hs*.9,1));g.strokeStyle='#e8d4a0';g.lineWidth=.45;g.beginPath();L.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));g.stroke()}}
+  else if(roll<.6)for(let i=0;i<14;i++){const f=-4.6+hsn(i,1)*9,h=5.6+hsn(i,2)*3.6,q=P(f,ns*2.9,h,1);g.strokeStyle=hsn(i,4)<.5?'rgba(130,112,90,.45)':'rgba(10,8,6,.35)';g.lineWidth=.3;g.beginPath();g.moveTo(q[0],q[1]);g.lineTo(q[0]-tx*.6,q[1]+.7);g.stroke()}}
+ /* shoulder shade (near side) */if(roll<.5){const ns=tx>=0?-1:1,a=P(k==='deer'?2.0:2.4,ns*2.6,k==='deer'?7.4:6.6,1);g.fillStyle='rgba(30,16,6,.12)';g.beginPath();g.ellipse(a[0],a[1],1.1,2.2,0,0,6.283);g.fill()}
+ if(!tailFar)tail();near.forEach(o=>leg(o.L,0));if(headNear){head();ears();antlers()}
+ if(young)g.restore();
+ /* dust puffs at chest impact and side impact */if(U>.36&&U<1){for(const[t0,f0]of[[.4,3],[.78,-1]]){const e=(U-t0)/.22;if(e<0||e>1)continue;for(let i=0;i<5;i++){const a=i/5*6.28+f0,q=P(f0+Math.cos(a)*(2+e*3),Math.sin(a)*1.5,0,0);g.fillStyle='rgba(196,170,120,'+(.5*(1-e))+')';g.beginPath();g.arc(q[0],q[1]-e*1.2,.8+e*1.6,0,6.283);g.fill()}}}
+ if(young)g.restore();
+ const hd=HP(0,0,1),bk=P(0,0,9,1);return{head:hd,back:[bk[0],bk[1]],feet:FEET,joints:JN}}
+
+
+/* ---- sprite + critDraw drop-ins (mirror the game's aniSpr/critDraw) ---- */
+const ANI_SPR_SC=4,ASPR2={};/* game: 4 = crisp at zoom (~110 KB per frame) */
+function aniSpr2(k,fr,opt){opt=opt||{};const key=k+'|'+fr+'|'+(opt.sex||'')+(opt.age||'')+(opt.sc||ANI_SPR_SC)+'|'+(opt.pose|0);if(ASPR2[key])return ASPR2[key];const sc=opt.sc||ANI_SPR_SC,c=document.createElement('canvas');c.width=48*sc;c.height=36*sc;const g=c.getContext('2d');g.scale(sc,sc);
+ const o=Object.assign({},opt);if(fr<4){o.mode=fr===0&&opt.idle?'idle':'walk';drawBeast(g,24,26,k,1,0,fr/4,o)}else if(fr===4){o.mode='graze';drawBeast(g,24,26,k,1,0,0,o)}else if(fr<9){o.mode='run';drawBeast(g,24,26,k,1,0,(fr-5)/4,o)}else if(fr>=11){/* game: 11..18 = die u 0..1 */o.mode='die';o.u=(fr-11)/7;o.pose=opt.pose||0;drawBeast(g,24,26,k,1,0,0,o)}else if(fr===9){o.mode='dead';o.pose=opt.pose||0;drawBeast(g,24,26,k,1,0,0,o)}else{o.mode='carry';drawBeast(g,24,26,k,1,0,0,o)}
+ return ASPR2[key]=c}
+function critDraw2(c,now){if(typeof vx==='undefined')return;const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1;const mv=c.tx!=null&&Math.hypot((c.tx||0)-c.x,(c.ty||0)-c.y)>.03,run=mv&&(c.flee>0);
+ const fr=run?5+Math.floor(now/70+(c.x*7|0))%4:mv?Math.floor(now/140+(c.x*7|0))%4:(c.graze?4:0);
+ vx.save();vx.translate(X,Y);if(f<0)vx.scale(-1,1);vx.drawImage(aniSpr2(c.k,fr,{sex:c.sex,age:c.age}),-24,-26,48,36);vx.restore()}
+Object.assign(G,{GAITS,GAIT_DIST,DEATH_POSES,drawBeast,aniSpr2,critDraw2,ANI2:PAL,RIG2:RIG,ANI_SPR_SC})})(typeof window!=='undefined'?window:globalThis);
+</script>
 <script>/* ROADS art (art-studio/roads/roads.js, embedded; adds ROADS.pix, a per-pixel hook for renderChunkG) */
 /* Bronze and Blood — ROADS (Ningal art pass). Self-contained; no game globals needed.
  *
@@ -2636,15 +2818,16 @@ function huntStep(a,s,b,j,R,ST,near){
   huntDrop(a);return}
  huntDrop(a)}
 /* ---- art (placeholder until Ningal draws the lodge set): carcass, carried carcass, smoking rack with fire and woodpile ---- */
-function huntCarcArt(X,Y,dir,b,k){vx.save();vx.translate(X,Y);if(dir<0)vx.scale(-1,1);ell(vx,0,4,12,3.5,'rgba(20,14,8,.3)');vx.rotate(Math.PI);vx.drawImage(aniSpr(k||'deer',0),-24,-30,48,36);vx.restore();if(b){vx.fillStyle='rgba(150,30,25,.55)';vx.beginPath();vx.ellipse(X+2,Y+5,6,2,0,0,7);vx.fill()}}
-function huntCarryArt(X,Y,dir,k){vx.save();vx.translate(X,Y-15);if(dir===2)vx.scale(-1,1);vx.rotate(-.12);vx.scale(.62,.62);vx.drawImage(aniSpr(k||'deer',4),-24,-24,48,36);vx.restore()}
+function huntCarcArt(X,Y,dir,b,k,C){const kk=k||'deer',pose=Math.floor(hsh(Math.round(X),Math.round(Y),61)*3);let fr=9;/* the strike plays the die animation once (~1.1 s), then the dead pose; a carcass brought to the station is already dead */if(C&&!b){const now=performance.now();if(C._d0==null)C._d0=now;const u=(now-C._d0)/1100;if(u<1)fr=11+Math.min(7,Math.floor(u*8))}
+ vx.save();vx.translate(X,Y);if(dir<0)vx.scale(-1,1);vx.drawImage(aniSpr2(kk,fr,{pose}),-24,-26,48,36);vx.restore();if(b){vx.fillStyle='rgba(150,30,25,.55)';vx.beginPath();vx.ellipse(X+2,Y+5,6,2,0,0,7);vx.fill()}}
+function huntCarryArt(X,Y,dir,k){vx.save();vx.translate(X,Y-15);if(dir===2)vx.scale(-1,1);vx.scale(.62,.62);vx.drawImage(aniSpr2(k||'deer',10),-24,-24,48,36);vx.restore()}
 function rackArt(X,Y,m,prog,fw,now){const O='#2a1d12';
  /* firewood pile beside the rack */for(let k=0;k<Math.min(12,fw);k++){const r=k/4|0,c=k%4;rr(vx,X+30+c*4.5-r*2,Y+10-r*3.5,4,3,1,'#8a6038',O,.5)}
  if(m>0&&prog<1){/* fire under the rack + smoke */const f=1+.2*Math.sin(now/90);circ(vx,X+16,Y+12,3.2*f,'#f0a030');circ(vx,X+16,Y+12,1.8*f,'#ffe080');for(let i=0;i<4;i++){const ph=((now/1600)+i/4)%1;vx.fillStyle='rgba(200,200,200,'+(.35*(1-ph)).toFixed(2)+')';vx.beginPath();vx.arc(X+16+Math.sin(ph*6+i)*3,Y+6-ph*26,2+ph*5,0,7);vx.fill()}}
  for(const px of[0,32]){rr(vx,X+px-1.5,Y-14,3,28,1,'#6e4a2a',O,.7)}rr(vx,X-3,Y-15,38,3,1,'#7a5432',O,.7);rr(vx,X-3,Y-6,38,2.5,1,'#7a5432',O,.6);
  const n=Math.round(Math.min(1,m/RACK_MAX)*8),t=Math.max(0,Math.min(1,prog));for(let i=0;i<n;i++){const x=X+2+i*3.7,y=i%2?-12:-3;vx.fillStyle=lerpC('#b8403a','#5a2a1a',t);vx.fillRect(x,Y+y,2.6,7+(i%3));vx.fillStyle='rgba(255,255,255,.25)';vx.fillRect(x,Y+y,1,6)}}
-function huntVis(D,now,inV){for(let i=HGORE.length-1;i>=0;i--){const G=HGORE[i],e=(now-G.t0)/650;if(e>1.6){G.C.hid=0;HGORE.splice(i,1);continue}if(e>=1){G.C.hid=0;continue}const x=G.x0+(G.x1-G.x0)*e,y=G.y0+(G.y1-G.y0)*e,X=x*TS,Y=y*TS;if(!inV(X,Y))continue;D.push({k:Y+1,f:()=>{vx.save();vx.translate(X,Y);if(G.x1<G.x0)vx.scale(-1,1);vx.drawImage(aniSpr('boar',(Math.floor(now/70)%4)),-24,-30,48,36);vx.restore();for(let q=0;q<3;q++){vx.fillStyle='rgba(150,120,80,'+(.5-q*.15)+')';vx.beginPath();vx.arc(X-(G.x1-G.x0)*TS*.12*(q+1),Y+2,3+q,0,7);vx.fill()}if(e>.75){vx.fillStyle='#e02a1a';vx.font='bold 14px sans-serif';vx.fillText('!',G.ax*TS-3,G.ay*TS-34)}}})}
- for(const C of HCARC){if(C.hid)continue;const X=C.x*TS,Y=C.y*TS;if(inV(X,Y))D.push({k:Y,f:()=>huntCarcArt(X,Y,C.dir,C.b,C.k)})}
+function huntVis(D,now,inV){for(let i=HGORE.length-1;i>=0;i--){const G=HGORE[i],e=(now-G.t0)/650;if(e>1.6){G.C.hid=0;HGORE.splice(i,1);continue}if(e>=1){G.C.hid=0;continue}const x=G.x0+(G.x1-G.x0)*e,y=G.y0+(G.y1-G.y0)*e,X=x*TS,Y=y*TS;if(!inV(X,Y))continue;D.push({k:Y+1,f:()=>{vx.save();vx.translate(X,Y);if(G.x1<G.x0)vx.scale(-1,1);vx.drawImage(aniSpr2('boar',5+Math.floor(Math.hypot(G.x1-G.x0,G.y1-G.y0)*TS*Math.min(1,e)/GAIT_DIST('boar','run')*4)%4),-24,-26,48,36);vx.restore();for(let q=0;q<3;q++){vx.fillStyle='rgba(150,120,80,'+(.5-q*.15)+')';vx.beginPath();vx.arc(X-(G.x1-G.x0)*TS*.12*(q+1),Y+2,3+q,0,7);vx.fill()}if(e>.75){vx.fillStyle='#e02a1a';vx.font='bold 14px sans-serif';vx.fillText('!',G.ax*TS-3,G.ay*TS-34)}}})}
+ for(const C of HCARC){if(C.hid)continue;const X=C.x*TS,Y=C.y*TS;if(inV(X,Y))D.push({k:Y,f:()=>huntCarcArt(X,Y,C.dir,C.b,C.k,C)})}
  const E=S.eco;if(!E)return;for(const s of E.steads){if(s.camp!=='lodge'||!s.rk)continue;const R=s.rk,X=R.x*TS+4,Y=R.y*TS+18;if(!inV(X,Y))continue;D.push({k:Y+12,f:()=>{vx.save();vx.translate(X,Y);rackArt(0,0,R.m,R.m>0?(S.t-R.t0)/DAYLEN:0,s.rfw||0,now);vx.restore()}})}}
 {const _da=drawAgent;drawAgent=function(a,p,moving,now){if(a.hj&&a.hj.ph==='stalk'){const q=POSE.stalk.squash||.8;vx.save();vx.translate(p.x,p.y);vx.scale(1,q);vx.translate(-p.x,-p.y);try{_da(a,p,moving,now)}finally{vx.restore()}}else _da(a,p,moving,now);if(a.carc)huntCarryArt(p.x,p.y,a.dir,a.carcK)}}
 function huntInsp(s,b){const L=huntHerds(s),cx=b.x+bsz(b.t)/2,cy=b.y+bsz(b.t)/2,R=s.rk,B=t=>'<b>'+t+'</b>';const H=L.slice().sort((p,q)=>Math.hypot(p.x-cx,p.y-cy)-Math.hypot(q.x-cx,q.y-cy))[0];
@@ -4303,7 +4486,12 @@ function aniSpr(k,fr){const key=k+fr;if(ASPR[key])return ASPR[key];const A=ANI[k
  if(A.beard)ln(g,hx+A.hd,hy+A.hd*.6,hx+A.hd*.8,hy+A.hd*1.5,'#5a4a3a',1);
  if(A.comb){circ(g,hx+.3,hy-A.hd*.9,.9,'#d83a2a');g.fillStyle='#e8a030';g.beginPath();g.moveTo(hx+A.hd*1.3,hy-.4);g.lineTo(hx+A.hd*2.1,hy+.1);g.lineTo(hx+A.hd*1.3,hy+.6);g.fill()}
  return ASPR[key]=c}
-function critDraw(c,now){const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1,A=ANI[c.k]||ANI.deer;const mv=c.tx!=null&&Math.hypot((c.tx||0)-c.x,(c.ty||0)-c.y)>.03;const fr=mv?Math.floor(now/140+(c.x*7|0))%4:(c.graze?4:0),bob=mv?Math.abs(Math.sin(now/140*Math.PI/2))*.8:0;
+function critDraw(c,now){if(c.k==='deer'||c.k==='boar')return critDraw3(c,now);critDraw1(c,now)}
+/* deer/boar: Ningal sprites; gait phase from distance walked (GAIT_DIST px per stride cycle), so hooves don't slide at any speed */
+function critDraw3(c,now){const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1,mv=c.tx!=null&&Math.hypot((c.tx||0)-c.x,(c.ty||0)-c.y)>.03,run=mv&&c.run;let fr;
+ if(mv){const m=run?'run':'walk',ph=c.gd!=null?((c.gd/GAIT_DIST(c.k,m))%1+1)%1:((now/(run?280:560))+(c.x*7|0)*.25)%1;fr=(run?5:0)+Math.floor(ph*4)%4}else fr=c.graze?4:0;
+ vx.save();vx.translate(X,Y);if(f<0)vx.scale(-1,1);vx.drawImage(aniSpr2(c.k,fr),-24,-26,48,36);vx.restore()}
+function critDraw1(c,now){const X=c.x*TS,Y=c.y*TS,f=c.dir<0?-1:1,A=ANI[c.k]||ANI.deer;const mv=c.tx!=null&&Math.hypot((c.tx||0)-c.x,(c.ty||0)-c.y)>.03;const fr=mv?Math.floor(now/140+(c.x*7|0))%4:(c.graze?4:0),bob=mv?Math.abs(Math.sin(now/140*Math.PI/2))*.8:0;
  ell(vx,X+1,Y+1.5,A.w*.95,A.h*.55,'rgba(20,14,8,.25)');vx.save();vx.translate(X,Y-bob);if(f<0)vx.scale(-1,1);vx.drawImage(aniSpr(c.k,fr),-24,-26,48,36);vx.restore()}
 let vign=null;
 function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(last||now))/1000),dt=rdt*spd;last=now;camStep(rdt);AXF++;getChunk.bud=3;PAT.bud=48;farmDraw.bud=2;if(spd){vframe.tt=(vframe.tt||0)+dt;if(vframe.tt>.5){vframe.tt=0;/* road congestion removed: roads are optional speed boosts */}vframe.pc=(vframe.pc||0)+dt;if(vframe.pc>6){vframe.pc=0;PC.clear();ffNow+=6;ffAge(0);wearTick()}}
@@ -4998,7 +5186,7 @@ function evArt(x,id){const W=320,H=160;x.save();x.imageSmoothingEnabled=true;let
  const ag=(typeof agents!=='undefined'&&agents.length)?agents.filter(a=>a.role!=='kid'):[];
  const look=(k,mod)=>{const a=ag.length?ag[(k*7+3)%ag.length]:null;const o=Object.assign({},a?a.o:{t:TUN[k%TUN.length],t2:'#5e3a1c',hat:'none',sk:'#9e663e',hs:'short',hair:'#241610'},mod||{});return o};
  const man=(cx,cy,k,dir,mod,sc)=>{sc=(sc||1)*1.35;const o=look(k,mod);x.fillStyle='rgba(20,14,8,.3)';x.beginPath();x.ellipse(cx,cy+1,8*sc,3*sc,0,0,6.283);x.fill();x.drawImage(pawnSpr(o,dir==null?1:dir,2),cx-12*sc,cy-30*sc,24*sc,32*sc)};
- const beast=(k,cx,cy,f,sc)=>{sc=(sc||1)*1.35;x.fillStyle='rgba(20,14,8,.28)';x.beginPath();x.ellipse(cx,cy+2,12*sc,3.5*sc,0,0,6.283);x.fill();x.save();x.translate(cx,cy);if(f<0)x.scale(-1,1);x.drawImage(aniSpr(k,1),-30*sc,-30*sc,60*sc,45*sc);x.restore()};
+ const beast=(k,cx,cy,f,sc)=>{sc=(sc||1)*1.35;x.fillStyle='rgba(20,14,8,.28)';x.beginPath();x.ellipse(cx,cy+2,12*sc,3.5*sc,0,0,6.283);x.fill();x.save();x.translate(cx,cy);if(f<0)x.scale(-1,1);x.drawImage(k==='deer'||k==='boar'?aniSpr2(k,1):aniSpr(k,1),-30*sc,-30*sc,60*sc,45*sc);x.restore()};
  const pack=(cx,cy,c1,c2)=>{x.fillStyle='rgba(30,20,10,.35)';x.fillRect(cx-9,cy-1,18,4);x.fillStyle=c1;x.beginPath();x.ellipse(cx-5,cy-4,5,4,0,0,6.283);x.fill();x.fillStyle=c2;x.beginPath();x.ellipse(cx+5,cy-4,5,4,0,0,6.283);x.fill();x.strokeStyle='#4a3420';x.lineWidth=1;x.beginPath();x.moveTo(cx-10,cy-6);x.lineTo(cx+10,cy-6);x.stroke()};
  const fire=(cx,cy,sz)=>{for(let k=0;k<26;k++){const a=R()*6.283,r=R()*sz*.6,fy=cy-R()*sz*1.3;const fg=x.createRadialGradient(cx+Math.cos(a)*r,fy,0,cx+Math.cos(a)*r,fy,sz*.35);fg.addColorStop(0,'rgba(255,240,150,.9)');fg.addColorStop(.5,'rgba(240,120,40,.6)');fg.addColorStop(1,'rgba(200,40,20,0)');x.fillStyle=fg;x.beginPath();x.arc(cx+Math.cos(a)*r,fy,sz*.35,0,6.283);x.fill()}};
  const smoke=(cx,cy,n,c)=>{for(let k=0;k<n;k++){x.fillStyle=c||'rgba(60,56,50,.22)';x.beginPath();x.arc(cx+(R()-.3)*30+k*3,cy-k*9,10+k*2.4,0,6.283);x.fill()}};
@@ -5835,8 +6023,8 @@ function rnHerdDraw(D,dt,now,inV){if(!S.herds)return;S.herds.forEach((H,hi)=>{le
  for(const c of A){c.t-=dt;if(c.t<=0){c.t=6+Math.random()*8;if(Math.random()<.55)pick(c)}
   const tx=H.x+c.ox,ty=H.y+c.oy;let dx=tx-c.x,dy=ty-c.y;const d=Math.hypot(dx,dy),sp=(H.flee>0?2.2:.32)*dt;
   for(const o of A){if(o===c)continue;const ex=c.x-o.x,ey=c.y-o.y,e=Math.hypot(ex,ey);if(e<.8&&e>.001){c.x+=ex/e*(.8-e)*dt*1.5;c.y+=ey/e*(.8-e)*dt*1.5}}
-  if(c.mv){if(d<.08)c.mv=0}else if(d>.3)c.mv=1;const mv=!!c.mv;if(mv){c.x+=dx/d*Math.min(d,sp);c.y+=dy/d*Math.min(d,sp);if(Math.abs(dx)>.2)c.dir=dx>0?1:-1}
-  if(!inV(c.x*TS,c.y*TS))continue;const cc={k:H.k,x:c.x,y:c.y,dir:c.dir,tx:mv?tx:null,ty:mv?ty:null,graze:!mv&&H.flee<=0&&((c.t|0)%3!==0)};D.push({k:c.y*TS+hi*.001+A.indexOf(c)*.00001,f:()=>critDraw(cc,now)})}})}
+  if(c.mv){if(d<.08)c.mv=0}else if(d>.3)c.mv=1;const mv=!!c.mv;if(mv){c.gd=(c.gd||0)+Math.min(d,sp)*TS;c.x+=dx/d*Math.min(d,sp);c.y+=dy/d*Math.min(d,sp);if(Math.abs(dx)>.2)c.dir=dx>0?1:-1}
+  if(!inV(c.x*TS,c.y*TS))continue;const cc={k:H.k,x:c.x,y:c.y,dir:c.dir,tx:mv?tx:null,ty:mv?ty:null,gd:c.gd||0,run:H.flee>0,graze:!mv&&H.flee<=0&&((c.t|0)%3!==0)};D.push({k:c.y*TS+hi*.001+A.indexOf(c)*.00001,f:()=>critDraw(cc,now)})}})}
 // ---- node-aware prop drawing: stumps, saplings, berries, depleting rocks ----
 function rnPropKey(pr){if(pr.rk!==undefined)return pr.rk;const x=pr.gx|0,y=pr.gy|0,i=y*MW+x;let k='';if((pr.k==='oak'||pr.k==='cypress'||pr.k==='olive')&&ter(x,y)===T_FOREST)k='t'+i;else if(pr.k==='bush')k='b'+i;else if(pr.k==='rock')k='s'+i;else if(pr.k==='cuore')k='c'+i;else if(pr.k==='snore')k='n'+i;if(k&&!RN.has.has(k))k='';return pr.rk=k}
 function lerpC(a,b,t){t=Math.max(0,Math.min(1,t));const A=hex2(a),B=hex2(b);return'rgb('+A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',')+')'}
