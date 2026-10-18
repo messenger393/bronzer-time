@@ -89,6 +89,128 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <div id="toast"></div><div id="tip"></div><div id="log" hidden></div>
 <div id="modal"><div class="panel glass" id="mbody"></div></div>
 
+<script>/* ROADS art (art-studio/roads/roads.js, embedded; adds ROADS.pix, a per-pixel hook for renderChunkG) */
+/* Bronze and Blood — ROADS (Ningal art pass). Self-contained; no game globals needed.
+ *
+ * API
+ *   ROADS.drawRoad(g, x, y, type, mask, seed, opt)
+ *     g     CanvasRenderingContext2D. Ground (grass) must already be painted under the tile.
+ *     x,y   tile top-left in canvas px (32 px tiles). World px = x,y unless opt.wx/opt.wy given
+ *           (patterns and wear are keyed to WORLD px, so neighbouring tiles are seamless).
+ *     type  'dirt' | 'packed' | 'paved'   (baseline: exact copy of the game's rl 1/2/3 pixel code)
+ *           'stoneA' | 'stoneB' | 'stoneC' | 'fancyA' | 'fancyB' | 'fancyC'
+ *     mask  connection bits, same neighbour logic as game roadConn():
+ *           N=1 E=2 S=4 W=8, diagonals NE=16 SE=32 SW=64 NW=128 (diagonal only counts when both
+ *           adjacent orthogonals are set — exactly like renderChunkG's corner fill).
+ *     seed  int, wear variation (deterministic). The game would pass hsh(gx,gy,…) or S.seed.
+ *     opt   {lower: 4-bit mask (N,E,S,W) of neighbours of a LOWER tier -> a threshold kerb is laid
+ *            across that edge; wx,wy world px}
+ *   ROADS.maskAt(get, gx, gy) helper: get(x,y) -> truthy if road. Returns the 8-bit mask.
+ *   ROADS.TIER {dirt:1,stone*:2,fancy*:3}; ROADS.HALF half-width (tile units) per type.
+ * ANCHORS: tile-local; road centreline is the tile centre (16,16); arms run to the tile edge
+ *   midpoints. Half widths: dirt .25 (16 px road), stone .31 (~20 px), fancy .38 (~24 px) — the
+ *   game's existing rw table [0,.25,.31,.38]. Everything is axis-aligned; drop shadow falls
+ *   down-right 1-2 px (game light from top-left). Pawn feet (PSC .72) sit on the surface; no props.
+ */
+(function(){
+const hsh=(a,b,c=0)=>{let h=(a*374761393+b*668265263+c*1442695041)|0;h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296};
+function vnoise(x,y,sc,seed){const X=Math.floor(x/sc),Y=Math.floor(y/sc),fx=x/sc-X,fy=y/sc-Y,s=t=>t*t*(3-2*t);const a=hsh(X,Y,seed),b=hsh(X+1,Y,seed),c=hsh(X,Y+1,seed),d=hsh(X+1,Y+1,seed);return a+(b-a)*s(fx)+(c-a)*s(fy)+(a-b-c+d)*s(fx)*s(fy)}
+const TIER={dirt:1,packed:2,paved:3,stoneA:2,stoneB:2,stoneC:2,fancyA:3,fancyB:3,fancyC:3};
+const HALF={dirt:.25,packed:.31,paved:.38,stoneA:.31,stoneB:.31,stoneC:.31,fancyA:.38,fancyB:.38,fancyC:.38};
+const EARTH=[150,122,84],PACK=[172,148,108];
+/* Voronoi on a jittered grid (world px) -> fitted fieldstones / flags */
+function vor(X,Y,c,s){const gx=Math.floor(X/c),gy=Math.floor(Y/c);let d1=1e9,d2=1e9,ix=0,iy=0,px=0,py=0;
+ for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const a=gx+i,b=gy+j,ox=(a+.15+.7*hsh(a,b,s))*c,oy=(b+.15+.7*hsh(a,b,s+1))*c,dx=X-ox,dy=Y-oy,d=Math.sqrt(dx*dx+dy*dy);
+  if(d<d1){d2=d1;d1=d;ix=a;iy=b;px=dx;py=dy}else if(d<d2)d2=d}return{e:d2-d1,ix,iy,px,py,d1}}
+/* rectangular slabs in running bond; along = coordinate along the road, across = across */
+function slab(al,ac,L,W,s){const row=Math.floor(ac/W),off=(hsh(row,7,s)*.6+.2)*L*(row&1?1:.5),k=Math.floor((al+off)/L);
+ const ea=Math.min((al+off)-k*L,(k+1)*L-(al+off)),eb=Math.min(ac-row*W,(row+1)*W-ac);return{id:k*131+row,ea,eb,la:(al+off)-k*L,lb:ac-row*W,row,k}}
+function maskAt(get,x,y){let m=0;const N=get(x,y-1),E=get(x+1,y),S=get(x,y+1),W=get(x-1,y);if(N)m|=1;if(E)m|=2;if(S)m|=4;if(W)m|=8;
+ if(N&&E&&get(x+1,y-1))m|=16;if(S&&E&&get(x+1,y+1))m|=32;if(S&&W&&get(x-1,y+1))m|=64;if(N&&W&&get(x-1,y-1))m|=128;return m}
+/* signed distance to the road shape (tile units, <0 inside) — the game's union-of-rects */
+function sdf(u,v,rw,m,o){let best=9,side=0;const add=(x0,x1,y0,y1)=>{const ex=Math.max(x0-u,0,u-x1),ey=Math.max(y0-v,0,v-y1);let s,sd;
+  if(ex||ey){s=Math.hypot(ex,ey);sd=ex>ey?1:0}else{const a=Math.min(u-x0,x1-u),b=Math.min(v-y0,y1-v);s=-Math.min(a,b);sd=a<b?1:0}if(s<best){best=s;side=sd}};
+ add(.5-rw,.5+rw,.5-rw,.5+rw);if(m&1)add(.5-rw,.5+rw,-1,.5);if(m&2)add(.5,2,.5-rw,.5+rw);if(m&4)add(.5-rw,.5+rw,.5,2);if(m&8)add(-1,.5,.5-rw,.5+rw);
+ if(m&16)add(.5,2,-1,.5);if(m&32)add(.5,2,.5,2);if(m&64)add(-1,.5,.5,2);if(m&128)add(-1,.5,-1,.5);if(o)o.side=side;return best}
+const mix=(c,t,k)=>[c[0]+(t[0]-c[0])*k,c[1]+(t[1]-c[1])*k,c[2]+(t[2]-c[2])*k],mul=(c,k)=>[c[0]*k,c[1]*k,c[2]*k];
+/* stone body shading: lit top-left rim, dark bottom-right rim -> 3D */
+function bevel(c,px,py,e,R){const r=Math.hypot(px,py)||1,lt=-(px+py)/(r*1.414),rim=Math.max(0,1-e/R);return mul(c,1+lt*rim*.28-rim*.06)}
+function grassTuft(X,Y,s){return hsh(X>>1,Y>>1,s)<.35}
+const GR=[[92,118,56],[110,136,62]];
+/* ---- per-type pixel shaders: return [r,g,b] or null (=transparent). d = depth inside edge in px ---- */
+const SH={
+ dirt(ctx){const{X,Y,n2,h}=ctx,t=.88+.18*n2;let c=[150*t,122*t,84*t];if(h<.1)c=mul(c,.86);if(h>.97)c=[120,108,80];return c},
+ packed(ctx){const{X,Y,n2,h,best}=ctx,t=.92+.12*n2;let c=[172*t,148*t,108*t];if(best>-.04)c=mul(c,.82);if(h<.06)c=mul(c,.85);return c},
+ paved(ctx){const{X,Y,best}=ctx,row=Math.floor(Y/7),bx=Math.floor((X+(row%2)*5)/10),mort=(Y%7===0)||((X+(row%2)*5)%10===0),t=.88+hsh(bx,row,4)*.22;let c=mort?[104,100,92]:[158*t,152*t,140*t];if(best>-.035)c=mul(c,.78);return c},
+ /* STONE A — rounded fieldstone cobbles set in packed earth, rubble-stone curb */
+ stoneA(ctx){const{X,Y,d,s,n2}=ctx;const kerb=d<4.2,V=vor(X,Y,kerb?7.5:5.5,kerb?61:51);
+  const gap=kerb?1.3:1.15;if(V.e<gap+(n2-.5)*.6){let c=mul(EARTH,.82+.2*n2);if(grassTuft(X,Y,s+5)&&hsh(V.ix,V.iy,s)<.3)c=GR[hsh(X,Y,3)<.5?0:1];return c}
+  const r=hsh(V.ix,V.iy,s+9),base=kerb?[118,110,96]:[[150,140,120],[164,152,130],[136,128,114],[172,160,136]][Math.floor(r*4)];
+  let c=mul(base,.9+.2*hsh(V.ix,V.iy,77));if(hsh(V.ix,V.iy,s+3)<.06&&!kerb)c=mul(EARTH,.9);/* lost cobble: hole of earth */
+  return bevel(c,V.px,V.py,V.e,kerb?3.5:2.6)},
+ /* STONE B — big flat limestone flagstones, earth joints with grass, upright edge stones */
+ stoneB(ctx){const{X,Y,d,s,n2}=ctx;if(d<2.6){const V=vor(X,Y,4.2,71);if(V.e<.9)return mul(EARTH,.75);return bevel(mul([126,118,104],.9+.2*hsh(V.ix,V.iy,5)),V.px,V.py,V.e,2.2)}
+  const V=vor(X,Y,10,81),j=1.6+(n2-.5)*.8;if(V.e<j){if(V.e<j*.7&&grassTuft(X,Y,s+11)&&hsh(V.ix,V.iy,s+2)<.55)return GR[hsh(X,Y,4)<.5?0:1];return mul(EARTH,.8+.2*n2)}
+  let c=mul([[196,186,162],[184,176,154],[204,192,166]][Math.floor(hsh(V.ix,V.iy,s+4)*3)],.92+.12*vnoise(X,Y,3,9));
+  if(hsh(V.ix,V.iy,s+8)<.12&&Math.abs(V.px*.6-V.py)<.5)c=mul(c,.72);/* hairline crack */return bevel(c,V.px,V.py,V.e,2.2)},
+ /* STONE C — packed-earth carriageway between two fieldstone curbs, scattered set stones */
+ stoneC(ctx){const{X,Y,d,s,n2,h}=ctx;if(d<4.6){const V=vor(X,Y,5.5,91);if(V.e<1.1)return mul(EARTH,.78);return bevel(mul([[132,124,108],[148,138,118],[120,114,102]][Math.floor(hsh(V.ix,V.iy,s)*3)],.92+.16*hsh(V.ix,V.iy,6)),V.px,V.py,V.e,2.6)}
+  const t=.92+.12*n2;let c=[PACK[0]*t,PACK[1]*t,PACK[2]*t];const V=vor(X,Y,9,95);if(hsh(V.ix,V.iy,s+1)<.22&&V.d1<2.6)c=bevel([156,146,126],V.px,V.py,2.6-V.d1,2.6);
+  if(h<.06)c=mul(c,.86);/* wheel/foot ruts */const a=ctx.al,ac=ctx.ac;if(Math.abs(Math.abs(ac)-5)<.8&&hsh(Math.floor(X/12),Math.floor(Y/12),s+2)<.7)c=mul(c,.9);return c},
+ /* FANCY A — dressed limestone slabs in running bond, bitumen joints, basalt kerbstones */
+ fancyA(ctx){const{X,Y,d,s}=ctx;if(d<3.2){const B=slab(ctx.kal,ctx.kac,9,40,s+13);if(B.ea<.8)return[62,56,50];return bevel(mul([108,104,98],.9+.2*hsh(B.id,3,s)),0,(1.6-d)*(ctx.kin?1:1),Math.min(B.ea,d,3.2-d),1.6)}
+  const B=slab(ctx.al,ctx.ac-.5,13,8,s+17);if(B.ea<.7||B.eb<.7)return[112,92,70];
+  let c=mul([214,200,170],.9+.14*hsh(B.id,1,s)+.06*(vnoise(X,Y,4,12)-.5));if(hsh(B.id,2,s)<.07)c=mul(c,.8);return mul(c,1+.1*Math.max(0,1-B.eb/1.6)*(B.lb<4?1:-1))},
+ /* FANCY B — Babylonian processional: big limestone slabs, baked-brick border set in bitumen, limestone kerb */
+ fancyB(ctx){const{X,Y,d,s}=ctx;if(d<2.4){const B=slab(ctx.kal,ctx.kac,11,40,s+23);if(B.ea<.8)return[120,104,84];return mul([206,194,166],(d<1?.82:1)*(.94+.1*hsh(B.id,4,s)))}
+  if(d<6.2){const B=slab(ctx.kal,ctx.kac-2.4,3.4,40,s+29);if(B.ea<.6)return[88,66,50];return mul([[166,108,74],[156,100,68],[176,118,80]][Math.floor(hsh(B.id,5,s)*3)],(d<3?.88:1)*(.95+.1*hsh(B.id,8,s)))}
+  const B=slab(ctx.al,ctx.ac-.5,16,14,s+31);if(B.ea<.7||B.eb<.7)return[104,86,66];let c=mul([220,208,180],.9+.12*hsh(B.id,1,s)+.06*(vnoise(X,Y,5,14)-.5));return mul(c,1+.08*(B.lb<2?1:B.lb>8?-1:0))},
+ /* FANCY C — dark basalt slabs, pale limestone kerbs; the 'black road' of a Hittite citadel */
+ fancyC(ctx){const{X,Y,d,s}=ctx;if(d<3.4){const B=slab(ctx.kal,ctx.kac,10,40,s+37);if(B.ea<.8)return[150,138,114];return mul([210,198,172],(d<1.1?.8:1)*(.94+.1*hsh(B.id,6,s)))}
+  const B=slab(ctx.al,ctx.ac-.5,12,9,s+41);if(B.ea<.8||B.eb<.8)return[132,120,98];let c=mul([92,90,88],.86+.22*hsh(B.id,1,s)+.1*(vnoise(X,Y,3,15)-.5));if(B.lb<1.2)c=mul(c,1.18);return c}
+};
+function drawRoad(g,x,y,type,mask,seed,opt){opt=opt||{};seed=seed|0;const rw=HALF[type],wx0=opt.wx!=null?opt.wx:x,wy0=opt.wy!=null?opt.wy:y,base=type==='dirt'||type==='packed'||type==='paved';
+ const im=g.getImageData(x,y,32,32),D=im.data,o={},lw=opt.lower||0,hor=(mask&10)!==0;
+ for(let ly=0;ly<32;ly++)for(let lx=0;lx<32;lx++){const X=wx0+lx,Y=wy0+ly,u=(lx+.5)/32,v=(ly+.5)/32,k=(ly*32+lx)*4;
+  let best=sdf(u,v,rw,mask,o);const n2=vnoise(X,Y,7,6),h=hsh(X,Y,7);
+  if(base){best+=(vnoise(X,Y,4,33)-.5)*(type==='dirt'?.12:.03);const a=Math.max(0,Math.min(1,.5-best/.05));if(a<=0)continue;const c=SH[type]({X,Y,n2,h,best});
+   D[k]+=(c[0]-D[k])*a;D[k+1]+=(c[1]-D[k+1])*a;D[k+2]+=(c[2]-D[k+2])*a;continue}
+  const bp=best*32;
+  if(bp>0){/* drop shadow down-right: where the shape shifted by (1.2,1.6)px covers this pixel */const sb=sdf(u-1.2/32,v-1.6/32,rw,mask)*32;if(sb<0){const a=Math.min(1,-sb)*.32;D[k]*=1-a;D[k+1]*=1-a;D[k+2]*=1-a}
+   if(bp<1.4){/* trodden earth apron hugging the edge */const a=(1-bp/1.4)*.35;D[k]+=(EARTH[0]*.85-D[k])*a;D[k+1]+=(EARTH[1]*.85-D[k+1])*a;D[k+2]+=(EARTH[2]*.85-D[k+2])*a}continue}
+  let d=-bp;const side=o.side;
+  /* along/across coordinates: courses follow the arm the pixel is in */
+  const inH=Math.abs(v-.5)<=rw,inV=Math.abs(u-.5)<=rw,H=inH&&inV?hor:inH?true:inV?false:true;
+  const al=H?X:Y,ac=H?(Y-wy0-16):(X-wx0-16);
+  /* kerb coordinates follow the nearest edge (side=1 -> vertical edge -> run along Y) */
+  let kal=side?Y:X,kac=d,kin=0;
+  /* threshold kerb across an edge shared with a lower-tier road */
+  const te=[(lw&1)?ly+.5:99,(lw&2)?32-lx-.5:99,(lw&4)?32-ly-.5:99,(lw&8)?lx+.5:99],tm=Math.min(...te);
+  if(tm<d){d=tm;const ti=te.indexOf(tm);kal=ti&1?Y:X;kac=d;kin=1}
+  const c=SH[type]({X,Y,d,s:seed,n2,h,al,ac,kal,kac,kin,best});if(!c)continue;
+  let t=Math.max(0,Math.min(1,d+.5));/* wear: per-tile grime blotches + sun-bleach, deterministic */
+  const wv=vnoise(X,Y,11,seed+101);let cc=wv<.3?mul(c,.9+wv*.33):c;if(d<1)cc=mul(cc,.86);/* edge lip shading */
+  if(ly===0||lx===0){}D[k]+=(cc[0]-D[k])*t;D[k+1]+=(cc[1]-D[k+1])*t;D[k+2]+=(cc[2]-D[k+2])*t}
+ g.putImageData(im,x,y)}
+/* draw a whole grid. grid[y][x] = type or null. Lower-tier thresholds and masks computed for you. */
+function drawNet(g,grid,ox,oy,seed){const H=grid.length,W=grid[0].length,get=(x,y)=>x>=0&&y>=0&&x<W&&y<H&&grid[y][x];
+ const order=[];for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(grid[y][x])order.push([TIER[grid[y][x]],x,y]);order.sort((a,b)=>a[0]-b[0]);
+ for(const[t,x,y]of order){const ty=grid[y][x],m=maskAt(get,x,y);let lw=0;[[0,-1],[1,0],[0,1],[-1,0]].forEach(([dx,dy],i)=>{const n=get(x+dx,y+dy);if(n&&TIER[n]<t)lw|=1<<i});
+  drawRoad(g,ox+x*32,oy+y*32,ty,m,(seed||0)+Math.floor(hsh(x,y,5)*1000),{lower:lw,wx:x*32,wy:y*32})}}
+/* GAME HOOK: shade one pixel of a road tile into col=[R,G,B] (mutated). lx,ly tile-local px; wx0,wy0 tile world px. Same maths as drawRoad. */
+const _o={};function pix(col,type,lx,ly,wx0,wy0,mask,seed,lw){const rw=HALF[type],X=wx0+lx,Y=wy0+ly,u=(lx+.5)/32,v=(ly+.5)/32,hor=(mask&10)!==0;
+ const best=sdf(u,v,rw,mask,_o),bp=best*32;
+ if(bp>0){const sb=sdf(u-1.2/32,v-1.6/32,rw,mask)*32;if(sb<0){const a=Math.min(1,-sb)*.32;col[0]*=1-a;col[1]*=1-a;col[2]*=1-a}
+  if(bp<1.4){const a=(1-bp/1.4)*.35;col[0]+=(EARTH[0]*.85-col[0])*a;col[1]+=(EARTH[1]*.85-col[1])*a;col[2]+=(EARTH[2]*.85-col[2])*a}return}
+ const n2=vnoise(X,Y,7,6),h=hsh(X,Y,7);let d=-bp;const side=_o.side;
+ const inH=Math.abs(v-.5)<=rw,inV=Math.abs(u-.5)<=rw,H=inH&&inV?hor:inH?true:inV?false:true;const al=H?X:Y,ac=H?(Y-wy0-16):(X-wx0-16);
+ let kal=side?Y:X,kac=d,kin=0;if(lw){const te=[(lw&1)?ly+.5:99,(lw&2)?32-lx-.5:99,(lw&4)?32-ly-.5:99,(lw&8)?lx+.5:99],tm=Math.min(te[0],te[1],te[2],te[3]);if(tm<d){d=tm;const ti=te.indexOf(tm);kal=ti&1?Y:X;kac=d;kin=1}}
+ const c=SH[type]({X,Y,d,s:seed,n2,h,al,ac,kal,kac,kin,best});if(!c)return;const t=Math.max(0,Math.min(1,d+.5));
+ const wv=vnoise(X,Y,11,seed+101);let cc=wv<.3?mul(c,.9+wv*.33):c;if(d<1)cc=mul(cc,.86);col[0]+=(cc[0]-col[0])*t;col[1]+=(cc[1]-col[1])*t;col[2]+=(cc[2]-col[2])*t}
+window.ROADS={pix,drawRoad,drawNet,maskAt,sdf,TIER,HALF,hsh,vnoise,
+ OPTIONS:{stoneA:'Fieldstone cobbles in packed earth, rubble curb',stoneB:'Large limestone flagstones, grassy earth joints, upright edge stones',stoneC:'Packed-earth carriageway between fieldstone curbs',fancyA:'Dressed limestone running-bond slabs, bitumen joints, basalt kerbs',fancyB:'Babylon-style processional: big limestone slabs, baked-brick border in bitumen, limestone kerb',fancyC:'Hittite black road: basalt slabs with pale limestone kerbs'}};
+})();
+</script>
 <script>/* QUARRY v2 art (art-studio/quarry/v2/quarry.js, embedded; export adds TL,ZL,CW,CH,GX,GY for the game) */
 /* QUARRY v2 — rough stone only. Art + layout helpers, no game mechanics.
  * SCALE (audited against the live game): tile 32 px; standing pawn = 24x32 sprite * PSC .72 (~17x23 px, head top ~21 px above the feet);
@@ -3594,7 +3716,7 @@ const CHJ={};function chunkJob(cx,cy,DL){const k=cx+','+cy;let j=CHJ[k];if(!j||j
 function* renderChunkG(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);const img=g.createImageData(W,W),d=img.data;let fimg=null,fd=null;const col=[0,0,0],tmp=[0,0,0];const dry=!!evOn('drought');
  for(let gy=cy*CS;gy<cy*CS+CS;gy++){for(let gx=cx*CS;gx<cx*CS+CS;gx++){const gi=gy*MW+gx,own=RT[gi],nbs=NBD.map(([dx,dy])=>rtAt(gx+dx,gy+dy)),diff=nbs.some(r=>r!==own);
   const ob=NBD.slice(0,4).map(([dx,dy])=>{const x=gx+dx,y=gy+dy;if(x<0||y<0||x>=MW||y>=MH)return 0;const o=occ[y*MW+x];if(!o)return 0;const b=S.bl[o-1];return b&&!FLATB[b.t]?1:0});
-  const rl=occ[gi]?0:roadSet[gi],rc=rl?[roadConn(gx,gy-1),roadConn(gx+1,gy),roadConn(gx,gy+1),roadConn(gx-1,gy)]:null,rw=[0,.25,.31,.38][rl];
+  const rl=occ[gi]?0:roadSet[gi],rc=rl?[roadConn(gx,gy-1),roadConn(gx+1,gy),roadConn(gx,gy+1),roadConn(gx-1,gy)]:null,rw=[0,.25,.31,.38][rl];let rmask=0,rlow=0,rseed=0;if(rl>=2){rmask=ROADS.maskAt(roadConn,gx,gy);rseed=Math.floor(ROADS.hsh(gx,gy,5)*1000);[[0,-1],[1,0],[0,1],[-1,0]].forEach(([dx,dy],i)=>{const x=gx+dx,y=gy+dy;if(x<0||y<0||x>=MW||y>=MH)return;const j=y*MW+x;if(!occ[j]&&roadSet[j]&&roadSet[j]<rl)rlow|=1<<i})}
   const nearR=isRock(own)||nbs.some(isRock);const apL=[];for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){const x=gx+dx,y=gy+dy;if(x<0||y<0||x>=MW||y>=MH)continue;const o=occ[y*MW+x];if(!o)continue;const b=S.bl[o-1];if(b&&!FLATB[b.t]&&!APX[b.t])apL.push([x,y])}
   for(let ly=0;ly<32;ly++)for(let lx=0;lx<32;lx++){const X=gx*32+lx,Y=gy*32+ly,u=(lx+.5)/32,v=(ly+.5)/32;const n1=vnoise(X,Y,26,5),n2=vnoise(X,Y,7,6),h=hsh(X,Y,7);
    let R,G,B,wat=0,wW=0;const fx=X/32-.5,fy=Y/32-.5,i0=Math.floor(fx),j0=Math.floor(fy),tx=fx-i0,ty=fy-j0;
@@ -3613,7 +3735,8 @@ function* renderChunkG(cx,cy){const W=CS*32,ox=cx*W,oy=cy*W;const[c,g]=mk(W,W);c
    if(rl){let best=9;const add=(x0,x1,y0,y1)=>{const ex=Math.max(x0-u,0,u-x1),ey=Math.max(y0-v,0,v-y1);const s=ex||ey?Math.hypot(ex,ey):-Math.min(u-x0,x1-u,v-y0,y1-v);if(s<best)best=s};
     add(.5-rw,.5+rw,.5-rw,.5+rw);if(rc[0])add(.5-rw,.5+rw,-1,.5);if(rc[1])add(.5,2,.5-rw,.5+rw);if(rc[2])add(.5-rw,.5+rw,.5,2);if(rc[3])add(-1,.5,.5-rw,.5+rw);if(rc[0]&&rc[1]&&roadConn(gx+1,gy-1))add(.5,2,-1,.5);if(rc[1]&&rc[2]&&roadConn(gx+1,gy+1))add(.5,2,.5,2);if(rc[2]&&rc[3]&&roadConn(gx-1,gy+1))add(-1,.5,.5,2);if(rc[3]&&rc[0]&&roadConn(gx-1,gy-1))add(-1,.5,-1,.5);
     best+=(vnoise(X,Y,4,33)-.5)*(rl===1?.12:.03);const a=Math.max(0,Math.min(1,.5-best/.05));
-    if(a>0){let r2,g2,b2;if(rl===3){const row=Math.floor(Y/7),bx=Math.floor((X+(row%2)*5)/10),mort=(Y%7===0)||((X+(row%2)*5)%10===0),t=.88+hsh(bx,row,4)*.22;r2=mort?104:158*t;g2=mort?100:152*t;b2=mort?92:140*t;if(best>-.035){r2*=.78;g2*=.78;b2*=.78}}
+    if(rl>=2){/* Ningal road art: rl2 = Stone A, rl3 = Fancy A (widths unchanged: HALF matches rw) */col[0]=R;col[1]=G;col[2]=B;ROADS.pix(col,rl===3?'fancyA':'stoneA',lx,ly,gx*32,gy*32,rmask,rseed,rlow);R=col[0];G=col[1];B=col[2]}
+    else if(a>0){let r2,g2,b2;if(rl===3){const row=Math.floor(Y/7),bx=Math.floor((X+(row%2)*5)/10),mort=(Y%7===0)||((X+(row%2)*5)%10===0),t=.88+hsh(bx,row,4)*.22;r2=mort?104:158*t;g2=mort?100:152*t;b2=mort?92:140*t;if(best>-.035){r2*=.78;g2*=.78;b2*=.78}}
      else if(rl===2){const t=.92+.12*n2;r2=172*t;g2=148*t;b2=108*t;if(best>-.04){r2*=.82;g2*=.82;b2*=.82}if(h<.06){r2*=.85;g2*=.85;b2*=.85}}
      else{const t=.88+.18*n2;r2=150*t;g2=122*t;b2=84*t;if(h<.1){r2*=.86;g2*=.86;b2*=.86}if(h>.97){r2=120;g2=108;b2=80}}
      R+=(r2-R)*a;G+=(g2-G)*a;B+=(b2-B)*a}}
