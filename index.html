@@ -3345,7 +3345,17 @@ let AXF=0;const AX={f:-1,hvk:new Map(),haul:new Map(),bsite:new Map(),inB:new Ma
 function ax(){if(AX.f===AXF)return AX;AX.f=AXF;AX.hvk.clear();AX.haul.clear();AX.bsite.clear();AX.inB.clear();AX.lz=0;const inc=(m,k)=>m.set(k,(m.get(k)||0)+1);
  for(const a of agents){if(a.hvk)inc(AX.hvk,a.hvk);if(a.haul&&a.haul.k!=null)inc(AX.haul,a.haul.k);if(a.bsite)inc(AX.bsite,a.bsite);if(a.inB&&!(a.route&&a.route.length)){let l=AX.inB.get(a.inB);if(!l)AX.inB.set(a.inB,l=[]);l.push(a)}if(a.state==='leisure')AX.lz++}return AX}
 const FF=new Map(),FFN=new Map(),FFR=110,FFMAX=96;let ffNow=0;
+/* perf (opt pass): same Dijkstra, same heap order and tie-breaks as before; typed-array heap reused between builds (no per-swap array allocs) and walkC memoised per build (walkC is constant during one build) */
+let FFH=new Int32Array(1<<16),FFV=new Float64Array(1<<16),FFC=null;
 function ffBuild(gx,gy){const x0=Math.max(0,gx-FFR),y0=Math.max(0,gy-FFR),x1=Math.min(MW-1,gx+FFR),y1=Math.min(MH-1,gy+FFR),w=x1-x0+1,h=y1-y0+1,N=w*h,par=new Int32Array(N).fill(-2),G=new Float64Array(N).fill(1e9);
+ if(!FFC||FFC.length<N)FFC=new Float64Array(N);const WC=FFC;WC.fill(-1,0,N);const wc=(lx,ly)=>{const k=ly*w+lx;let v=WC[k];if(v<0){v=walkC(lx+x0,ly+y0);WC[k]=v}return v};
+ let hn=0,hp=FFH,hv=FFV;const push=(n,f)=>{if(hn>=hp.length){const a=new Int32Array(hp.length*2);a.set(hp);hp=FFH=a;const b=new Float64Array(hv.length*2);b.set(hv);hv=FFV=b}let i=hn++;hp[i]=n;hv[i]=f;while(i>0){const q=(i-1)>>1;if(hv[q]<=hv[i])break;const tn=hp[q];hp[q]=hp[i];hp[i]=tn;const tv=hv[q];hv[q]=hv[i];hv[i]=tv;i=q}};
+ const pop=()=>{const t=hp[0];hn--;const ln=hp[hn],lv=hv[hn];if(hn){hp[0]=ln;hv[0]=lv;let i=0;for(;;){const a=2*i+1,b=a+1;let m=i;if(a<hn&&hv[a]<hv[m])m=a;if(b<hn&&hv[b]<hv[m])m=b;if(m===i)break;const tn=hp[m];hp[m]=hp[i];hp[i]=tn;const tv=hv[m];hv[m]=hv[i];hv[i]=tv;i=m}}return t};
+ const g0=(gy-y0)*w+gx-x0;par[g0]=-1;G[g0]=0;push(g0,0);const gc=walkC(gx,gy)||1;const GO=gOwn(),gO=GO?GO[gy*MW+gx]:0;
+ while(hn){const f=hv[0],n=pop();if(f>G[n])continue;const lx=n%w,ly=(n/w)|0,X0=lx+x0,Y0=ly+y0;const cn=n===g0?gc:wc(lx,ly);
+  for(let d=0;d<4;d++){const dx=d===0?1:d===1?-1:0,dy=d===2?1:d===3?-1:0,lx2=lx+dx,ly2=ly+dy;if(lx2<0||ly2<0||lx2>=w||ly2>=h)continue;const m=ly2*w+lx2;let c=wc(lx2,ly2);if(!c)continue;if(GO){const o=GO[(Y0+dy)*MW+X0+dx];if(o&&o!==gO)c+=GRANT_PEN}const ng=G[n]+(c+cn)*.5;if(ng<G[m]){G[m]=ng;par[m]=n;push(m,ng)}}}
+ return{x0,y0,w,h,par,t:ffNow}}
+function ffBuildRef(gx,gy){const x0=Math.max(0,gx-FFR),y0=Math.max(0,gy-FFR),x1=Math.min(MW-1,gx+FFR),y1=Math.min(MH-1,gy+FFR),w=x1-x0+1,h=y1-y0+1,N=w*h,par=new Int32Array(N).fill(-2),G=new Float64Array(N).fill(1e9);
  const hp=[],hv=[];const push=(n,f)=>{hp.push(n);hv.push(f);let i=hp.length-1;while(i>0){const q=(i-1)>>1;if(hv[q]<=hv[i])break;[hp[q],hp[i]]=[hp[i],hp[q]];[hv[q],hv[i]]=[hv[i],hv[q]];i=q}};
  const pop=()=>{const t=hp[0],ln=hp.pop(),lv=hv.pop();if(hp.length){hp[0]=ln;hv[0]=lv;let i=0;for(;;){const a=2*i+1,b=a+1;let m=i;if(a<hp.length&&hv[a]<hv[m])m=a;if(b<hp.length&&hv[b]<hv[m])m=b;if(m===i)break;[hp[m],hp[i]]=[hp[i],hp[m]];[hv[m],hv[i]]=[hv[i],hv[m]];i=m}}return t};
  const g0=(gy-y0)*w+gx-x0;par[g0]=-1;G[g0]=0;push(g0,0);const gc=walkC(gx,gy)||1;const GO=gOwn(),gO=GO?GO[gy*MW+gx]:0;
