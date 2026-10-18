@@ -90,6 +90,191 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <div id="modal"><div class="panel glass" id="mbody"></div></div>
 
 <script>
+/* Gatherer's Hut, berry bushes and picker art (art-studio/gatherer/v2/gatherer.js by Ningal, approved by Weston); verbatim */
+/* Bronze and Blood: GATHERER'S HUT (BLD.gatherhut), BERRY BUSHES and the PICKER pose. Art only, self-contained (no game globals needed).
+ *
+ * HUT  drawGatherHut(ctx, t, {interior, beds, fill, variant, burn})   variant 'A' | 'B' | 'C'
+ *   FOOTPRINT  PROPOSAL 5x5 tiles (160px). Today: NSZ_A gatherhut:3 (3x3, 96px, new games, SCL 2) / NSZ1 gatherhut:6 (old saves).
+ *              3x3 is the size of the family TENT alone; a family house for 4-6 plus the berry store does not fit -> 5x5 is Hammurabi's call.
+ *   SPRITE     176x176, drawn at world (x*32-8, y*32-8) like fpSpr; anchor = top-left tile; footprint = sprite px 8..168.
+ *              All coordinates below are SPRITE px. t = ms (smoke, hearth flicker; loop 2400 ms). fill 0..1 = berries / GH_STORE_CAP (2000).
+ *   interior   true = cut-away (roof removed, beds + family slots visible); false = thatched exterior.
+ *   beds       4..6 bed rolls drawn (slot order below); sleepers are drawn by the game.
+ *   Slots      GH_SLOTS[variant] = {house:{...}, beds:[{x,y,rot,a}], seats:[{x,y}], hearth:{x,y}, door:{x,y}, store:{x,y,w,h,n,per}, work:[{x,y,dir}]}
+ *              bed: translate(x,y) rotate(rot), pillow at local -y, bed 13x24; rot = a + PI/2 (intDraw convention). Sleeper: drawImage(pawnSpr(o,1,2),-8,-12,16,22).
+ * BUSH drawBerryBush(ctx, state, shape, t, f, rustle, colour)  shape 0..4 (BUSH_SHAPES: round mound, wide sprawl, tall upright, lopsided, low creeping),
+ *   colour 'red'|'blue' (BERRY_PALETTES; default shape%2). One palette per type shared by bush, hopping berry and basket/jar/silo heaps.
+ * (old line kept for reference:) drawBerryBush(ctx, state, variant, t, f, rustle)  origin = bush centre on the ground (same point the game uses for prop X,Y). ~26x22 px, 48x48 box like propSpr.
+ *   state 'full' | 'picked' | 'green' | 'turning' | 'ripening' | 'winter'; (the game's sp2 colour pick should map to red/blue only: sp2%2);
+ *   f (optional 0..1) = rnAmt/RND.b.max, thins the berries of 'full' (game: 5 clusters * f).
+ *   Suggested game mapping: a<=0 -> 'picked'; regrow f<.34 'green', <.67 'turning', <1 'ripening', 1 'full'; winter season (rnSeason()==3) -> 'winter'.
+ * PICKER POSE_PICK_A/B/C (pose-table format, no arms; drawPicker(...,t,POSE_PICK_B) etc.): squash / lean / push / jostle / rustle keys + hop windows (see the PICKER section).
+ *   Per frame: drawBerryBush(ctx,'full',v,t,f, ghBushRustle(cyc)); then drawPicker(ctx,x,y,cyc,drawBody,PSC,v,[bx,by],fl,t)
+ *   (pawn in front, overlapping the bush's near edge). Thin the bush by one pluck per started hop.
+ */
+(function(G){'use strict';
+const O='#2a1a0e',LOOP=2400,GH_STORE_CAP=2000;
+const hs=(i,s)=>{const v=Math.sin(i*127.1+s*311.7)*43758.5453;return v-Math.floor(v)};
+function ell(g,x,y,rx,ry,c){g.beginPath();g.ellipse(x,y,Math.max(.1,rx),Math.max(.1,ry),0,0,6.2832);g.fillStyle=c;g.fill()}
+function circ(g,x,y,r,f,s,lw){g.beginPath();g.arc(x,y,Math.max(.05,r),0,6.2832);if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw||1;g.stroke()}}
+function rr(g,x,y,w,h,r,f,s,lw){g.beginPath();g.roundRect(x,y,w,h,r);if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw||1;g.stroke()}}
+function ln(g,a,b,c,d,s,w){g.beginPath();g.moveTo(a,b);g.lineTo(c,d);g.strokeStyle=s;g.lineWidth=w;g.stroke()}
+function shade(hex,k){const n=parseInt(hex.slice(1),16);const f=v=>Math.max(0,Math.min(255,Math.round(k>0?v+(255-v)*k:v*(1+k))));return'rgb('+f(n>>16)+','+f(n>>8&255)+','+f(n&255)+')'}
+const lerp=(a,b,u)=>a+(b-a)*u,ease=u=>u<.5?2*u*u:1-2*(1-u)*(1-u),easeIn=u=>u*u,easeOut=u=>1-(1-u)*(1-u);
+/* same evaluator as the game's PWN.swing(p,keys): keys [[t,v,'io'|'in'|'out'],...] */
+function swing(p,keys){for(let i=0;i<keys.length-1;i++){const[a,va,e]=keys[i],[b,vb]=keys[i+1];if(p>=a&&p<=b){const u=(p-a)/(b-a);const fn=e==='in'?easeIn:e==='out'?easeOut:ease;return lerp(va,vb,fn(u))}}return keys[keys.length-1][1]}
+/* ================= BERRY BUSH ================= */
+/* ONE shared palette per berry type: bush clusters, the hopping berry, basket/jar/silo heaps all draw with berry() from these exact colours.
+   ripe = [base, highlight, shade]; green = unripe; turn = half-ripe (red: orange-red, blue: pinkish purple). */
+const BERRY_PALETTES={red:{ripe:['#b81f30','#ff8a8a','#6a0a14'],green:['#9ac04a','#d8f08a','#4a6a1a'],turn:['#d8603a','#ffb08a','#7a2010']},
+ blue:{ripe:['#2c3a8e','#9ab4f2','#121a46'],green:['#9ac04a','#d8f08a','#4a6a1a'],turn:['#a8507e','#eaa6d0','#4a1a3a']}};
+const BCOL=c=>c==='blue'||c===1?'blue':'red';const PAL=c=>BERRY_PALETTES[BCOL(c)].ripe;
+/* the single berry primitive (every berry in this file): base disc, shade outline, highlight dot */
+function berry(g,x,y,r,C){circ(g,x,y,r,C[0],C[2],Math.max(.3,r*.36));circ(g,x-r*.34,y-r*.36,r*.34,C[1])}
+const LEAF=[['#1c3418','#2f5a26','#467a36','#6a9a4e'],['#1e3424','#335c3a','#4a7a4c','#6e9e66'],['#2a3418','#4a5a26','#647834','#86a04e']];
+const BUSH_SHAPES=['round mound','wide sprawl','tall upright','lopsided','low creeping'];
+function bushLobes(v){const L=[];const S=[{n:6,rx:7.5,ry:5.5,r:6,up:0,sk:0},{n:7,rx:10.5,ry:5,r:5.6,up:-1,sk:0},{n:6,rx:5.5,ry:7,r:5.8,up:-3,sk:0},{n:6,rx:8,ry:5.5,r:5.4,up:-1,sk:1},{n:8,rx:12.5,ry:3.4,r:4.3,up:3,sk:0}][v];
+ for(let i=0;i<S.n;i++){const a=i/S.n*6.2832+v*.7,c=Math.cos(a);const lop=S.sk?(c>0?1.35:.8):1;L.push({x:c*S.rx*(S.sk?(c>0?1.15:.85):1)+S.sk*2,y:Math.sin(a)*S.ry*.8-4+S.up*.5-(S.sk&&c>0?2:0),r:(S.r+hs(i,v+1)*1.6)*lop})}
+ L.push({x:S.sk*3,y:-7+S.up-(S.sk?1.5:0),r:S.r+.8});L.push({x:-2,y:-1+(v===4?2:0),r:S.r});L.sort((p,q)=>p.y-q.y);return L}
+function berryCl(g,x,y,C,s){for(const[dx,dy]of[[0,0],[1.7,.6],[.5,1.7],[-1.2,1]])berry(g,x+dx*s,y+dy*s,1.25*s,C)}
+function vnoise(t,seed,step){const i=Math.floor(t/step),u=t/step-i,a=hs(i,seed)*2-1,b=hs(i+1,seed)*2-1,w=u*u*(3-2*u);return a+(b-a)*w}
+/* rus = rustle 0..1 (ghBushRustle): foliage EDGE trembles. Silhouette lobes keep their centres and only breathe (<=0.3px radius); inner shading shifts <=0.45px and is clipped to the silhouette, so nothing detaches, gaps or draws outside the outline. Leaf detail is seeded per lobe (stable). */
+function drawBerryBush(g,state,v,t,f,rus,col){v=((v|0)%5+5)%5;col=BCOL(col==null?v%2:col);const BP=BERRY_PALETTES[col],P=LEAF[v%3],L0=bushLobes(v),win=state==='winter';t=t||0;rus=Math.max(0,Math.min(1,rus||0));const Ls=L0.map((l,i)=>({x:l.x,y:l.y,r:l.r+(rus?(vnoise(t,i*7+1,70)*.7+vnoise(t,i*7+3,31)*.3)*.3*rus:0)})),L=L0.map((l,i)=>({i,x:l.x+(rus?(vnoise(t,i*7+5,83)*.7+vnoise(t,i*7+2,37)*.3)*.45*rus:0),y:l.y+(rus?vnoise(t,i*7+4,61)*.3*rus:0),r:l.r}));
+ ell(g,3,3,13+(v===1?3:0),6,'rgba(10,14,6,.3)');
+ if(win){/* bare twigs fanning from the root crown, a few brown leaves, frost */g.save();g.lineCap='round';for(let i=0;i<9;i++){const a=-Math.PI/2+(i/8-.5)*[2,2.6,1.3,2.1,2.9][v]+(v===3?.25:0);const len=[13,13,17,14,9][v]+hs(i,v)*4;const ex=Math.cos(a)*len,ey=Math.sin(a)*len*.85;
+   ln(g,0,1,ex,ey,'#3a2614',1.6);ln(g,0,1,ex,ey,'#6a4a2e',.8);for(let k=1;k<3;k++){const px=ex*k/3,py=ey*k/3,b=a+(k%2?.6:-.6);ln(g,px,py,px+Math.cos(b)*4,py+Math.sin(b)*4,'#5a3e24',.7)}
+   if(hs(i,9)<.5)ell(g,ex*.7,ey*.7,1.3,.8,'#8a6a3a');circ(g,ex,ey,.7,'rgba(240,248,255,.9)')}g.restore();for(let i=0;i<14;i++)circ(g,(hs(i,3)-.5)*24,(hs(i,4)-.5)*8+3,.6,'rgba(235,245,255,.85)');ell(g,0,2,4,2,'#4a3420');return}
+ for(const l of Ls)circ(g,l.x,l.y,l.r+1.1,'#10200c');for(const l of Ls)circ(g,l.x,l.y,l.r,P[1]);g.save();g.beginPath();for(const l of Ls){g.moveTo(l.x+l.r,l.y);g.arc(l.x,l.y,l.r,0,6.2832)}g.clip();
+ for(const l of L){const gr=g.createRadialGradient(l.x-l.r*.4,l.y-l.r*.5,l.r*.15,l.x,l.y,l.r*1.1);gr.addColorStop(0,P[3]);gr.addColorStop(.55,P[2]);gr.addColorStop(1,P[1]);circ(g,l.x,l.y,l.r,gr)}
+ for(const l of L){g.fillStyle=P[0];g.beginPath();g.arc(l.x+l.r*.15,l.y+l.r*.3,l.r*.85,.2,2.9);g.globalAlpha=.35;g.fill();g.globalAlpha=1;for(let k=0;k<4;k++){const a=hs(k,l.i*3+1)*6.28,r=hs(k,l.i*3+2)*l.r*.7;ell(g,l.x+Math.cos(a)*r,l.y+Math.sin(a)*r,1.4,.8,k%2?P[3]:P[1])}} g.restore();
+ if(state==='picked'){for(let i=0;i<4;i++){const l=L[(i*2+1)%L.length];ln(g,l.x-1,l.y,l.x+1.5,l.y-1.2,'#5a3a20',.5)}berry(g,6,4,.8,BP.ripe);return}
+ const C=state==='green'?BP.green:state==='turning'?BP.turn:BP.ripe,sz=state==='green'?.65:state==='turning'?.8:state==='ripening'?.9:1,nb=state==='full'?Math.round(8*(f==null?1:f)):state==='ripening'?7:state==='turning'?6:6;
+ for(let i=0;i<nb;i++){const l=L[(i*3+v)%L.length];const a=i*2.39+v,cx=l.x+Math.cos(a)*l.r*.45,cy=l.y+Math.abs(Math.sin(a))*l.r*.45;const mix=state==='ripening'&&i%3===0?BP.turn:C;berryCl(g,cx,cy,mix,sz)}}
+/* ================= HUT: shared props ================= */
+function dirt(g,x,y,w,h,c,seed){rr(g,x,y,w,h,6,c);for(let i=0;i<w*h/50;i++){g.fillStyle='rgba(60,40,20,'+(.06+hs(i,seed)*.12)+')';g.fillRect(x+hs(i,seed+1)*w,y+hs(i,seed+2)*h,1.6,1.1)}}
+function yardPatch(g,cx,cy,rx,ry){const gr=g.createRadialGradient(cx,cy,Math.min(rx,ry)*.3,cx,cy,Math.max(rx,ry));gr.addColorStop(0,'rgba(170,138,92,.75)');gr.addColorStop(.75,'rgba(170,138,92,.55)');gr.addColorStop(1,'rgba(170,138,92,0)');g.fillStyle=gr;g.beginPath();g.ellipse(cx,cy,rx,ry,0,0,6.2832);g.fill();
+ for(let i=0;i<rx*ry/14;i++){const a=hs(i,5)*6.28,r=Math.sqrt(hs(i,6));g.fillStyle='rgba(80,56,30,'+(.08+hs(i,7)*.12)+')';g.fillRect(cx+Math.cos(a)*r*rx*.9,cy+Math.sin(a)*r*ry*.9,1.5,1)}}
+function bed(g,s,c){g.save();g.translate(s.x,s.y);g.rotate(s.rot);ell(g,1.5,2,7.5,12.5,'rgba(0,0,0,.2)');rr(g,-6.5,-12,13,24,2.5,c,O,.6);for(let k=-8;k<12;k+=3)ln(g,-6,k,6,k,'rgba(60,40,20,.12)',.4);rr(g,-5,-10.5,10,5,2,'#efe4cc','rgba(60,40,20,.5)',.4);g.restore()}
+const BEDC=['#c8b090','#9a6a4a','#b85a3a','#6a7a9a','#d8c8a0','#7a5a8a'];
+function hearth(g,x,y,t,lit,r){r=r||5.4;for(let i=0;i<9;i++){const a=i/9*6.2832;circ(g,x+Math.cos(a)*r,y+Math.sin(a)*r*.82,1.8,i%2?'#9a9488':'#8a847a',O,.4)}ell(g,x,y,r-1.6,(r-1.6)*.8,'#2a1a10');if(lit){const fl=.75+.25*Math.sin((t||0)/110)+.1*Math.sin((t||0)/47);ell(g,x,y,2.8*fl,2.2*fl,'#e86a20');ell(g,x,y-.5,1.5*fl,1.2*fl,'#ffd060')}}
+function smoke(g,x,y,t){const ph=(t||0)/LOOP;for(let k=0;k<3;k++){const q=(ph+k/3)%1;g.globalAlpha=.3*(1-q);circ(g,x+q*8+Math.sin(q*9+k)*1.6,y-q*20,1.8+q*3,'#d8d0c0');g.globalAlpha=1}}
+function log3(g,x,y,len,r){const gr=g.createLinearGradient(0,y-r,0,y+r);gr.addColorStop(0,'#a0703c');gr.addColorStop(.5,'#7a4e28');gr.addColorStop(1,'#4e3018');rr(g,x,y-r,len,2*r,r,gr,O,.7);ell(g,x+len-r*.6,y,r*.75,r,'#d8b080')}
+function pot(g,x,y,r,c){c=c||'#b8703c';ell(g,x+1.5,y+r*.9,r,r*.42,'rgba(0,0,0,.28)');const gr=g.createRadialGradient(x-r*.4,y-r*.5,r*.15,x,y,r*1.25);gr.addColorStop(0,shade(c,.35));gr.addColorStop(.6,c);gr.addColorStop(1,shade(c,-.45));g.beginPath();g.ellipse(x,y,r,r*1.1,0,0,6.2832);g.fillStyle=gr;g.fill();g.strokeStyle=O;g.lineWidth=.7;g.stroke();ell(g,x,y-r*.92,r*.48,r*.19,shade(c,-.25));ell(g,x,y-r*.9,r*.3,r*.1,'#2a160a')}
+function quern(g,x,y){ell(g,x+2,y+4,9,4,'rgba(0,0,0,.25)');rr(g,x-9,y-3,18,8,4,'#8a847a',O,.7);ell(g,x-1,y,6,2.6,'#a8a294');rr(g,x-3,y-3.5,6,3,1.5,'#9a9488',O,.5)}
+function stool(g,x,y){log3(g,x-8,y,16,2.6)}
+/* woven basket in 3/4 view; fill 0..1 heaps berries above the rim */
+function basket(g,x,y,r,fill,v){const h=r*.9;ell(g,x+1.8,y+h*.55,r*1.1,r*.45,'rgba(0,0,0,.28)');const gr=g.createLinearGradient(x-r,0,x+r,0);gr.addColorStop(0,'#d8b070');gr.addColorStop(.5,'#c09048');gr.addColorStop(1,'#8a6230');
+ g.beginPath();g.moveTo(x-r,y-h*.5);g.lineTo(x-r*.85,y+h*.45);g.ellipse(x,y+h*.45,r*.85,r*.32,0,Math.PI,0,true);g.lineTo(x+r,y-h*.5);g.closePath();g.fillStyle=gr;g.fill();g.strokeStyle=O;g.lineWidth=.7;g.stroke();
+ for(let k=1;k<4;k++)ln(g,x-r*(1-k*.04),y-h*.5+k*h*.24,x+r*(1-k*.04),y-h*.5+k*h*.24,'rgba(90,60,20,.45)',.5);for(let k=-3;k<=3;k++)ln(g,x+k*r*.28,y-h*.45,x+k*r*.24,y+h*.5,'rgba(255,230,170,.25)',.4);
+ ell(g,x,y-h*.5,r,r*.38,'#6a4a24');g.beginPath();g.ellipse(x,y-h*.5,r,r*.38,0,0,6.2832);g.strokeStyle=O;g.lineWidth=.7;g.stroke();ell(g,x,y-h*.48,r*.8,r*.28,'#3a2410');
+ if(fill>0){const C=PAL(v);const hh=r*.55*Math.min(1,fill),rw=r*.8*(fill<.3?.7+fill:1),ry=y-h*.48;/* heap = shade-coloured mound covered in palette berries */
+  g.beginPath();g.ellipse(x,ry,rw,r*.3,0,0,Math.PI,false);g.quadraticCurveTo(x,ry-hh*2.1,x+rw,ry);g.fillStyle=C[2];g.fill();
+  const n=Math.round(5+fill*9),br=Math.max(.55,r*.17);for(let q=0;q<n;q++){const u=(q+.5)/n,ax=(hs(q,7)-.5)*2*rw*.8,top=hh*2.1*.5*(1-(ax/rw)**2);berry(g,x+ax,ry+r*.12-top*hs(q,9)-br*.2,br,C)}}}
+/* irregular basket placement: positions are jittered from a loose ring, never a row */
+function storeBaskets(g,S,fill){const n=S.n,per=1/n;for(let i=0;i<n;i++){const p=S.pos[i];const fi=Math.max(0,Math.min(1,(fill-i*per)/per));basket(g,p[0],p[1],p[2]||5.6,fi,(i*7%3)===1?1:0)}}
+function storeJars(g,S,fill){const n=S.n,per=1/n;for(let i=0;i<n;i++){const p=S.pos[i];const fi=Math.max(0,Math.min(1,(fill-i*per)/per));pot(g,p[0],p[1],p[2]||6,i%3===1?'#a86034':'#b8703c');
+ /* the open mouth shows a berry mound that grows with the jar's share */if(fi>0){const r=p[2]||6,C=PAL(i%2),my=p[1]-r*.95;ell(g,p[0],my,r*.46,r*.2,C[2]);g.beginPath();g.ellipse(p[0],my,r*.46,r*.2,0,0,Math.PI);g.quadraticCurveTo(p[0],my-r*.9*fi,p[0]+r*.46,my);g.fillStyle=C[2];g.fill();for(let q=0;q<3+fi*4;q++)berry(g,p[0]+(hs(q,i)-.5)*r*.7,my-hs(q,i+3)*r*.5*fi,.65,C)}
+ /* lid off when partly full, tied cloth cover when full */}}
+function fillTag(g,x,y,w,fill){rr(g,x,y,w,3.4,1.2,'rgba(30,20,10,.6)');rr(g,x+.4,y+.4,(w-.8)*Math.max(0,Math.min(1,fill)),2.6,1,'#c83a4a')}
+function lean(g,x,y,w,h){/* lean-to shade: 4 posts and a reed mat roof seen from above (left half cut so the store reads) */for(const[px,py]of[[x,y],[x+w,y],[x,y+h],[x+w,y+h]]){ell(g,px+1,py+1.5,1.6,.8,'rgba(0,0,0,.3)');circ(g,px,py,1.4,'#6a4626',O,.5)}
+ g.save();g.globalAlpha=.88;g.beginPath();g.moveTo(x-3,y-4);g.lineTo(x+w*.42,y-4);g.lineTo(x+w*.42,y+h+3);g.lineTo(x-3,y+h+3);g.closePath();g.fillStyle='#c8a868';g.fill();g.strokeStyle=O;g.lineWidth=.8;g.stroke();for(let yy=y-2;yy<y+h+3;yy+=2.4)ln(g,x-2,yy,x+w*.42-1,yy,'rgba(110,80,40,.4)',.5);g.restore()}
+function rack(g,x,y,w,t){const R=PAL('red'),B=PAL('blue');/* drying rack with berries spread on a mat */ell(g,x+w/2+2,y+8,w*.6,3,'rgba(0,0,0,.25)');ln(g,x,y+8,x,y-6,'#5a3a1e',1.2);ln(g,x+w,y+8,x+w,y-6,'#5a3a1e',1.2);rr(g,x-1,y-4,w+2,9,1,'#d8c08a',O,.6);for(let i=0;i<w;i+=3)ln(g,x+i,y-4,x+i,y+5,'rgba(120,90,40,.35)',.4);for(let i=0;i<w*1.2;i++)berry(g,x+1+hs(i,x)*(w-2),y-3+hs(i,y)*7,.75,hs(i,4)<.5?R:B)}
+/* ================= HOUSE SHAPES ================= */
+function roundWalls(g,cx,cy,R){ell(g,cx+4,cy+5,R+4,R*.95,'rgba(0,0,0,.22)');circ(g,cx,cy,R+5,'#b89466',O,1.3);for(let i=0;i<64;i++){const a=i/64*6.2832;ln(g,cx+Math.cos(a)*(R+.5),cy+Math.sin(a)*(R+.5),cx+Math.cos(a)*(R+4.5),cy+Math.sin(a)*(R+4.5),i%2?'rgba(110,80,40,.45)':'rgba(230,200,150,.35)',.8)}}
+function roundFloor(g,cx,cy,R){g.save();g.beginPath();g.arc(cx,cy,R,0,6.2832);g.clip();dirt(g,cx-R,cy-R,2*R,2*R,'#8a6a46',3);g.restore();g.beginPath();g.arc(cx,cy,R,0,6.2832);g.strokeStyle='rgba(40,24,10,.6)';g.lineWidth=1;g.stroke()}
+function doorGap(g,x,y,w,vert,floor){g.fillStyle=floor||'#8a6a46';if(vert)g.fillRect(x-3,y-w/2,7,w);else g.fillRect(x-w/2,y-3,w,7);ln(g,vert?x-3:x-w/2,vert?y-w/2:y-3,vert?x+4:x-w/2,vert?y-w/2:y+4,O,1);ln(g,vert?x-3:x+w/2,vert?y+w/2:y-3,vert?x+4:x+w/2,vert?y+w/2:y+4,O,1)}
+function coneRoof(g,cx,cy,R,t){const r=R+9;ell(g,cx+6,cy+8,r,r*.9,'rgba(0,0,0,.25)');const gr=g.createRadialGradient(cx-r*.35,cy-r*.4,r*.1,cx,cy,r);gr.addColorStop(0,'#e0c27a');gr.addColorStop(.6,'#c09a54');gr.addColorStop(1,'#8a6a34');circ(g,cx,cy,r,gr,O,1.3);
+ for(let i=0;i<90;i++){const a=i/90*6.2832+hs(i,1)*.05;ln(g,cx+Math.cos(a)*r*.18,cy+Math.sin(a)*r*.18,cx+Math.cos(a)*(r-.5),cy+Math.sin(a)*(r-.5),i%3?'rgba(110,80,30,.28)':'rgba(255,240,190,.25)',.6)}
+ for(const k of[.45,.75])g.beginPath(),g.arc(cx,cy,r*k,0,6.2832),g.strokeStyle='rgba(90,60,24,.45)',g.lineWidth=1.1,g.stroke();for(let i=0;i<40;i++){const a=i/40*6.2832;ln(g,cx+Math.cos(a)*(r-.5),cy+Math.sin(a)*(r-.5),cx+Math.cos(a)*(r+1.6),cy+Math.sin(a)*(r+1.6),'#9a7a3a',.7)}
+ circ(g,cx,cy,4.5,'#5a3a1a',O,.7);circ(g,cx,cy,2,'#2a160a');smoke(g,cx,cy-2,t)}
+function rectWalls(g,x,y,w,h){rr(g,x+4,y+5,w,h,4,'rgba(0,0,0,.22)');rr(g,x-5,y-5,w+10,h+10,4,'#b89466',O,1.3);for(let i=0;i<(w+h)*2/3;i++){const p=i*3;let px,py;if(p<w){px=x+p;py=y-2.5}else if(p<w+h){px=x+w+2.5;py=y+p-w}else if(p<2*w+h){px=x+w-(p-w-h);py=y+h+2.5}else{px=x-2.5;py=y+h-(p-2*w-h)}circ(g,px,py,1,'rgba(110,80,40,.4)')}
+ for(const[cx,cy]of[[x-3,y-3],[x+w+3,y-3],[x-3,y+h+3],[x+w+3,y+h+3]])circ(g,cx,cy,2.6,'#7a5232',O,.6)}
+function rectFloor(g,x,y,w,h){dirt(g,x,y,w,h,'#8a6a46',4);rr(g,x,y,w,h,2,null,'rgba(40,24,10,.6)',1)}
+function gableRoof(g,x,y,w,h,t){const o=7,X=x-o,Y=y-o,W=w+2*o,H=h+2*o;rr(g,X+6,Y+8,W,H,4,'rgba(0,0,0,.25)');const ym=Y+H/2;
+ const half=(ya,yb,c1,c2)=>{const gr=g.createLinearGradient(0,ya,0,yb);gr.addColorStop(0,c1);gr.addColorStop(1,c2);g.fillStyle=gr;g.fillRect(X,ya,W,yb-ya);for(let i=0;i<W;i+=1.6)ln(g,X+i,ya+1,X+i+hs(i,ya)*1.2,yb-1,i%3?'rgba(110,80,30,.22)':'rgba(255,240,190,.2)',.5);for(let yy=ya+5;yy<yb;yy+=6)ln(g,X,yy,X+W,yy,'rgba(90,60,24,.35)',.8)};
+ half(Y,ym,'#e0c27a','#c8a45e');half(ym,Y+H,'#a8844a','#86662f');g.strokeStyle=O;g.lineWidth=1.3;g.strokeRect(X,Y,W,H);ln(g,X,ym,X+W,ym,'#6a4a1e',2.4);ln(g,X,ym-1.2,X+W,ym-1.2,'#f0d890',.8);for(let i=0;i<W;i+=2)ln(g,X+i,Y+H,X+i+.6,Y+H+1.8,'#9a7a3a',.7);
+ circ(g,x+w*.5,ym,3,'#3a2414',O,.6);smoke(g,x+w*.5,ym-2,t)}
+/* ================= LAYOUTS (sprite px, footprint 8..168) ================= */
+const RB=(cx,cy,r,degs)=>degs.map(d=>{const a=d*Math.PI/180;return{x:+(cx+Math.cos(a)*r).toFixed(1),y:+(cy+Math.sin(a)*r).toFixed(1),rot:+(a+Math.PI/2).toFixed(4),a:+a.toFixed(4)}});
+const GH_SLOTS={
+ A:{house:{shape:'round',cx:68,cy:68,r:52,floorR:52,area:8495},hearth:{x:68,y:68},door:{x:68,y:125},
+  beds:RB(68,68,36,[200,245,290,335,20,160]),seats:[{x:56,y:80},{x:80,y:80},{x:68,y:86}],
+  store:{kind:'baskets',x:128,y:14,w:36,h:64,n:10,per:200,pos:[[138,26,6],[152,23,5.6],[134,40,5.8],[149,38,6.2],[159,48,5],[140,55,6],[154,60,5.6],[134,70,5.4],[148,74,6],[160,70,5]]},
+  yard:{hearth:{x:106,y:146},seats:[{x:94,y:152},{x:118,y:152},{x:106,y:158}]},work:[{x:130,y:102,dir:1,what:'sorting at the drying rack'},{x:44,y:150,dir:0,what:'quern'},{x:126,y:52,dir:1,what:'store'}]},
+ B:{house:{shape:'rect',x:14,y:14,w:104,h:84,area:8736},hearth:{x:66,y:60},door:{x:66,y:103},
+  beds:[{x:26,y:30},{x:42,y:30},{x:58,y:30},{x:74,y:30}].map(p=>({...p,rot:0,a:-Math.PI/2})).concat([{x:104,y:52},{x:104,y:74}].map(p=>({...p,rot:Math.PI/2,a:0}))),seats:[{x:54,y:72},{x:78,y:72},{x:66,y:80}],
+  store:{kind:'jars',x:128,y:16,w:36,h:72,n:8,per:250,pos:[[139,28,6.4],[154,25,6],[134,45,6.2],[150,43,6.6],[160,58,5.6],[140,63,6.4],[154,76,6.2],[136,82,5.8]]},
+  yard:{hearth:{x:96,y:140},seats:[{x:84,y:146},{x:108,y:146},{x:96,y:152}]},work:[{x:124,y:124,dir:1,what:'drying rack'},{x:36,y:140,dir:0,what:'quern'},{x:128,y:52,dir:1,what:'store'}]},
+ C:{house:{shape:'round',cx:62,cy:70,r:50,floorR:50,area:7854},hearth:{x:62,y:70},door:{x:62,y:125},
+  beds:RB(62,70,34,[200,245,290,335,20,160]),seats:[{x:50,y:82},{x:74,y:82},{x:62,y:88}],
+  store:{kind:'silos',x:122,y:12,w:44,h:80,n:2,per:1000,pos:[[142,34,15],[146,74,15]]},
+  yard:{hearth:{x:100,y:148},seats:[{x:88,y:154},{x:112,y:154},{x:100,y:160}]},work:[{x:128,y:118,dir:1,what:'drying mats'},{x:38,y:150,dir:0,what:'quern'},{x:124,y:56,dir:1,what:'silo ladder'}]}};
+/* raised wicker silo (C): woven drum on a stone/stilt base, open lid shows the berry level */
+function silo(g,x,y,r,fill,v){ell(g,x+3,y+r*.9,r*1.1,r*.42,'rgba(0,0,0,.3)');for(const dx of[-r*.6,0,r*.6])ln(g,x+dx,y+r*.4,x+dx,y+r*.9,'#5a3a1e',1.6);basket(g,x,y,r,0,v);
+ const h=r*.9,C=PAL(v);if(fill>0){const k=Math.min(1,fill);ell(g,x,y-h*.48+(1-k)*r*.12,r*.8*(.5+.5*k),r*.28*(.5+.5*k),C[2]);for(let i=0;i<Math.round(6+k*14);i++){const a=hs(i,x)*6.28,q=Math.sqrt(hs(i,y))*r*.66*(.5+.5*k);berry(g,x+Math.cos(a)*q,y-h*.48+(1-k)*r*.12+Math.sin(a)*q*.3,.85,C)}}
+ /* conical lid tipped to one side + ladder */g.save();g.translate(x+r*.7,y-h*.5-3);g.rotate(.5);ell(g,0,0,r*.55,r*.22,'#b89050');for(let i=-3;i<=3;i++)ln(g,i*r*.15,-r*.18,0,-r*.5,'rgba(110,80,30,.6)',.5);g.restore();
+ ln(g,x-r-2,y+r*.4,x-r+2,y-h*.6,'#7a5232',1);ln(g,x-r+2,y+r*.4,x-r+6,y-h*.6,'#7a5232',1);for(let i=0;i<5;i++){const u=i/4;ln(g,x-r-2+u*4,y+r*.4-u*(r*.4+h*.6),x-r+2+u*4,y+r*.4-u*(r*.4+h*.6),'#7a5232',.8)}fillTag(g,x-r*.6,y+r+1,r*1.2,fill)}
+function drawGatherHut(g,t,o){o=o||{};const V=GH_SLOTS[o.variant]?o.variant:'A',L=GH_SLOTS[V],fill=Math.max(0,Math.min(1,o.fill==null?.5:o.fill)),int=!!o.interior,nb=Math.max(0,Math.min(6,o.beds==null?6:o.beds)),H=L.house;
+ /* yard ground */yardPatch(g,88,88,86,84);
+ /* yard: hearth with log seats, quern, drying rack/mats, firewood */hearth(g,L.yard.hearth.x,L.yard.hearth.y,t,1);stool(g,L.yard.hearth.x-10,L.yard.hearth.y+8);stool(g,L.yard.hearth.x+10,L.yard.hearth.y+8);quern(g,L.work[1].x+8,L.work[1].y-2);
+ if(V==='C'){for(const[mx,my]of[[124,112],[146,132]]){rr(g,mx,my,24,14,2,'#d8c08a',O,.6);for(let i=0;i<34;i++)berry(g,mx+2+hs(i,mx)*20,my+2+hs(i,my)*10,.8,hs(i,3)<.5?PAL('red'):PAL('blue'))}}else rack(g,L.work[0].x+6,L.work[0].y-10,24,t);
+ log3(g,20,160,22,2.6);log3(g,24,156,20,2.6);pot(g,L.door.x+16,L.door.y+10,4.2);basket(g,L.door.x-16,L.door.y+12,4.4,.6,0);
+ /* store */const S=L.store;if(S.kind==='baskets'){lean(g,S.x,S.y,S.w,S.h);storeBaskets(g,S,fill);fillTag(g,S.x,S.y+S.h+8,S.w,fill)}else if(S.kind==='jars'){lean(g,S.x,S.y,S.w,S.h);storeJars(g,S,fill);fillTag(g,S.x,S.y+S.h+8,S.w,fill)}else{S.pos.forEach((p,i)=>silo(g,p[0],p[1],p[2],Math.max(0,Math.min(1,fill*2-i)),i))}
+ /* house */if(H.shape==='round'){roundWalls(g,H.cx,H.cy,H.r);if(int){roundFloor(g,H.cx,H.cy,H.r);doorGap(g,L.door.x,L.door.y-2,13,0);interiorProps(g,t,L,nb,V)}else{coneRoof(g,H.cx,H.cy,H.r,t);doorGap(g,L.door.x,L.door.y+3,12,0,'#3a2414')}}
+ else{rectWalls(g,H.x,H.y,H.w,H.h);if(int){rectFloor(g,H.x,H.y,H.w,H.h);doorGap(g,L.door.x,H.y+H.h+2,13,0);interiorProps(g,t,L,nb,V)}else{gableRoof(g,H.x,H.y,H.w,H.h,t);rr(g,L.door.x-6,H.y+H.h+5,12,6,1,'#3a2414',O,.6)}}
+ if(o.burn){g.save();g.globalCompositeOperation='multiply';g.fillStyle='rgba(120,100,90,.85)';g.fillRect(0,0,176,176);g.restore();for(let i=0;i<22;i++){g.globalAlpha=.4+hs(i,4)*.3;ell(g,8+hs(i,1)*160,8+hs(i,2)*160,5+hs(i,3)*10,3+hs(i,5)*7,'#1a1410');g.globalAlpha=1}for(let i=0;i<8;i++)circ(g,8+hs(i,9)*160,8+hs(i,6)*160,1.1,'#e8682a')}}
+function interiorProps(g,t,L,nb,V){const H=L.house;/* rug + hearth + beds + family things along the wall */
+ g.save();g.translate(L.hearth.x,L.hearth.y+4);rr(g,-15,-10,30,20,3,'#8a3a2a');g.strokeStyle='#d8b060';g.lineWidth=.9;g.strokeRect(-12.5,-7.5,25,15);g.restore();
+ L.beds.slice(0,nb).forEach((s,i)=>bed(g,s,BEDC[i]));hearth(g,L.hearth.x,L.hearth.y,t,1);
+ if(H.shape==='round'){const P=(d,r)=>[H.cx+Math.cos(d*Math.PI/180)*r,H.cy+Math.sin(d*Math.PI/180)*r];pot(g,...P(62,42),4.4);pot(g,...P(52,45),3.6,'#c88a4a');basket(g,...P(122,42),4.6,.7,1);basket(g,...P(132,44),4,.3,0)}
+ else{pot(g,H.x+8,H.y+H.h-10,4.4);pot(g,H.x+17,H.y+H.h-8,3.6,'#c88a4a');basket(g,H.x+H.w-26,H.y+H.h-9,4.6,.7,1);rr(g,H.x+6,H.y+46,10,22,1.5,'#7a5232',O,.5)}}
+/* ================= PICKER POSES A/B/C (no arms: pawns are one armless sprite) =================
+ * All three: crouch (squash), lean INTO the bush (pawn drawn in front of its near edge), irregular jostle/twist (value noise, not a sine), pushes,
+ * clamped edge-tremble rustle (ghBushRustle), underhand berry scoop into the held hip basket (never above the waist), bush thins one pluck per hop.
+ * Basket at the game's held-item point (hx = X+4*fl, hy = Y-10, prop centre hy+4; pawn units * PSC), coloured from the bush being picked.
+ * Keys (PWN.swing format [[t,v,ease]]): squash (height factor), lean (px into the bush; dips = pull-backs), push (quick shove px), jostle (noise amp),
+ * rustle (base 0..1), slide (px along the bush's near edge, +down; C only), hop [[t0,t1]] berry flights.
+ *   A  near-side rummage (the cleaned-up version Weston liked)
+ *   B  kneeling low, digging deeper with longer, stronger pushes, slower
+ *   C  shuffling sideways along the bush with quick short picks (4 per cycle) */
+const POSE_PICK_A={n:'Picking A: crouch, lean in, rummage (jostle/twist/push), pull back, push in, 2 underhand berries',period:4200,
+ squash:[[0,1],[.1,.82,'io'],[.88,.82],[.97,1,'io'],[1,1]],
+ lean:[[0,0],[.1,3,'io'],[.16,5.2,'io'],[.44,5.2],[.5,3.4,'io'],[.56,5.4,'io'],[.84,5.4],[.88,3,'io'],[.97,0,'io'],[1,0]],
+ push:[[0,0],[.2,0],[.22,1,'out'],[.26,0,'in'],[.31,0],[.33,1.2,'out'],[.37,0,'in'],[.62,0],[.64,1,'out'],[.68,0,'in'],[.74,0],[.76,1.2,'out'],[.8,0,'in'],[1,0]],
+ jostle:[[0,0],[.14,0],[.18,1,'io'],[.46,1],[.5,.3],[.56,1,'io'],[.84,1],[.88,0],[1,0]],
+ rustle:[[0,0],[.12,0],[.16,.55,'io'],[.86,.55],[.92,0,'io'],[1,0]],slide:[[0,0],[1,0]],
+ hop:[[.4,.5],[.83,.93]]};
+const POSE_PICK_B={n:'Picking B: kneel low, dig deep with long strong pushes, 2 underhand berries',period:5200,
+ squash:[[0,1],[.12,.66,'io'],[.88,.66],[.97,1,'io'],[1,1]],
+ lean:[[0,0],[.12,3.5,'io'],[.2,6.4,'io'],[.46,6.4],[.52,4.2,'io'],[.6,6.6,'io'],[.86,6.6],[.9,3.5,'io'],[.97,0,'io'],[1,0]],
+ push:[[0,0],[.22,0],[.27,2.1,'io'],[.35,0,'io'],[.38,0],[.43,2.3,'io'],[.5,0,'io'],[.62,0],[.67,2.2,'io'],[.75,0,'io'],[1,0]],
+ jostle:[[0,0],[.16,0],[.2,.7,'io'],[.48,.7],[.52,.2],[.6,.7,'io'],[.86,.7],[.9,0],[1,0]],
+ rustle:[[0,0],[.14,0],[.2,.6,'io'],[.86,.6],[.92,0,'io'],[1,0]],slide:[[0,0],[1,0]],
+ hop:[[.5,.6],[.77,.87]]};
+const POSE_PICK_C={n:'Picking C: crouch and shuffle sideways along the bush, 4 quick short picks',period:4400,
+ squash:[[0,1],[.08,.8,'io'],[.9,.8],[.98,1,'io'],[1,1]],
+ lean:[[0,0],[.08,3.6,'io'],[.92,3.6],[.98,0,'io'],[1,0]],
+ push:[[0,0],[.12,0],[.14,.9,'out'],[.17,0,'in'],[.32,0],[.34,.9,'out'],[.37,0,'in'],[.52,0],[.54,.9,'out'],[.57,0,'in'],[.72,0],[.74,.9,'out'],[.77,0,'in'],[1,0]],
+ jostle:[[0,0],[.1,.5],[.9,.5],[1,0]],
+ rustle:[[0,0],[.1,.45,'io'],[.9,.45],[.96,0,'io'],[1,0]],
+ slide:[[0,-4],[.08,-4],[.24,-4],[.28,-1.5,'io'],[.44,-1.5],[.48,1,'io'],[.64,1],[.68,3.5,'io'],[.86,3.5],[.98,-4,'io'],[1,-4]],
+ hop:[[.17,.23],[.37,.43],[.57,.63],[.77,.83]]};
+const POSE_PICK=POSE_PICK_A,POSE_PICKS={A:POSE_PICK_A,B:POSE_PICK_B,C:POSE_PICK_C};
+/* irregular jostle (not a sine): two octaves of value noise, ~70 ms and ~170 ms steps. Returns {x, tw, y} in pawn units/radians */
+function ghJostle(t,amp){return{x:(vnoise(t,11,70)*.6+vnoise(t,13,170)*.4)*1.6*amp,tw:(vnoise(t,17,90)*.7+vnoise(t,19,210)*.3)*.09*amp,y:Math.abs(vnoise(t,23,60))*.5*amp}}
+/* bush rustle intensity 0..1 for drawBerryBush(..., rus): base while rummaging + a burst on each push */
+function ghBushRustle(cyc,P){P=P||POSE_PICK_A;return Math.min(1,swing(cyc,P.rustle)+swing(cyc,P.push)*.4)}
+function pickPose(cyc,t,P){P=P||POSE_PICK_A;const j=ghJostle(t||0,swing(cyc,P.jostle));return{sq:swing(cyc,P.squash),lean:swing(cyc,P.lean)+swing(cyc,P.push)+j.x*.35,side:j.x,tw:j.tw,bob:j.y,slide:swing(cyc,P.slide)}}
+/* draws the picker at feet (x,y), facing east (fl=1) / west (-1), AFTER the bush. drawBody(dx,dy,sq,twist) draws the game sprite at feet+(dx,dy),
+ * squashed from the feet by sq and skewed by twist. col = 'red'|'blue' of the bush being picked (basket + hopping berry use its palette).
+ * t = ms (jostle noise). bush = [bx,by]. P = POSE_PICK_A|B|C. Returns {plucks} (thin the bush by one pluck per started hop). */
+function drawPicker(g,x,y,cyc,drawBody,k,col,bush,fl,t,P){P=P||POSE_PICK_A;k=k||.72;fl=fl||1;const p=pickPose(cyc,t,P),dx=p.lean*k*fl,dy=p.bob*k+Math.abs(p.side)*.15*k+p.slide*k;drawBody(dx,dy,p.sq,p.tw*fl);
+ const hx=x+dx-1*k*fl,hy=y+dy-(10-4)*k*p.sq,C=PAL(col);basket(g,hx-2*k*fl,hy+.5*k,3.4*k*1.25,.2+.25*Math.min(1,cyc*1.2),BCOL(col));
+ /* underhand scoop: emerges low at the bush's near edge beside the pawn, dips, rises a little, drops in; clamped below the waist */
+ if(bush)for(const[a,b]of P.hop)if(cyc>=a&&cyc<b){const u=(cyc-a)/(b-a),bkx=hx-2*k*fl,bky=hy-1.6*k,sx=x+dx+5*k*fl,sy=y+dy-2*k,waist=y+dy-11*k*p.sq;
+  const bx=lerp(sx,bkx,u),by=Math.max(waist,lerp(sy,bky,u)+Math.sin(u*Math.PI)*1.2-Math.max(0,u-.6)*2.2*k*(1-u)*4);g.globalAlpha=u<.12?u/.12:1;berry(g,bx,by,1,C);g.globalAlpha=1}
+ return{plucks:P.hop.filter(([a])=>cyc>=a).length}}
+Object.assign(G,{drawGatherHut,drawBerryBush,drawPicker,ghBushRustle,ghJostle,pickPose,POSE_PICK,POSE_PICK_A,POSE_PICK_B,POSE_PICK_C,POSE_PICKS,BERRY_PALETTES,BUSH_SHAPES,ghBerry:berry,GH_SLOTS,GH_STORE_CAP,GH_SPRITE:176,GH_FOOTPRINT:5,GH_LOOP:LOOP,ghSwing:swing,ghBasket:basket,ghPal:PAL})})(typeof window!=='undefined'?window:globalThis);
 /* Imperial Stockyard art, option B (art-studio/holding/holding-designs.js, approved) */
 /* Bronze and Blood: IMPERIAL STOCKYARD (BLD.holding) redesigns A/B/C. Art only, self-contained, no game globals needed.
  * FOOTPRINT  8x8 tiles (NSZ holding:8, 256px). SPRITE 272x272, same as fpSpr: drawn at world (x*32-8, y*32-8); anchor = top-left tile.
@@ -2226,14 +2411,14 @@ const SPR={};
 const SZFIX={shrine:3};const bsz=t=>SZFIX[t]||(BLD[t]&&BLD[t].sz)||1;
 // realistic proportions: buildings at true scale vs ~0.65-tile people (art drawn at design size then scaled)
 
-const NSZ_A={holding:8,stead:5,craft:5,tavern:5,shrine:2,senet:2,plaza:6,trainingcamp:8,spearschool:6,archery:8,slingfield:6,axehall:5,stables:7,gatherhut:3,storehouse:6,bakery:4,brewery:4,tent:3,campfire:1,stockpile:3,garden:4,farm:8,house:4,lodge:4,lumber:6,quarry:6,barracks:8,granary:6,well:1,copper:6,tin:6,smelter:5,temple:14,market:10,palace:28,statue:2};
+const NSZ_A={holding:8,stead:5,craft:5,tavern:5,shrine:2,senet:2,plaza:6,trainingcamp:8,spearschool:6,archery:8,slingfield:6,axehall:5,stables:7,gatherhut:5,storehouse:6,bakery:4,brewery:4,tent:3,campfire:1,stockpile:3,garden:4,farm:8,house:4,lodge:4,lumber:6,quarry:6,barracks:8,granary:6,well:1,copper:6,tin:6,smelter:5,temple:14,market:10,palace:28,statue:2};
 const NSZ1={holding:8,stead:8,craft:7,tavern:8,shrine:3,senet:2,plaza:5,trainingcamp:7,spearschool:6,archery:7,slingfield:6,axehall:6,stables:7,gatherhut:6,storehouse:8,bakery:7,brewery:7,tent:4,campfire:2,stockpile:5,garden:4,farm:8,house:9,lodge:6,lumber:6,quarry:6,barracks:10,granary:8,well:2,copper:6,tin:6,smelter:7,temple:12,market:8,palace:12,statue:3};
 const NSZ=SCLA?NSZ_A:NSZ1;
 const BCOSTX={house:1.4,barracks:1.4,granary:1.4,temple:1.4,palace:1.3,market:1.3,smelter:1.3,lodge:1.2,lumber:1.2};
 for(const k in NSZ)if(BLD[k]){BLD[k].osz=BLD[k].sz||1;BLD[k].sz=NSZ[k];if(BCOSTX[k])for(const r in BLD[k].cost)BLD[k].cost[r]=Math.round(BLD[k].cost[r]*BCOSTX[k])}
 // ---- placement, occupancy, A*, roads ----
 const RAD=[14,24,34,44,56];
-function rebuildOcc(){occ=new Int16Array(MW*MH);LWALK.clear();if(bsz('lumber')===6)S.bl.forEach(b=>{if(b.t==='lumber')for(let j=0;j<6;j++)for(let i=0;i<6;i++)if(lumWalkT(i,j))LWALK.add((b.y+j)*MW+b.x+i);/* the v4 yard south of the camp (shed, stack, outer blocks and the paths between) is part of the camp from the day it is placed */const bi=S.bl.indexOf(b)+1;for(const[x,y]of lumYard(b)){const k=y*MW+x;if(!occ[k]){occ[k]=bi;LWALK.add(k)}}});S.bl.forEach((b,i)=>{const s=bsz(b.t),M=fpMask(b.t,bfp(b));for(let y=b.y;y<b.y+s;y++)for(let x=b.x;x<b.x+s;x++)if(x>=0&&y>=0&&x<MW&&y<MH&&(!M||M[(y-b.y)*s+x-b.x]))occ[y*MW+x]=i+1});try{fwOcc()}catch(e){}}
+function rebuildOcc(){occ=new Int16Array(MW*MH);LWALK.clear();if(bsz('gatherhut')===5)S.bl.forEach(b=>{if(b.t==='gatherhut')for(let j=0;j<5;j++)for(let i=0;i<5;i++)if(gh5WalkT(i,j))LWALK.add((b.y+j)*MW+b.x+i)});if(bsz('lumber')===6)S.bl.forEach(b=>{if(b.t==='lumber')for(let j=0;j<6;j++)for(let i=0;i<6;i++)if(lumWalkT(i,j))LWALK.add((b.y+j)*MW+b.x+i);/* the v4 yard south of the camp (shed, stack, outer blocks and the paths between) is part of the camp from the day it is placed */const bi=S.bl.indexOf(b)+1;for(const[x,y]of lumYard(b)){const k=y*MW+x;if(!occ[k]){occ[k]=bi;LWALK.add(k)}}});S.bl.forEach((b,i)=>{const s=bsz(b.t),M=fpMask(b.t,bfp(b));for(let y=b.y;y<b.y+s;y++)for(let x=b.x;x<b.x+s;x++)if(x>=0&&y>=0&&x<MW&&y<MH&&(!M||M[(y-b.y)*s+x-b.x]))occ[y*MW+x]=i+1});try{fwOcc()}catch(e){}}
 const nearT=(x,y,s,types,d)=>{for(let yy=y-d;yy<y+s+d;yy++)for(let xx=x-d;xx<x+s+d;xx++)if(types.includes(ter(xx,yy)))return true;return false};
 const NEAR={lumber:[[T_FOREST],3,'forest'],lodge:[[T_FOREST],4,'forest'],quarry:[[T_ROCK],2,'rock'],copper:[[T_CU],2,'copper ore'],tin:[[T_SN],2,'tin ore']};
 const STORES={stockpile:1,granary:1,market:1,storehouse:1};
@@ -2269,7 +2454,7 @@ function astar(sx,sy,tx,ty){sx=Math.max(0,Math.min(MW-1,sx|0));sy=Math.max(0,Mat
  const s0=sy*MW+sx,goal=ty*MW+tx;AS[s0]=st;AG[s0]=0;AP[s0]=-1;push(s0,h(sx,sy));let it=0;const GO=gOwn(),ok0=GO?GO[s0]:0,ok1=GO?GO[goal]:0,okS=PATH_ST+1;
  while(heap.length&&it++<20000){const[,n]=pop();if(n===goal)break;if(AC[n]===st)continue;AC[n]=st;/* E12: skip stale heap entries so detours round work zones and grants finish inside the step budget */const x=n%MW,y=(n/MW)|0;for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=MW||Y>=MH||X<bx0||X>bx1||Y<by0||Y>by1)continue;const m=Y*MW+X;let c=walkC(X,Y);if(m===goal&&!c)c=1;if(!c)continue;if(GO){const o=GO[m];if(o&&o!==okS&&o!==ok0&&o!==ok1)c+=GRANT_PEN}const ng=AG[n]+c;if(AS[m]!==st||ng<AG[m]){AS[m]=st;AG[m]=ng;AP[m]=n;push(m,ng+h(X,Y)*.4)}}}
  if(AS[goal]!==st)return null;const out=[];let n=goal;while(n!==-1&&out.length<400){out.push({x:n%MW+.5,y:((n/MW)|0)+.5});n=AP[n]}return out.reverse()}
-function doorOf(b){const fd=bfp(b)?fpDoor(b):null;if(fd)return fd;const s=bsz(b.t),c=[[b.x+(s>>1),b.y+s],[b.x+s,b.y+(s>>1)],[b.x+(s>>1),b.y-1],[b.x-1,b.y+(s>>1)]];for(const[x,y]of c)if(walkC(x,y))return{x:x+.5,y:y+.5};return{x:c[0][0]+.5,y:c[0][1]+.5}}
+function doorOf(b){if(b.t==='gatherhut'&&bsz('gatherhut')===5)return{x:b.x+GH5_DOOR[0]/32,y:b.y+GH5_DOOR[1]/32};const fd=bfp(b)?fpDoor(b):null;if(fd)return fd;const s=bsz(b.t),c=[[b.x+(s>>1),b.y+s],[b.x+s,b.y+(s>>1)],[b.x+(s>>1),b.y-1],[b.x-1,b.y+(s>>1)]];for(const[x,y]of c)if(walkC(x,y))return{x:x+.5,y:y+.5};return{x:c[0][0]+.5,y:c[0][1]+.5}}
 function hubB(){return S.bl.find(b=>b.t==='granary')||S.bl.find(b=>b.t==='palace')||S.bl.find(b=>b.t==='campfire')}
 function hubT(){const b=hubB();if(b){if(b.t==='campfire')return{x:b.x+.5,y:b.y+1.5};return doorOf(b)}return{x:S.center.x+.5,y:S.center.y+.5}}
 // ---- people (hi-res 24x32) ----
@@ -2960,7 +3145,7 @@ function autoRoadFor(b){if(S.tier<1||S.autoRoad===false||NOROAD[b.t]||touchesRoa
  for(let i=0;i<MW*MH;i++)if(roadSet[i]&&!occ[i]){const x=i%MW,y=(i/MW)|0,dd=Math.abs(x+.5-d.x)+Math.abs(y+.5-d.y);if(dd<bd){bd=dd;tg={x:x+.5,y:y+.5}}}
  if(!tg){const hb=hubB();if(!hb||hb===b){const i=Math.floor(d.y)*MW+Math.floor(d.x);if(!occ[i]){roadSet[i]=1;return 1}return 0}tg=hb.t==='campfire'?{x:hb.x+.5,y:hb.y+1.5}:doorOf(hb)}
  const p=astar(d.x,d.y,tg.x,tg.y);if(!p)return 0;let n=0;p.forEach(q=>{const i=Math.floor(q.y)*MW+Math.floor(q.x);if(!occ[i]&&!roadSet[i]&&TER[i]!==T_WATER){roadSet[i]=1;n++}});return n}
-function walkC(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const i=y*MW+x,t=TER[i];if(t===T_WATER||(CLIFF&&CLIFF[i]))return 0;const o=occ[i];if(o){const b=S.bl[o-1];if(b&&b.t==='lumber'&&LWALK.has(i))return 1.6;if(!b||!(b.t==='gate'||b.t==='campfire'||FLATB[b.t]||b.t==='garden'))return 0;if(b.t!=='gate')return 2.5}const r=roadSet[i];return r?[0,.55,.45,.35][r]:t===T_FOREST?5:t>=T_HILL?2.2:1.6}
+function walkC(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const i=y*MW+x,t=TER[i];if(t===T_WATER||(CLIFF&&CLIFF[i]))return 0;const o=occ[i];if(o){const b=S.bl[o-1];if(b&&(b.t==='lumber'||b.t==='gatherhut')&&LWALK.has(i))return 1.6;if(!b||!(b.t==='gate'||b.t==='campfire'||FLATB[b.t]||b.t==='garden'))return 0;if(b.t!=='gate')return 2.5}const r=roadSet[i];return r?[0,.55,.45,.35][r]:t===T_FOREST?5:t>=T_HILL?2.2:1.6}
 function placeErr(t,x,y,ignoreNear){const e=placeErrBase(t,x,y,ignoreNear);if(e)return e;if(t!=='gate'){const s=bsz(t),FM=CURFP&&CURFP.t===t?fpMask(t,CURFP):null;for(let yy=y;yy<y+s;yy++)for(let xx=x;xx<x+s;xx++)if((!FM||FM[(yy-y)*s+xx-x])&&roadSet[yy*MW+xx])return'Road in the way'}return''}
 function autoPlace(t,l,ignoreNear,cx0,cy0){const sv=CURFP;if(FP[t]){const n=FP[t].length;CURFP={t,v:Math.floor(Math.random()*n),r:Math.floor(Math.random()*4),m:Math.random()<.5?1:0}}try{return _autoPlace(t,l,ignoreNear,cx0,cy0)}finally{CURFP=sv}}
 function _autoPlace(t,l,ignoreNear,cx0,cy0){const c={x:cx0??S.center.x,y:cy0??S.center.y},s=bsz(t),R=RAD[S.tier]+1;let best=null,bs=-1e9;
@@ -3046,10 +3231,10 @@ function intGrid(m){if(m._wg)return m._wg;const R=m.R;if(!R)return null;const n=
 function intCell(G,x,y){const i=Math.max(0,Math.min(G.n-1,x/G.C|0)),j=Math.max(0,Math.min(G.n-1,y/G.C|0));return j*G.n+i}
 function intNear(G,c){if(G.w[c])return c;const n=G.n,q=[c],seen=new Uint8Array(n*n);seen[c]=1;while(q.length){const k=q.shift();if(G.w[k])return k;const x=k%n,y=k/n|0;for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1]]){const X=x+a,Y=y+b;if(X<0||Y<0||X>=n||Y>=n)continue;const nk=Y*n+X;if(!seen[nk]){seen[nk]=1;q.push(nk)}}}return c}
 function intPath(G,a0,b0){const n=G.n,prev=new Int32Array(n*n).fill(-1);const q=[a0];prev[a0]=a0;while(q.length){const k=q.shift();if(k===b0)break;const x=k%n,y=k/n|0;for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]){const X=x+a,Y=y+b;if(X<0||Y<0||X>=n||Y>=n)continue;const nk=Y*n+X;if(prev[nk]>=0||!G.w[nk])continue;if(a&&b&&(!G.w[y*n+X]||!G.w[Y*n+x]))continue;prev[nk]=k;q.push(nk)}}if(prev[b0]<0)return[b0];const P=[];for(let k=b0;k!==a0;k=prev[k])P.push(k);return P.reverse()}
-function intPos(a,dt){const b=a.inB,sp=b.t==='holding'&&isHoldFam(a)?{m:holdIntM()}:b.t==='tent'||b.t==='gatherhut'?tentIntSpr(b):b.t==='lumber'&&bsz('lumber')===6?lumIntSpr(b,lumBeds(b)):bSpr(b);if(!sp||!sp.m||!sp.m.R)return null;const m=sp.m,G=intGrid(m);if(!G)return null;const nt=night(),want=a.state==='home'&&nt?'bed':'seat';
+function intPos(a,dt){const b=a.inB,sp=b.t==='holding'&&isHoldFam(a)?{m:holdIntM()}:b.t==='gatherhut'&&bsz('gatherhut')===5?gh5Int(b,0):b.t==='tent'||b.t==='gatherhut'?tentIntSpr(b):b.t==='lumber'&&bsz('lumber')===6?lumIntSpr(b,lumBeds(b)):bSpr(b);if(!sp||!sp.m||!sp.m.R)return null;const m=sp.m,G=intGrid(m);if(!G)return null;const nt=night(),want=a.state==='home'&&nt?'bed':'seat';
  let occ=ISP.get(b);if(!occ){occ=new Map();ISP.set(b,occ)}const here=ax().inB.get(b)||[];for(const k of occ.keys())if(!here.some(q=>q.key===k))occ.delete(k);
  let o=occ.get(a.key);if(!o||o.k!==want){const taken=new Set([...occ.values()].filter(v=>v!==o).map(v=>v.i));const L=(m.spots||[]).map((q,i)=>({q,i})).filter(z=>z.q.k===want&&!taken.has(z.i));const z=L[0]||(m.spots||[]).map((q,i)=>({q,i})).find(z=>!taken.has(z.i));o=z?{k:want,i:z.i}:{k:want,i:-1};occ.set(a.key,o)}
- let tgt=o.i>=0?m.spots[o.i]:null;if(!tgt){if(!o.free){const fr=[];for(let k=0;k<G.w.length;k++)if(G.w[k])fr.push(k);const used=new Set([...occ.values()].map(v=>v.free).filter(Boolean));let c=fr[(hsh((a.idx||0)*7,(a.key||'').length,31)*fr.length)|0];for(let t=0;t<20&&used.has(c);t++)c=fr[(hsh((a.idx||0)*7,t,32)*fr.length)|0];o.free=c}tgt={x:(o.free%G.n+.5)*G.C,y:((o.free/G.n|0)+.5)*G.C}}if(a._ib!==b||a._ixy==null){a._ib=b;const d=fpDoor(b);const dx=d?(d.x-b.x)*32:G.n*G.C/2,dy=d?(d.y-b.y)*32:G.n*G.C-6;a._ixy=[dx,dy];a._ipath=null;a._it=null}
+ let tgt=o.i>=0?m.spots[o.i]:null;if(!tgt){if(!o.free){const fr=[];for(let k=0;k<G.w.length;k++)if(G.w[k])fr.push(k);const used=new Set([...occ.values()].map(v=>v.free).filter(Boolean));let c=fr[(hsh((a.idx||0)*7,(a.key||'').length,31)*fr.length)|0];for(let t=0;t<20&&used.has(c);t++)c=fr[(hsh((a.idx||0)*7,t,32)*fr.length)|0];o.free=c}tgt={x:(o.free%G.n+.5)*G.C,y:((o.free/G.n|0)+.5)*G.C}}if(a._ib!==b||a._ixy==null){a._ib=b;const d=b.t==='gatherhut'&&bsz('gatherhut')===5?{x:b.x+GH5_DOOR[0]/32,y:b.y+(GH5_DOOR[1]-4)/32}:fpDoor(b);const dx=d?(d.x-b.x)*32:G.n*G.C/2,dy=d?(d.y-b.y)*32:G.n*G.C-6;a._ixy=[dx,dy];a._ipath=null;a._it=null}
  if(a._it!==o.i){a._it=o.i;const P=intPath(G,intNear(G,intCell(G,a._ixy[0],a._ixy[1])),intNear(G,intCell(G,tgt.x,tgt.y)));a._ipath=P.map(k=>[(k%G.n+.5)*G.C,((k/G.n|0)+.5)*G.C]);a._ipath.push([tgt.x,tgt.y])}
  let mv=false;if(a._ipath&&a._ipath.length){const[nx,ny]=a._ipath[0],ddx=nx-a._ixy[0],ddy=ny-a._ixy[1],d=Math.hypot(ddx,ddy),st=Math.min(d,70*Math.min(.1,dt||.016));if(d<1.5)a._ipath.shift();else{a._ixy[0]+=ddx/d*st;a._ixy[1]+=ddy/d*st;a.dir=dirOf(ddx,ddy);a.ft=(a.ft||0)+st*.25;mv=true}}
  return{p:isoP(b.x+a._ixy[0]/32,b.y+a._ixy[1]/32),mv,pose:mv?'walk':(o.i>=0?(m.spots[o.i].k==='bed'?'lie':'sit'):'stand'),r:o.i>=0?m.spots[o.i].r||0:0}}
@@ -3059,6 +3244,7 @@ function intDraw(a,p,ip,now){if(ip.pose==='lie'){vx.save();vx.translate(p.x,p.y)
 function drawAgent(a,p,moving,now){if(a.state==='home'&&a.inB&&!moving&&!(a.route&&a.route.length)&&night()){const t=a.inB.t;if(t==='tent'){if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.8)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+6,p.y-14-(now/90%10))}return}
   vx.save();vx.translate(p.x,p.y-6);vx.rotate(-Math.PI/2);rr(vx,-22,-11,40,22,3,'#e8dcc0','rgba(60,40,20,.6)',.8);rr(vx,-22,-11,9,22,3,'#f4eee0');const br=Math.sin(now/1300+(a.idx||0))*.4;vx.drawImage(pawnSpr(a.o,1,2),-16,-14,21,28);rr(vx,-16,-.5+br,20,13-br,3,TUN[(a.idx||0)%TUN.length],'rgba(40,20,10,.6)',.7);ln(vx,-15,3+br,3,3+br,'rgba(255,240,200,.35)',.8);vx.restore();
   if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.85)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+8,p.y-18-(now/90%10))}return}
+ if(GH_ART&&!moving&&a.hvTool==='basket'&&a.hvk&&a.state==='work'&&a.gj&&a.gj.ph==='pick'){ghPickDraw(a,p,now);return}
  if(PSC!==1){vx.save();vx.translate(p.x,p.y);vx.scale(PSC,PSC);vx.translate(-p.x,-p.y);try{_drawAgent0(a,p,moving,now)}finally{vx.restore()}}else _drawAgent0(a,p,moving,now)}
 /* ---- F1 shared pose system: every pawn animation, in the game and in the dev animation preview, reads its tool, swing curve and timing from this one table ---- */
 const POSE={idle:{n:'Idle / standing'},walk:{n:'Walking'},
@@ -3137,7 +3323,7 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
  const wt=now/1000;if(z>=.5){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){if(hsh(gx,gy,9)>.18||!isWat(RT[gy*MW+gx]))continue;const X=(gx+hsh(gx,gy,4))*TS,Y=(gy+hsh(gx,gy,5))*TS,ph=(wt*.9+hsh(gx,gy,3)*6)%3;if(ph<1.6){vx.globalAlpha=Math.sin(ph/1.6*Math.PI)*.5;ln(vx,X+ph*5,Y,X+ph*5+7,Y,'#d8eef6',1);vx.globalAlpha=1}}}
  const D=[],blist=blds(),flats=[];FPB.on=1;FPB.n=1;
  blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):bspr(b.t,b.l,v);
-  const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.cp?()=>siteDraw(b,sp,X,Y,s,now):b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{if(b.t==='holding'&&s===8){holdBlit(b,X,Y,v==='burn',o.i,z);return}if(b.t==='gatherhut'&&s===3){tentBlit(b,X,Y,v==='burn',now);ghYard(b,X,Y);return}/* H6: the family lives in the hut (tent art for now) */{const cb=z<=.8&&sp.m.walled?roofCombo(b,o.i,sp,z,dt):null;if(cb){vx.drawImage(cMip(cb,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);return}}if(b.t==='tent'&&s===3){tentBlit(b,X,Y,v==='burn',now);return}if(b.t==='lumber'&&s===6){lumBlit(X,Y,v==='burn',now);return}vx.drawImage(cMip(sp.c,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
+  const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.cp?()=>siteDraw(b,sp,X,Y,s,now):b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{if(b.t==='holding'&&s===8){holdBlit(b,X,Y,v==='burn',o.i,z);return}if(b.t==='gatherhut'&&s===5){gh5Blit(b,X,Y,v==='burn',now,0);return}if(b.t==='gatherhut'&&s===3){tentBlit(b,X,Y,v==='burn',now);ghYard(b,X,Y);return}/* H6: the family lives in the hut (tent art for now) */{const cb=z<=.8&&sp.m.walled?roofCombo(b,o.i,sp,z,dt):null;if(cb){vx.drawImage(cMip(cb,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);return}}if(b.t==='tent'&&s===3){tentBlit(b,X,Y,v==='burn',now);return}if(b.t==='lumber'&&s===6){lumBlit(X,Y,v==='burn',now);return}vx.drawImage(cMip(sp.c,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
  ecoDrawFields(vl,vr,vt,vb,z);FPB.on=0;flats.forEach(e=>e.f());if(z>=.45&&S.stk)blist.forEach(o=>{const b=o.b;if(S.stk[bid(b)])stkDraw(b,o.gx*TS,o.gy*TS,o.s)});
  if(z<.3){propBake.up=[];propBake.on=1}else if(z<(GFX.q==='high'?.85:GFX.q==='low'?1.6:PBZ)){propBake(vl,vr,vt,vb,now);propBake.on=1}else visProps(vl,vr,vt,vb).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS;if(!inV(X,Y))return;const vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';const sw=big?Math.sin(wt*1.3+pr.gx)*.6:0;D.push({k:Y+(big?10:2),f:()=>rnDrawProp(pr,X,Y,sp,sw,big)})});
  critters.forEach(c=>{c.t-=dt;if(c.t<=0){const rg=c.k==='deer'?2.5:1.4;c.tx=c.hx+(Math.random()-.5)*rg*2;c.ty=c.hy+(Math.random()-.5)*rg;if(!walkC(c.tx|0,c.ty|0)&&c.k!=='deer'){c.tx=c.x;c.ty=c.y}c.t=1+Math.random()*3}
@@ -4661,6 +4847,7 @@ function lerpC(a,b,t){t=Math.max(0,Math.min(1,t));const A=hex2(a),B=hex2(b);retu
 function rnDrawProp(pr,X,Y,sp,sw,big){const k=S.rn?rnPropKey(pr):'';const k0=k||(pr.k==='bush'?'b':'');if(!k0){vx.drawImage(sp.c,X-24+sw,Y-24,48,48);return}const M=RND[k0[0]].max,a=k?rnAmt(k):M,f=a/M,q=k0[0];
  if(q==='t'){if(a<=0||(S.rn.z[k]!==undefined&&S.t-S.rn.z[k]<500)){ell(vx,X+1,Y+2,5,3,'rgba(20,14,8,.3)');circ(vx,X,Y,4.2,'#8a6038',OUTL,.7);circ(vx,X,Y,2.6,'#c8a070');circ(vx,X,Y,1.2,null,'#8a6038',.5);for(let i=0;i<3;i++)circ(vx,X+5+i*2.5,Y+3-i,1.1,'#d8b880');return}
   if(f<.6){const s=48*(.3+.7*f/.6);vx.drawImage(sp.c,X-s/2+sw,Y-s/2,s,s);return}vx.drawImage(sp.c,X-24+sw,Y-24,48,48);return}
+ if(q==='b'&&GH_ART){ghBushDraw(pr,k,X,Y,a,M);return}
  if(q==='b'){vx.drawImage(sp.c,X-24,Y-24,48,48);const rg=!!(k&&S.rn.bg&&S.rn.bg[k]),nb=rg?Math.round(7*f):Math.round(7*f),sp2=(pr.gx*7+pr.gy*13|0)%3,BC=[['#b81f30','#ff8a8a'],['#3a2a7a','#9a8ae0'],['#d89a1a','#ffe08a']][sp2];
   /* H4: ripe clusters in proportion to what is left; picked bare = none; regrowing = small green berries turning colour */
   const col=rg?(f<.5?'#6a9a3a':lerpC('#6a9a3a',BC[0],(f-.5)/.5)):BC[0],bs=rg?.55+.45*f:1;
@@ -5280,11 +5467,48 @@ const HINT={m:null};function holdIntM(){if(HINT.m)return HINT.m;const H=HOLD_HOU
 const isHoldFam=a=>{const r=FAMK[a.key];return !!(r&&r[0]===holdFamId())};
 function lumBeds(b){return Math.max(4,agents.filter(a=>a.home&&a.home.b===b).length)}
 
+/* Ningal's Gatherer's Hut art (v2, variant A), hooked to the game. Footprint 5x5 (sprite 176x176 at x*32-8,y*32-8), door at sprite (68,125). */
+const GH_ART=true,GH5_DOOR=[68-8,125-8+6];
+function gh5WalkT(i,j){return j===4||(j===3&&(i===1||i>=3))}/* the yard row and the door step are walkable, the house and store are not */
+function ghStead(b){return S.eco&&S.eco.steads.find(q=>q.camp==='gatherhut'&&q.x===b.x&&q.y===b.y)}
+function ghFill(b){const s=ghStead(b);return s?Math.max(0,Math.min(1,(s.st.berries||0)/GH_STORE)):0}
+function ghRes(b){return agents.filter(a=>a.home&&a.home.b===b).length}
+function ghBeds(b){return Math.max(4,Math.min(6,ghRes(b)))}
+const GHC=new Map();function ghCache(k,mk2){let c=GHC.get(k);if(c){GHC.delete(k);GHC.set(k,c);return c}c=mk2();GHC.set(k,c);if(GHC.size>80)GHC.delete(GHC.keys().next().value);return c}
+function gh5Blit(b,X,Y,burn,now,int){const fr=burn?0:Math.floor((now%GH_LOOP)/GH_LOOP*12),fq=Math.round(ghFill(b)*50),nb=int?ghBeds(b):0,k='h'+int+'|'+fr+'|'+fq+'|'+nb+(burn?'b':'');
+ const c=ghCache(k,()=>{const[c,g]=mk(352,352);g.scale(2,2);drawGatherHut(g,fr/12*GH_LOOP,{interior:!!int,beds:nb,fill:fq/50,variant:'A',burn});return c});vx.drawImage(c,X-8,Y-8,176,176)}
+function ghLabel(b,X,Y){if(cam.z<.9)return;const s=ghStead(b),n=s?Math.round(s.st.berries||0):0,S2=GH_SLOTS.A.store;vx.fillStyle='rgba(255,240,220,.95)';vx.font='bold 8px sans-serif';vx.textAlign='center';vx.fillText(n+' / '+GH_STORE,X-8+S2.x+S2.w/2,Y-8+S2.y+S2.h+20)}
+/* interior walk grid + slots (local px = sprite px - 8): beds 0..n-1 (4 by default, up to 6), then house seats, yard seats and the work spots */
+const GH5I={};function gh5Int(b){const n=ghBeds(b);if(GH5I[n])return GH5I[n];const L=GH_SLOTS.A,W=160,C=4,N=W/C,w=new Uint8Array(N*N),H=L.house,sp=[];
+ for(let j=0;j<N;j++)for(let i=0;i<N;i++){const x=(i+.5)*C+8,y=(j+.5)*C+8;const inH=Math.hypot(x-H.cx,y-H.cy)<H.r-5,door=Math.abs(x-L.door.x)<6&&y>=H.cy&&y<L.door.y+8,yard=y>L.door.y+4&&y<168&&x>12&&x<164;w[j*N+i]=inH||door||yard?1:0}
+ L.beds.slice(0,n).forEach(q=>sp.push({k:'bed',x:q.x-8,y:q.y-8,r:q.a}));L.seats.forEach(q=>sp.push({k:'seat',x:q.x-8,y:q.y-8}));L.yard.seats.forEach(q=>sp.push({k:'seat',x:q.x-8,y:q.y-8}));L.work.forEach(q=>sp.push({k:'seat',x:q.x-8,y:q.y-8}));
+ return GH5I[n]={m:{R:1,spots:sp,_wg:{n:N,C,w}}}}
+/* bushes: Ningal's drawBerryBush, cached per look; a bush being picked is drawn live (rustle + one berry thinned per pluck, visual only) */
+const GHB=new Map(),GHPK=new Map();
+function ghBushLook(pr){const sp2=(pr.gx*7+pr.gy*13|0)%3;return{col:sp2%2?'blue':'red',shape:(hsh(pr.gx*5|0,pr.gy*5|0,63)*5)|0}}
+function ghBushState(k,a,M){if(rnSeason()===3)return'winter';if(a<=0)return'picked';const rg=!!(k&&S.rn&&S.rn.bg&&S.rn.bg[k]),f=a/M;if(rg)return f<.34?'green':f<.67?'turning':'ripening';return'full'}
+function ghBushDraw(pr,k,X,Y,a,M,stOv){const L=ghBushLook(pr),st=stOv||ghBushState(k,a,M),f=Math.max(0,Math.min(1,a/M));if(k)GHB.set(k,{x:X,y:Y,col:L.col});const pk=k&&GHPK.get(k),now=performance.now();
+ if(pk&&now-pk.t<400&&!PB_ON&&st==='full'){vx.save();vx.translate(X,Y);drawBerryBush(vx,'full',L.shape,now,Math.max(0,f-pk.pl/8),pk.rus,L.col);vx.restore();return}
+ const fq=st==='full'?Math.round(f*8):0,key=L.shape+L.col+st+fq;let c=GHB.get(key);if(!c){c=mk(96,96)[0];const g=c.getContext('2d');g.scale(2,2);g.translate(24,30);drawBerryBush(g,st,L.shape,0,fq/8,0,L.col);GHB.set(key,c)}vx.drawImage(c,X-24,Y-30,48,48)}
+/* picker: drawPicker after the bush, the game's pawn sprite squashed from the feet; variants A/B/C rotate by pawn */
+function ghPickDraw(a,p,now){const V='ABC'[(a.idx||0)%3],P=POSE_PICKS[V],cyc=((now+(a.idx||0)*977)%P.period)/P.period,X=p.x,Y=p.y,bi=GHB.get(a.hvk),i=+String(a.hvk).slice(1),bx=bi?bi.x:(i%MW+.5)*TS,by=bi?bi.y:((i/MW|0)+.5)*TS,col=bi?bi.col:'red',fl=bx>=X?1:-1;
+ const o=a.sick?Object.assign({},a.o,{sick:1}):a.o,spr=pawnSprA(o,fl>0?0:2,cam.z*PXR<=1.05?1:0);
+ const body=(dx,dy,sq,tw)=>{vx.save();vx.translate(X+dx,Y+dy);vx.drawImage(shadowSpr(),-7*PSC,-2*PSC,14*PSC,6*PSC);vx.scale(PSC,PSC*sq);vx.transform(1,0,-tw-dx*.012,1,0,0);vx.drawImage(spr,-12,-29,24,32);vx.restore()};
+ const r=drawPicker(vx,X,Y,cyc,body,PSC,col,[bx,by],fl,now,P);GHPK.set(a.hvk,{t:performance.now(),pl:r.plucks,rus:ghBushRustle(cyc,P)})}
+/* old saves: a 3x3 hut grows to 5x5 in place (old hut centred if the ground is free, else the nearest free 5x5 that still covers it, else the nearest free spot within 12 tiles); its family stead moves with it */
+function ghMig5(){if(bsz('gatherhut')!==5||!S||!S.bl)return;const L=S.bl.filter(b=>b.t==='gatherhut'&&!b.g5);if(!L.length)return;const out=[];
+ for(const b of L){const i=S.bl.indexOf(b),st=ghStead(b);S.bl.splice(i,1);rebuildOcc();const ok=(x,y)=>{if(placeErrBase('gatherhut',x,y,true))return false;return true};let at=null;
+  for(const[dx,dy]of[[-1,-1],[0,-1],[-1,0],[-2,-1],[-1,-2],[0,0],[-2,0],[0,-2],[-2,-2]])if(ok(b.x+dx,b.y+dy)){at=[b.x+dx,b.y+dy];break}
+  if(!at){let bd=1e9;for(let y=b.y-13;y<=b.y+11;y++)for(let x=b.x-13;x<=b.x+11;x++){const d=Math.hypot(x+2.5-(b.x+1.5),y+2.5-(b.y+1.5));if(d<bd&&d<=12&&ok(x,y)){bd=d;at=[x,y]}}}
+  const was=b.x+','+b.y;if(at){b.x=at[0];b.y=at[1];if(st){st.x=b.x;st.y=b.y}for(let y=b.y;y<b.y+5;y++)for(let x=b.x;x<b.x+5;x++)if(roadSet&&roadSet[y*MW+x]&&!gh5WalkT(x-b.x,y-b.y))roadSet[y*MW+x]=0}
+  b.g5=1;S.bl.splice(i,0,b);out.push(was+(at?' -> '+b.x+','+b.y:' (kept, no free ground)'))}
+ rebuildOcc();GHF.mig=out;try{log("Gatherer's Hut enlarged to 5x5 for the new art: "+out.join('; '))}catch(e){}}
+{const _wc=worldChanged;worldChanged=function(){_wc();try{if(S&&S.bl&&!S.gh5&&bsz('gatherhut')===5){const old=S.bl.some(b=>b.t==='gatherhut'&&!b.g5);S.gh5=1;if(old){ghMig5();_wc()}}}catch(e){console.error(e)}/* S.gh5: huts in this save were built 3x3 before the art; new huts are 5x5 from the start */}}
 /* H5/H6: the hut's berry store beside the door: one basket drawn per 400 berries, with the count */
 function ghYard(b,X,Y){const s=S.eco&&S.eco.steads.find(q=>q.camp==='gatherhut'&&q.x===b.x&&q.y===b.y);const n=s?Math.round(s.st.berries||0):0,W=3*TS,bx=X+W-14,by=Y+W-8,k=Math.min(5,Math.ceil(n/400));
  for(let i=0;i<5;i++){const x=bx-(i%3)*9,y=by-(i>2?7:0);ell(vx,x,y,4.4,3.3,i<k?'#c8a060':'rgba(200,160,96,.45)',OUTL,.6);if(i<k)for(let q=0;q<4;q++)circ(vx,x-1.8+q*1.2,y-1.2,.9,'#b81f30')}
  if(cam.z>=.9){vx.fillStyle='rgba(255,240,220,.95)';vx.font='bold 8px sans-serif';vx.textAlign='center';vx.fillText(n+' / '+GH_STORE,bx-9,by+11)}}
-function tentCut(vl,vr,vt,vb,now,z){const selB=sel&&sel.i!=null?S.bl[sel.i]:null;{const H=holdB();if(H&&(z>=2.2||H===selB))(ax().inB.get(H)||[]).filter(isHoldFam).sort((p,q)=>p.key<q.key?-1:1).forEach(a=>{if(a.route.length)return;const ip=intPos(a,1/60);if(!ip)return;intDraw(a,ip.p,ip,now)})}if(bsz('lumber')===6)for(const b of S.bl){if(b.t!=='lumber'||!(z>=2.2||b===selB))continue;const X=b.x*TS,Y=b.y*TS,W=6*TS;if(X>vr||X+W<vl||Y>vb||Y+W<vt)continue;vx.drawImage(lumIntSpr(b,lumBeds(b)),X-8,Y-8,208,208);(ax().inB.get(b)||[]).slice().sort((p,q)=>p.key<q.key?-1:1).forEach(a=>{if(a.route.length)return;const ip=intPos(a,1/60);if(!ip)return;intDraw(a,ip.p,ip,now)})}for(const b of S.bl){if(b.t!=='tent'&&b.t!=='gatherhut')continue;if(!(z>=2.2||b===selB))continue;const s=bsz('tent'),X=b.x*TS,Y=b.y*TS,W=s*TS;if(X>vr||X+W<vl||Y>vb||Y+W<vt)continue;
+function tentCut(vl,vr,vt,vb,now,z){const selB=sel&&sel.i!=null?S.bl[sel.i]:null;{const H=holdB();if(H&&(z>=2.2||H===selB))(ax().inB.get(H)||[]).filter(isHoldFam).sort((p,q)=>p.key<q.key?-1:1).forEach(a=>{if(a.route.length)return;const ip=intPos(a,1/60);if(!ip)return;intDraw(a,ip.p,ip,now)})}if(bsz('lumber')===6)for(const b of S.bl){if(b.t!=='lumber'||!(z>=2.2||b===selB))continue;const X=b.x*TS,Y=b.y*TS,W=6*TS;if(X>vr||X+W<vl||Y>vb||Y+W<vt)continue;vx.drawImage(lumIntSpr(b,lumBeds(b)),X-8,Y-8,208,208);(ax().inB.get(b)||[]).slice().sort((p,q)=>p.key<q.key?-1:1).forEach(a=>{if(a.route.length)return;const ip=intPos(a,1/60);if(!ip)return;intDraw(a,ip.p,ip,now)})}for(const b of S.bl){if(b.t!=='tent'&&b.t!=='gatherhut')continue;if(!(z>=2.2||b===selB))continue;if(b.t==='gatherhut'&&bsz('gatherhut')===5){const X=b.x*TS,Y=b.y*TS;if(X>vr||X+160<vl||Y>vb||Y+160<vt)continue;gh5Blit(b,X,Y,false,now,1);(ax().inB.get(b)||[]).slice().sort((p,q)=>p.key<q.key?-1:1).forEach(a=>{if(a.route.length)return;const ip=intPos(a,1/60);if(!ip)return;intDraw(a,ip.p,ip,now)});continue}const s=bsz('tent'),X=b.x*TS,Y=b.y*TS,W=s*TS;if(X>vr||X+W<vl||Y>vb||Y+W<vt)continue;
  vx.drawImage(tentIntSpr(b),X,Y,W,W);const ins=(ax().inB.get(b)||[]).slice().sort((p,q)=>p.key<q.key?-1:1);ins.forEach(a=>{if(a.route.length)return;const ip=intPos(a,1/60);if(!ip)return;intDraw(a,ip.p,ip,now)})}}
 {const _fo=fbOver;fbOver=function(vl,vr,vt,vb,now,z){tentCut(vl,vr,vt,vb,now,z);_fo(vl,vr,vt,vb,now,z)}}
 {const _si2=showInsp;showInsp=function(){_si2();return;/* #6: the tent panel shows only its family */if(!sel||sel.i==null||!S)return;const b=S.bl[sel.i];if(!b||b.t!=='tent')return;const P=$('insp');if(P.style.display==='none')return;const F=tentFurn(b),o=tentOcc(b);const d=document.createElement('div');d.className='small';d.style.marginTop='3px';
