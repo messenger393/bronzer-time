@@ -89,6 +89,86 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <div id="toast"></div><div id="tip"></div><div id="log" hidden></div>
 <div id="modal"><div class="panel glass" id="mbody"></div></div>
 
+<script>/* BERRY BUSH v5 art (art-studio/berry-bush/bush.js, embedded) */
+/* Bronze and Blood: BERRY BUSH v5 (dense foliage, berries embedded in depth), by Ningal. Art only, self-contained.
+ * DROP-IN for the game's drawBerryBush (index.html ~756):
+ *   drawBerryBush2(ctx, state, shape, t, f, rustle, colour, style)
+ *     state 'full' (f = berries left 0..1) | 'green' | 'turning' | 'ripening' | 'picked' | 'winter'  (ghBushState set)
+ *     shape 0..4 (round mound, wide sprawl, tall upright, lopsided, low creeping)  colour 'red'|'blue' (BERRY_PALETTES)
+ *     t ms, rustle 0..1 (ghBushRustle), style 'F' fine-leaf blueberry/raspberry (default) | 'G' broad-leaf currant
+ *   origin = bush centre on the ground; ~26x22 px; fits the 48x48 cache box (translate(24,30)) unchanged.
+ * Build order (depth interleave, nothing sits on top, no stalks):
+ *   contact shadow -> dark silhouette interior + branch glimpses -> BACK leaves (dark) -> DEEP berries (small, dark, hidden)
+ *   -> MID leaves (cover part of them) -> MID berries -> FRONT leaves (lit top-left, overhang the edge) -> a few SURFACE berries
+ *   (with highlight). Ripeness recolours the SAME berry spots in place (green -> turning -> ripe); picked = same leaves, spots bare,
+ *   2 leftovers. Every leaf/berry belongs to a lobe and rustles with it.
+ */
+(function(G){
+const BP2=(typeof BERRY_PALETTES!=='undefined')?BERRY_PALETTES:{red:{ripe:['#b81f30','#ff8a8a','#6a0a14'],green:['#9ac04a','#d8f08a','#4a6a1a'],turn:['#d8603a','#ffb08a','#7a2010']},blue:{ripe:['#2c3a8e','#9ab4f2','#121a46'],green:['#9ac04a','#d8f08a','#4a6a1a'],turn:['#a8507e','#eaa6d0','#4a1a3a']}};
+const LEAF5=[['#122410','#1c3418','#2f5a26','#467a36','#6a9a4e','#92bc64'],['#12241a','#1e3424','#335c3a','#4a7a4c','#6e9e66','#96c288'],['#1c2410','#2a3418','#4a5a26','#647834','#86a04e','#aac46a']];
+const WOOD=['#24160c','#4a3018','#6a4a2a'],OUT='#0e1c0a';
+function hs(i,s){const x=Math.sin(i*127.1+s*311.7)*43758.5453;return x-Math.floor(x)}
+function vn(t,seed,step){const i=Math.floor(t/step),u=t/step-i,a=hs(i,seed)*2-1,b=hs(i+1,seed)*2-1,w=u*u*(3-2*u);return a+(b-a)*w}
+function disc(g,x,y,r,c){g.fillStyle=c;g.beginPath();g.arc(x,y,r,0,6.2832);g.fill()}
+function mix(a,b,u){const p=s=>[1,3,5].map(i=>parseInt(s.substr(i,2),16)),A=p(a),B=p(b);return'rgb('+A.map((v,i)=>Math.round(v+(B[i]-v)*u)).join(',')+')'}
+function lobes(v){const L=[];const S=[{n:6,rx:7.5,ry:5.5,r:6,up:0,sk:0},{n:7,rx:10.5,ry:5,r:5.6,up:-1,sk:0},{n:6,rx:5.5,ry:7,r:5.8,up:-3,sk:0},{n:6,rx:8,ry:5.5,r:5.4,up:-1,sk:1},{n:8,rx:12.5,ry:3.4,r:4.3,up:3,sk:0}][v];
+ for(let i=0;i<S.n;i++){const a=i/S.n*6.2832+v*.7,c=Math.cos(a);const lop=S.sk?(c>0?1.35:.8):1;L.push({x:c*S.rx*(S.sk?(c>0?1.15:.85):1)+S.sk*2,y:Math.sin(a)*S.ry*.8-4+S.up*.5-(S.sk&&c>0?2:0),r:(S.r+hs(i,v+1)*1.6)*lop})}
+ L.push({x:S.sk*3,y:-7+S.up-(S.sk?1.5:0),r:S.r+.8});L.push({x:-2,y:-1+(v===4?2:0),r:S.r});L.sort((p,q)=>p.y-q.y);L.forEach((l,i)=>l.i=i);return{L,sk:S.sk}}
+const CACHE={};
+/* deterministic layout per (shape, style): leaves per layer and berry spots per depth, each tied to a lobe */
+function layout(v,style){const key=v+style;if(CACHE[key])return CACHE[key];const{L,sk}=lobes(v),F=style!=='G';
+ const x0=Math.min(...L.map(l=>l.x-l.r)),x1=Math.max(...L.map(l=>l.x+l.r)),y0=Math.min(...L.map(l=>l.y-l.r)),y1=Math.max(...L.map(l=>l.y+l.r));
+ const inside=(x,y,m)=>{let best=-1,bd=1e9;for(const l of L){const d=Math.hypot(x-l.x,(y-l.y)/.92)-l.r*m;if(d<bd){bd=d;best=l.i}}return bd<0?best:-1};
+ const lit=(x,y)=>Math.max(0,Math.min(1,.5-(x-(x0+x1)/2)/(x1-x0)*.7-(y-(y0+y1)/2)/(y1-y0)*.9));
+ const leaves=[[],[],[]],seed=v*31+(F?1:7);const N=F?[150,120,110]:[80,64,56];
+ for(let ly=0;ly<3;ly++){let n=0,q=0;while(n<N[ly]&&q<N[ly]*12){q++;const x=x0+hs(q,seed+ly*13)*(x1-x0),y=y0+hs(q,seed+ly*13+5)*(y1-y0);
+  /* back fills everything; mid avoids the deep core a bit; front favours the outer shell and the lit side, and overhangs the edge */
+  const m=ly===2?1.04:ly===1?.98:.95,li=inside(x,y,m);if(li<0)continue;const l=L[li],e=Math.hypot(x-l.x,y-l.y)/l.r;if(ly===2&&e<.45&&hs(q,seed+9)<.6)continue;if(ly===1&&e<.25&&hs(q,seed+8)<.5)continue;
+  const lt=lit(x,y),ang=(F?(hs(q,seed+3)-.5)*3.1:Math.atan2(y-l.y,x-l.x)+(hs(q,seed+3)-.5)*1.3),len=F?.95+hs(q,seed+4)*.5:1.55+hs(q,seed+4)*.6;
+  leaves[ly].push({x,y,l:li,ang,len,lt,e,q});n++}}
+ /* berry spots at three depths */
+ const berries=[];const NB=[12,8,4];let id=0;for(let d=0;d<3;d++){let n=0,q=0;while(n<NB[d]&&q<600){q++;const x=x0+hs(q,seed+50+d*7)*(x1-x0),y=y0+hs(q,seed+51+d*7)*(y1-y0),li=inside(x,y,d===0?.78:d===1?.85:.9);if(li<0)continue;const l=L[li],e=Math.hypot(x-l.x,y-l.y)/l.r;
+  if(d===2&&lit(x,y)<.3)continue;if(berries.some(b=>Math.hypot(b.x-x,b.y-y)<(d?2.2:1.6)))continue;
+  const cl=(!F&&hs(q,seed+60)<.6)?2:(hs(q,seed+61)<.35?1:0);/* G currant: small tucked strings of 2-3; F: singles + pairs */
+  berries.push({x,y,l:li,d,cl,ord:hs(q,seed+62),id:id++});n++}}
+ return CACHE[key]={L,sk,leaves,berries,x0,x1,y0,y1}}
+function drawBerryBush2(g,state,v,t,f,rus,col,style){v=((v|0)%5+5)%5;style=style==='G'?'G':'F';col=(col==='blue'||col===1)?'blue':(col==null?(v%2?'blue':'red'):'red');
+ const BP=BP2[col],P=LEAF5[v%3],Y=layout(v,style),F=style==='F',win=state==='winter';t=t||0;rus=Math.max(0,Math.min(1,rus||0));f=f==null?1:Math.max(0,Math.min(1,f));
+ const sway=Math.sin(t/1500+v)*.2;const off=Y.L.map(l=>{const up=Math.max(0,-l.y)/10;return[(rus?(vn(t,l.i*7+5,83)*.7+vn(t,l.i*7+2,37)*.3)*.5*rus:0)+sway*up,rus?vn(t,l.i*7+4,61)*.3*rus:0]});
+ const O=(o)=>off[o.l]||[0,0];
+ g.save();g.lineCap='round';
+ /* contact shadow */const W=(Y.x1-Y.x0)/2;g.fillStyle='rgba(10,14,6,.24)';g.beginPath();g.ellipse(1.5,2.6,W+1.5,4.8,0,0,6.2832);g.fill();g.fillStyle='rgba(6,8,3,.4)';g.beginPath();g.ellipse(.5,1.6,W*.6,2.1,0,0,6.2832);g.fill();
+ const crown=[Y.sk*1.5,1.2];
+ const branches=()=>{for(const l of Y.L){const[dx,dy]=off[l.i],e=[l.x+dx+(l.x-crown[0])*.15,l.y+dy];const c1=[crown[0]+(l.x-crown[0])*.3,crown[1]-2-(crown[1]-l.y)*.5];
+  for(const[c,w]of[[WOOD[0],1.4],[WOOD[1],.75]]){g.strokeStyle=c;g.lineWidth=w;g.beginPath();g.moveTo(crown[0],crown[1]);g.quadraticCurveTo(c1[0],c1[1],e[0],e[1]);g.stroke()}
+  for(let k=0;k<2;k++){const a=-1.6+(hs(k,l.i)-.5)*2.2,ex=e[0]+Math.cos(a)*l.r*.6,ey=e[1]+Math.sin(a)*l.r*.6;g.strokeStyle=WOOD[k?1:2];g.lineWidth=.45;g.beginPath();g.moveTo(e[0],e[1]);g.lineTo(ex,ey);g.stroke();if(win)disc(g,ex,ey,.5,'rgba(240,248,255,.9)')}}};
+ if(win){branches();for(const l of Y.L)if(hs(l.i,v)<.4){g.fillStyle='#8a6a3a';g.beginPath();g.ellipse(l.x+1,l.y-1,1.1,.6,.5,0,6.2832);g.fill()}for(let i=0;i<16;i++)disc(g,(hs(i,3)-.5)*26,(hs(i,4)-.5)*7+3,.55,'rgba(235,245,255,.85)');g.restore();return}
+ /* silhouette interior: deep shadow with depth gradient (lighter toward the lit top-left) */
+ for(const l of Y.L){const[dx,dy]=off[l.i];disc(g,l.x+dx,l.y+dy,l.r+.7,OUT)}
+ for(const l of Y.L){const[dx,dy]=off[l.i];const gr=g.createRadialGradient(l.x+dx-l.r*.35,l.y+dy-l.r*.45,0,l.x+dx,l.y+dy,l.r);gr.addColorStop(0,P[1]);gr.addColorStop(1,P[0]);disc(g,l.x+dx,l.y+dy,l.r,gr)}
+ g.save();g.beginPath();for(const l of Y.L){const[dx,dy]=off[l.i];g.moveTo(l.x+dx+l.r,l.y+dy);g.arc(l.x+dx,l.y+dy,l.r,0,6.2832)}g.clip();branches();g.restore();
+ /* leaves */
+ const leaf=(o,ly)=>{const[dx,dy]=O(o),x=o.x+dx,y=o.y+dy;let ci;if(ly===0)ci=1+Math.round(o.lt*1.4);else if(ly===1)ci=2+Math.round(o.lt*1.8);else ci=2+Math.round(o.lt*2.6+(o.e>.85?.3:0));ci=Math.min(5,ci);
+  const L=o.len,wd=F?L*.55:L*.5;g.fillStyle=ly===0?P[0]:OUT;g.globalAlpha=ly===0?.6:.55;g.beginPath();g.ellipse(x+.25,y+.35,L,wd,o.ang,0,6.2832);g.fill();g.globalAlpha=1;
+  g.fillStyle=P[ci];if(F){g.beginPath();g.ellipse(x,y,L,wd,o.ang,0,6.2832);g.fill()}else{/* broad pointed currant leaf: lobed teardrop */const c=Math.cos(o.ang),s=Math.sin(o.ang);g.beginPath();g.moveTo(x+c*L*1.1,y+s*L*1.1);g.quadraticCurveTo(x-s*wd*1.6+c*L*.1,y+c*wd*1.6+s*L*.1,x-c*L*.8,y-s*L*.8);g.quadraticCurveTo(x+s*wd*1.6+c*L*.1,y-c*wd*1.6+s*L*.1,x+c*L*1.1,y+s*L*1.1);g.fill();
+   if(ly===2&&ci>=4){g.strokeStyle=P[ci-1];g.lineWidth=.22;g.beginPath();g.moveTo(x-c*L*.6,y-s*L*.6);g.lineTo(x+c*L*.8,y+s*L*.8);g.stroke()}}
+  if(ly===2&&ci>=4&&F){disc(g,x-Math.cos(o.ang)*.2-.15,y-.25,.28,P[5])}};
+ /* berries: stage colour in place; depth sets size/darkness; f thins surface first, then mid, then deep */
+ const C=state==='green'?BP.green:state==='turning'?BP.turn:BP.ripe,sz=state==='green'?.78:state==='turning'?.9:1;
+ const total=Y.berries.length,keep=state==='picked'?2:state==='full'?Math.round(total*f):total;
+ const order=Y.berries.slice().sort((a,b)=>(b.d-a.d)||(b.ord-a.ord));const gone=new Set(order.slice(0,total-keep).map(b=>b.id));
+ if(state==='picked'){gone.clear();order.forEach((b,i)=>{if(!(b.d===1&&b.ord<.35)&&!(b.d===0&&b.ord<.12))gone.add(b.id)});let left=Y.berries.filter(b=>!gone.has(b.id));if(left.length>2)left.slice(2).forEach(b=>gone.add(b.id));if(!left.length){const b=Y.berries.find(b=>b.d===0);if(b)gone.delete(b.id)}}
+ const berryAt=(b,x,y,r,dk)=>{const c0=dk?mix(C[0],C[2],dk):C[0];disc(g,x,y,r+.3,C[2]);disc(g,x,y,r,c0);if(b.d===2)disc(g,x-r*.38,y-r*.4,r*.4,C[1]);else if(b.d===1)disc(g,x-r*.35,y-r*.4,r*.28,mix(C[1],C[0],.45))};
+ const drawB=d=>{for(const b of Y.berries){if(b.d!==d||gone.has(b.id))continue;const[dx,dy]=O(b),x=b.x+dx,y=b.y+dy;const ripeMix=state==='ripening'&&b.ord<.33;const Cs=C;const r=(d===0?.75:d===1?.9:1.0)*sz,dk=d===0?.45:d===1?.12:0;
+  const pts=b.cl===2?[[0,0],[.9,.55],[.25,1.35]]:b.cl===1?[[0,0],[1.05,.3]]:[[0,0]];
+  for(const[px,py]of pts){if(ripeMix){const save=C;berryAt(b,x+px*r,y+py*r,r,dk)}else berryAt(b,x+px*r,y+py*r,r,dk)}}};
+ /* ripening: a third of spots still turning */
+ const drawBstage=d=>{if(state!=='ripening'){drawB(d);return}const keepC=C;for(const b of Y.berries){if(b.d!==d||gone.has(b.id))continue;const Cx=b.ord<.33?BP.turn:BP.ripe;const[dx,dy]=O(b),x=b.x+dx,y=b.y+dy,r=(d===0?.75:d===1?.9:1.0)*.95,dk=d===0?.45:d===1?.12:0;const pts=b.cl===2?[[0,0],[.9,.55],[.25,1.35]]:b.cl===1?[[0,0],[1.05,.3]]:[[0,0]];
+  for(const[px,py]of pts){const X=x+px*r,Yy=y+py*r;disc(g,X,Yy,r+.3,Cx[2]);disc(g,X,Yy,r,dk?mix(Cx[0],Cx[2],dk):Cx[0]);if(d===2)disc(g,X-r*.38,Yy-r*.4,r*.4,Cx[1]);else if(d===1)disc(g,X-r*.35,Yy-r*.4,r*.28,mix(Cx[1],Cx[0],.45))}}};
+ for(const o of Y.leaves[0])leaf(o,0);drawBstage(0);for(const o of Y.leaves[1])leaf(o,1);drawBstage(1);for(const o of Y.leaves[2])leaf(o,2);drawBstage(2);
+ g.restore()}
+Object.assign(G,{drawBerryBush2,BUSH_STYLES:{F:'fine-leaf blueberry',G:'broad-leaf currant'}})})(typeof window!=='undefined'?window:globalThis);
+</script>
 <script>/* DEER + BOAR art (art-studio/animals/animals.js, embedded; game: ANI_SPR_SC 4, die frames 11..18, pose in the cache key) */
 /* Bronze and Blood: DEER (Persian fallow, Dama mesopotamica) and WILD BOAR (Sus scrofa) v1, by Ningal.
  * Style: the procession ONAGER v2 (onager.js): overlapping shaded spheres with a dark outline (PWN.OL), vertical 3-stop gradient
@@ -6713,11 +6793,11 @@ const GH5I={};function gh5Int(b){const n=ghBeds(b);if(GH5I[n])return GH5I[n];con
  return GH5I[n]={m:{R:1,spots:sp,_wg:{n:N,C,w}}}}
 /* bushes: Ningal's drawBerryBush, cached per look; a bush being picked is drawn live (rustle + one berry thinned per pluck, visual only) */
 const GHB=new Map(),GHPK=new Map();
-function ghBushLook(pr){const sp2=(pr.gx*7+pr.gy*13|0)%3;return{col:sp2%2?'blue':'red',shape:(hsh(pr.gx*5|0,pr.gy*5|0,63)*5)|0}}
+function ghBushLook(pr){const sp2=(pr.gx*7+pr.gy*13|0)%3;return{col:sp2%2?'blue':'red',shape:(hsh(pr.gx*5|0,pr.gy*5|0,63)*5)|0,style:hsh(pr.gx*11|0,pr.gy*11|0,64)<.5?'F':'G'}}/* style: F fine-leaf / G broad-leaf, fixed per bush position */
 function ghBushState(k,a,M){if(rnSeason()===3)return'winter';if(a<=0)return'picked';const rg=!!(k&&S.rn&&S.rn.bg&&S.rn.bg[k]),f=a/M;if(rg)return f<.34?'green':f<.67?'turning':'ripening';return'full'}
 function ghBushDraw(pr,k,X,Y,a,M,stOv){const L=ghBushLook(pr),st=stOv||ghBushState(k,a,M),f=Math.max(0,Math.min(1,a/M));if(k)GHB.set(k,{x:X,y:Y,col:L.col});const pk=k&&GHPK.get(k),now=performance.now();
- if(pk&&now-pk.t<400&&!PB_ON&&st==='full'){vx.save();vx.translate(X,Y);drawBerryBush(vx,'full',L.shape,now,Math.max(0,f-pk.pl/8),pk.rus,L.col);vx.restore();return}
- const fq=st==='full'?Math.round(f*8):0,key=L.shape+L.col+st+fq;let c=GHB.get(key);if(!c){c=mk(96,96)[0];const g=c.getContext('2d');g.scale(2,2);g.translate(24,30);drawBerryBush(g,st,L.shape,0,fq/8,0,L.col);GHB.set(key,c)}vx.drawImage(c,X-24,Y-30,48,48)}
+ if(pk&&now-pk.t<400&&!PB_ON&&st==='full'){vx.save();vx.translate(X,Y);drawBerryBush2(vx,'full',L.shape,now,Math.max(0,f-pk.pl/8),pk.rus,L.col,L.style);vx.restore();return}
+ const fq=st==='full'?Math.round(f*8):0,key=L.shape+L.col+st+fq+L.style;let c=GHB.get(key);if(!c){c=mk(96,96)[0];const g=c.getContext('2d');g.scale(2,2);g.translate(24,30);drawBerryBush2(g,st,L.shape,0,fq/8,0,L.col,L.style);GHB.set(key,c)}vx.drawImage(c,X-24,Y-30,48,48)}
 /* picker: drawPicker after the bush, the game's pawn sprite squashed from the feet; variants A/B/C rotate by pawn */
 function ghPickDraw(a,p,now){const V='ABC'[(a.idx||0)%3],P=POSE_PICKS[V],cyc=((now+(a.idx||0)*977)%P.period)/P.period,X=p.x,Y=p.y,bi=GHB.get(a.hvk),i=+String(a.hvk).slice(1),bx=bi?bi.x:(i%MW+.5)*TS,by=bi?bi.y:((i/MW|0)+.5)*TS,col=bi?bi.col:'red',fl=bx>=X?1:-1;
  const o=a.sick?Object.assign({},a.o,{sick:1}):a.o,spr=pawnSprA(o,fl>0?0:2,cam.z*PXR<=1.05?1:0);
