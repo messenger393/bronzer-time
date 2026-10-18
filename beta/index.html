@@ -2009,7 +2009,7 @@ function campThink(a,s){const C=CAMP_T[s.camp],b=campB(s);if(!b){go(a,a.home,'id
 /* ===== Hunters' Lodge (Weston approved plan, balance later): every member 12+ hunts one real animal of a real deer herd (track, stalk, kill, carry the
    carcass home; the herd loses that animal), butchers it at the lodge (300 fresh meat + 1 hide), smokes fresh meat on a rack (1 day + 4 bundles of
    firewood the family chops itself) and fetches that firewood. Herds regrow only by spring fawns. ===== */
-const HUNT_MEAT=300,HUNT_HIDE=1,RACK_MAX=300,RACK_FW=4,RACK_WOOD_MAX=12,FAWN_R=.25,HUNT_TRACK=6,HUNT_KILL=1.3,HUNT_STEP=1.1,HUNT_BUTCH=4;
+const HUNT_MEAT=300,HUNT_HIDE=1,HUNT_Y={deer:{m:300,h:1},boar:{m:400,h:1}}/* Weston: per-animal carcass yield */,BOAR_GORE=.1,BOAR_FATAL=.1/* of gorings: 1 in 100 boar kills */,GORE_REST=3,RACK_MAX=300,RACK_FW=4,RACK_WOOD_MAX=12,FAWN_R=.25,HUNT_TRACK=6,HUNT_KILL=1.3,HUNT_STEP=1.1,HUNT_BUTCH=4;
 function HL(){const E=S.eco;return E.hunt||(E.hunt={k:0,m:0,h:0,eF:0,eS:0,spF:0,spS:0,sm:0,fw:0,fwCut:0,t:{},mk:{},fawns:0,gone:0})}
 const HCARC=[];/* carcasses lying on the ground (kill spot, butchering spot) */
 function huntMig(){if(S.hunt2)return;S.hunt2=1;const E=S.eco;/* old 'Game & hides' stock becomes smoked meat (keeps, no sudden spoiling) */const mv=o=>{if(o&&o.meat>0){o.smeat=(o.smeat||0)+o.meat;o.meat=0}};if(E){mv(E.hold);mv(E.mkt);for(const q of E.steads||[])mv(q.st)}for(const H of S.herds||[])H.n=Math.round(H.n);if(E)S.fawnY=E.yr}
@@ -2030,6 +2030,7 @@ function huntBooked(s,key,a){const k=s[key];if(!k||k===a.key)return false;if(age
 function huntNearTree(cx,cy){let best=null,bd=1e9;for(const n of RN.list.t||[]){if(occ[n.y*MW+n.x])continue;const am=rnAmt(n.k);if(am<RND.t.max*.5)continue;if(!walkC(n.x-1,n.y)&&!walkC(n.x+1,n.y))continue;const d=Math.hypot(n.x-cx,n.y-cy);if(d<bd&&d<CAMP_R*1.6){bd=d;best=n}}return best}
 function huntThink(a,s,b,cx,cy){const j=a.hj,R=rackSite(s,b),ST=campCarry(s,b),near=(p,r)=>Math.hypot(a.x-p.x,a.y-p.y)<(r||1.4);
  if(a.route.length){a.t=.5;return}
+ {const m=huntMem(a,s);if(m&&m.inj){if(m.inj>S.t&&!j){/* gored: rests at home 3 days, no work */a.limp=1;if(!(a.state==='home'&&a.inB===a.home.b))go(a,a.home,'home');a.t=4;return}if(m.inj<=S.t){m.inj=0;a.limp=0}}}
  if(j)return huntStep(a,s,b,j,R,ST,near);
  const fd=s.n*FOOD_DAY();
  /* 1. smoked meat ready: take it off the rack */
@@ -2044,6 +2045,11 @@ function huntThink(a,s,b,cx,cy){const j=a.hj,R=rackSite(s,b),ST=campCarry(s,b),n
  const L=huntHerds(s).filter(H=>(used.get(H)||0)<Math.round(H.n)).sort((p,q)=>Math.hypot(p.x-cx,p.y-cy)-Math.hypot(q.x-cx,q.y-cy));
  if(L.length){const H=L[0];const nj={job:'hunt',ph:'track',H,n:0,tool:null};a.hj=nj;const c=huntAnimal(H,a);if(c){c.hk=a.key;nj.c=c}const t=huntTgt(nj),d=Math.hypot(t.x-a.x,t.y-a.y)||1,p=walkNear(t.x+(a.x-t.x)/d*HUNT_TRACK,t.y+(a.y-t.y)/d*HUNT_TRACK);go(a,p,'towork');a.t=1;return}
  idleLeis(a,a.home)}/* no huntable herd: leisure (no filler) */
+function huntYield(s,k){const Y=HUNT_Y[k]||HUNT_Y.deer,M=Y.m,Hd=Y.h;s.st.meat=(s.st.meat||0)+M;s.st.hides=(s.st.hides||0)+Hd;s.cpdG=s.cpdG||{};s.cpdG.meat=(s.cpdG.meat||0)+M;s.cpdG.hides=(s.cpdG.hides||0)+Hd;s.prod=(s.prod||0)+M*EIT.meat.v+Hd*EIT.hides.v;const L=HL();L.m+=M;L.h+=Hd;s.killY=(s.killY||0)+1}
+/* Weston: boar gorings. The family member behind a stead pawn (stead#(id*16+j) is F.m[j]) */
+function huntMem(a,s){const F=famOf(s);if(!F||!a.key||a.key.indexOf('stead#')!==0)return null;return F.m[(+a.key.split('#')[1])-s.id*16]||null}
+const HGORE=[];
+function huntGoreDie(a,s){const F=famOf(s),m=huntMem(a,s);if(!F||!m)return;const nm=m.n;F.m.splice(F.m.indexOf(m),1);famFixHead(F);s.n=Math.max(1,s.n-1);S.pop=Math.max(1,S.pop-1);HL().gored=(HL().gored||0);HL().died=(HL().died||0)+1;rosterSig='';farmNote(s,'The '+F.sn+' family lost a hunter to a boar ('+nm+').')}
 function huntDrop(a){const j=a.hj;if(j&&j.c&&j.c.hk===a.key)j.c.hk=null;a.hj=null;a.carc=0;a.carry=null;a.fwCar=0;if(a.state==='work'||a.state==='stalk')a.state='idle';a.t=.5}
 function huntStep(a,s,b,j,R,ST,near){
  if(j.job==='hunt'){const H=j.H;
@@ -2055,11 +2061,14 @@ function huntStep(a,s,b,j,R,ST,near){
    j.ph='stalk';j.n=(j.n||0)+1;if(j.n>60){huntDrop(a);return}const st=Math.min(HUNT_STEP,d-HUNT_KILL*.8),p=walkNear(a.x+(t.x-a.x)/d*st,a.y+(t.y-a.y)/d*st);go(a,p,'stalk');a.t=1.1+Math.random()*.6;return}
   if(j.ph==='kill'){a.state='work';j.n++;if(j.n<2){a.t=.9;return}
    /* the strike: that animal falls, the herd is one fewer and bolts */const t=huntTgt(j),A=RN.anim.get(H);if(A&&j.c){const i=A.indexOf(j.c);if(i>=0)A.splice(i,1)}H.n=Math.max(0,Math.round(H.n)-1);H.flee=3;const fx=H.x-a.x,fy=H.y-a.y,fd=Math.hypot(fx,fy)||1;H.tx=H.x+fx/fd*5;H.ty=H.y+fy/fd*5;HL().k++;
-   const C={x:t.x,y:t.y,dir:j.c&&j.c.dir||1,a:a.key,k:H.k};j.k=H.k;HCARC.push(C);if(HCARC.length>24)HCARC.shift();j.cr=C;j.c=null;j.tool=null;a.state='idle';j.ph='lift';go(a,walkNear(t.x-.5,t.y+.3),'towork');a.t=1;return}
+   const C={x:t.x,y:t.y,dir:j.c&&j.c.dir||1,a:a.key,k:H.k};j.k=H.k;HCARC.push(C);if(HCARC.length>24)HCARC.shift();j.cr=C;j.c=null;j.tool=null;a.state='idle';
+   if(H.k==='boar'){const dg=S.devGore;S.devGore=0;const g=dg||Math.random()<BOAR_GORE;if(g){const fat=dg===2||(!dg&&Math.random()<BOAR_FATAL);const dx=t.x-a.x,dy=t.y-a.y,dd=Math.hypot(dx,dy)||1;HGORE.push({x0:t.x+dx/dd*2.5,y0:t.y+dy/dd*2.5,x1:a.x+dx/dd*.3,y1:a.y+dy/dd*.3,t0:performance.now(),C,ax:a.x,ay:a.y});C.hid=1;HL().gored=(HL().gored||0)+1;popup(a.x,a.y,fat?'Gored — fatally!':'Gored by the boar!','#ff5a4a');j.gore=1;a.limp=1;if(fat){j.ph='die';a.t=1.4;return}}}
+   j.ph='lift';go(a,walkNear(t.x-.5,t.y+.3),'towork');a.t=j.gore?1.4:1;return}
+  if(j.ph==='die'){const i=HCARC.indexOf(j.cr);if(i>=0)HCARC.splice(i,1);/* the carcass is left in the brush */a.limp=0;huntDrop(a);huntGoreDie(a,s);return}
   if(j.ph==='lift'){const i=HCARC.indexOf(j.cr);if(i>=0)HCARC.splice(i,1);a.carc=1;a.carcK=j.k||'deer';j.ph='carry';go(a,ST,'carry');a.t=1;return}
-  if(j.ph==='carry'){if(!near(ST,2.2)&&(j.tr=(j.tr||0)+1)<4){go(a,ST,'carry');a.t=1;return}a.carc=0;a.state='work';j.tool='sickle';j.ph='butch';j.n=0;j.cr={x:ST.x+.7,y:ST.y,dir:1,a:a.key,b:1,k:j.k};HCARC.push(j.cr);a.dir=1;a.t=2;return}
+  if(j.ph==='carry'){if(!near(ST,2.2)&&(j.tr=(j.tr||0)+1)<4){go(a,ST,'carry');a.t=1;return}if(j.gore){/* gored: no butchering; the carcass goes straight into the stores and he rests */a.carc=0;huntYield(s,j.k);const m=huntMem(a,s);if(m)m.inj=S.t+GORE_REST*DAYLEN;huntDrop(a);return}a.carc=0;a.state='work';j.tool='sickle';j.ph='butch';j.n=0;j.cr={x:ST.x+.7,y:ST.y,dir:1,a:a.key,b:1,k:j.k};HCARC.push(j.cr);a.dir=1;a.t=2;return}
   if(j.ph==='butch'){a.state='work';j.n++;if(j.n<HUNT_BUTCH){a.t=2;return}const i=HCARC.indexOf(j.cr);if(i>=0)HCARC.splice(i,1);
-   s.st.meat=(s.st.meat||0)+HUNT_MEAT;s.st.hides=(s.st.hides||0)+HUNT_HIDE;s.cpdG=s.cpdG||{};s.cpdG.meat=(s.cpdG.meat||0)+HUNT_MEAT;s.cpdG.hides=(s.cpdG.hides||0)+HUNT_HIDE;s.prod=(s.prod||0)+HUNT_MEAT*EIT.meat.v+HUNT_HIDE*EIT.hides.v;const L=HL();L.m+=HUNT_MEAT;L.h+=HUNT_HIDE;s.killY=(s.killY||0)+1;huntDrop(a);return}
+   huntYield(s,j.k);huntDrop(a);return}
   huntDrop(a);return}
  if(j.job==='rkA'){
   if(j.ph==='rget'){if(!near(rackPt(R),1.6)){huntDrop(a);return}a.state='work';j.tool='basket';j.ph='rgot';a.t=2.5;return}
@@ -2083,14 +2092,15 @@ function rackArt(X,Y,m,prog,fw,now){const O='#2a1d12';
  if(m>0&&prog<1){/* fire under the rack + smoke */const f=1+.2*Math.sin(now/90);circ(vx,X+16,Y+12,3.2*f,'#f0a030');circ(vx,X+16,Y+12,1.8*f,'#ffe080');for(let i=0;i<4;i++){const ph=((now/1600)+i/4)%1;vx.fillStyle='rgba(200,200,200,'+(.35*(1-ph)).toFixed(2)+')';vx.beginPath();vx.arc(X+16+Math.sin(ph*6+i)*3,Y+6-ph*26,2+ph*5,0,7);vx.fill()}}
  for(const px of[0,32]){rr(vx,X+px-1.5,Y-14,3,28,1,'#6e4a2a',O,.7)}rr(vx,X-3,Y-15,38,3,1,'#7a5432',O,.7);rr(vx,X-3,Y-6,38,2.5,1,'#7a5432',O,.6);
  const n=Math.round(Math.min(1,m/RACK_MAX)*8),t=Math.max(0,Math.min(1,prog));for(let i=0;i<n;i++){const x=X+2+i*3.7,y=i%2?-12:-3;vx.fillStyle=lerpC('#b8403a','#5a2a1a',t);vx.fillRect(x,Y+y,2.6,7+(i%3));vx.fillStyle='rgba(255,255,255,.25)';vx.fillRect(x,Y+y,1,6)}}
-function huntVis(D,now,inV){for(const C of HCARC){const X=C.x*TS,Y=C.y*TS;if(inV(X,Y))D.push({k:Y,f:()=>huntCarcArt(X,Y,C.dir,C.b,C.k)})}
+function huntVis(D,now,inV){for(let i=HGORE.length-1;i>=0;i--){const G=HGORE[i],e=(now-G.t0)/650;if(e>1.6){G.C.hid=0;HGORE.splice(i,1);continue}if(e>=1){G.C.hid=0;continue}const x=G.x0+(G.x1-G.x0)*e,y=G.y0+(G.y1-G.y0)*e,X=x*TS,Y=y*TS;if(!inV(X,Y))continue;D.push({k:Y+1,f:()=>{vx.save();vx.translate(X,Y);if(G.x1<G.x0)vx.scale(-1,1);vx.drawImage(aniSpr('boar',(Math.floor(now/70)%4)),-24,-30,48,36);vx.restore();for(let q=0;q<3;q++){vx.fillStyle='rgba(150,120,80,'+(.5-q*.15)+')';vx.beginPath();vx.arc(X-(G.x1-G.x0)*TS*.12*(q+1),Y+2,3+q,0,7);vx.fill()}if(e>.75){vx.fillStyle='#e02a1a';vx.font='bold 14px sans-serif';vx.fillText('!',G.ax*TS-3,G.ay*TS-34)}}})}
+ for(const C of HCARC){if(C.hid)continue;const X=C.x*TS,Y=C.y*TS;if(inV(X,Y))D.push({k:Y,f:()=>huntCarcArt(X,Y,C.dir,C.b,C.k)})}
  const E=S.eco;if(!E)return;for(const s of E.steads){if(s.camp!=='lodge'||!s.rk)continue;const R=s.rk,X=R.x*TS+4,Y=R.y*TS+18;if(!inV(X,Y))continue;D.push({k:Y+12,f:()=>{vx.save();vx.translate(X,Y);rackArt(0,0,R.m,R.m>0?(S.t-R.t0)/DAYLEN:0,s.rfw||0,now);vx.restore()}})}}
 {const _da=drawAgent;drawAgent=function(a,p,moving,now){if(a.hj&&a.hj.ph==='stalk'){const q=POSE.stalk.squash||.8;vx.save();vx.translate(p.x,p.y);vx.scale(1,q);vx.translate(-p.x,-p.y);try{_da(a,p,moving,now)}finally{vx.restore()}}else _da(a,p,moving,now);if(a.carc)huntCarryArt(p.x,p.y,a.dir,a.carcK)}}
 function huntInsp(s,b){const L=huntHerds(s),cx=b.x+bsz(b.t)/2,cy=b.y+bsz(b.t)/2,R=s.rk,B=t=>'<b>'+t+'</b>';const H=L.slice().sort((p,q)=>Math.hypot(p.x-cx,p.y-cy)-Math.hypot(q.x-cx,q.y-cy))[0];
  return (s.wz?'Work zone '+B((s.wz[2]-s.wz[0]+1)+'×'+(s.wz[3]-s.wz[1]+1))+' tiles · hunting only the deer and boar herds inside it':'No work zone: hunting the nearest deer or boar herd')+'<br>'+(L.length?L.length+' herd'+(L.length>1?'s':'')+' in reach ('+L.reduce((t,h)=>t+Math.round(h.n),0)+' animals)'+(H?' · nearest '+Math.round(H.n)+' '+H.k+', '+Math.round(Math.hypot(H.x-cx,H.y-cy))+' tiles':''):'<span style="color:#ffb070">no huntable herd: the family takes leisure</span>')+
  '<br>Kills this year '+(s.killY||0)+' · fresh meat '+Math.round(s.st.meat||0)+' · smoked '+Math.round(s.st.smeat||0)+' · hides '+Math.round(s.st.hides||0)+
  '<br>Smoking rack: '+(R&&R.m>0?(rackDone(R)?'smoked, '+Math.round(R.m)+' ready to take down':Math.round(R.m)+' meat smoking ('+Math.round((S.t-R.t0)/DAYLEN*100)+'%)'):'empty')+' · rack firewood '+Math.round(s.rfw||0)+' / '+RACK_WOOD_MAX+
- '<br><span class="small muted">A carcass gives '+HUNT_MEAT+' fresh meat + 1 hide. Fresh meat spoils 10%/day; a rack batch (up to '+RACK_MAX+') smokes in 1 day on '+RACK_FW+' bundles of firewood the family chops; smoked meat spoils ~5%/yr. Herds grow only by spring fawns (+25%).</span><br><button class="btn" style="margin-top:4px" onclick="wzStart('+s.id+')">Paint work zone</button>'}
+ '<br><span class="small muted">A carcass gives '+HUNT_Y.deer.m+' (deer) or '+HUNT_Y.boar.m+' (boar) fresh meat + 1 hide. A boar charges and gores the hunter about 1 kill in 10 (he limps home and rests '+GORE_REST+' days); about 1 in 100 is fatal. Fresh meat spoils 10%/day; a rack batch (up to '+RACK_MAX+') smokes in 1 day on '+RACK_FW+' bundles of firewood the family chops; smoked meat spoils ~5%/yr. Herds grow only by spring fawns (+25%).</span><br><button class="btn" style="margin-top:4px" onclick="wzStart('+s.id+')">Paint work zone</button>'}
 
 /* ---- H5/H7: Gatherer's Hut pickers: closest bush with ripe berries first (inside the work zone if one is painted), ~6 s a pick of a third of a full bush, basket of 300, carried to the hut store (2,000) and counted there ---- */
 const GHF={n:0};const GH_BASKET=300,GH_STORE=2000,GH_PICK=6;
@@ -3609,7 +3619,7 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
   const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);if(d>.03){c.x+=dx/d*.4*dt;c.y+=dy/d*.4*dt;c.dir=dx>0?1:-1}if(z<.5||!inV(c.x*TS,c.y*TS))return;D.push({k:c.y*TS,f:()=>critDraw(c,now)})});
  if(!S.rn||!S.herds)rnInit();rnBuild();rnHerdStep(dt);if(z>=.5)rnHerdDraw(D,dt,now,inV);try{if(z>=.5)huntVis(D,now,inV)}catch(e){}
  const sickP=evOn('plague');
- for(const a of agents){if(a.dnc&&!a.route.length)try{danceStep(a,dt)}catch(e){a.dnc=null}if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?(SCLA?RSPD_A[rl]:RSPD[rl])*Math.max(.35,congF(ri)):1,sp=(SCLA?WALK_A*(a.role==='kid'||(a.o&&a.o.age==='old')?.8:1)/* Weston: carrying never slows anyone down */:(a.role==='kid'?1.4:1))*(a.sick?.6:1)*rd*dt;
+ for(const a of agents){if(a.dnc&&!a.route.length)try{danceStep(a,dt)}catch(e){a.dnc=null}if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?(SCLA?RSPD_A[rl]:RSPD[rl])*Math.max(.35,congF(ri)):1,sp=(SCLA?WALK_A*(a.role==='kid'||(a.o&&a.o.age==='old')?.8:1)/* Weston: carrying never slows anyone down */:(a.role==='kid'?1.4:1))*(a.sick?.6:1)*(a.limp?.55:1)/* gored hunter limps */*rd*dt;
    if(rl)TR[ri]+=dt*(a.carry&&S.tier>=2?2:1);if(!rl||(rl===1&&WORN&&WORN[ri]))wearStep(ri,dt);if(d>.01)a.dir=dirOf(dx,dy);a.ft+=dt*(a.role==='kid'?10:7);if(d<=sp){a.x=p.x;a.y=p.y;a.route.shift();if(!a.route.length){if(a.state==='towork'){a.state='work';a.t=3+Math.random()*4}else if(a.state==='home')a.t=3}}else{a.x+=dx/d*sp;a.y+=dy/d*sp}}
   else{a.t-=dt;if(a.t<=0){// job/path decisions are spread over frames: at most ~2 ms of thinking per frame (min 3 pawns), the rest wait a frame
  const TB=think.fb!==vframe.t0?(think.fb=vframe.t0,think.n=0,think.dl=performance.now()+2):0;if(think.n<3||performance.now()<think.dl){think.n++;think(a)}}}a.sick=!!sickP&&a.idx%3===0&&a.role!=='soldier';if(a.state==='home'&&!a.route.length&&!a.inB)continue;if(z<.5)continue;let p=isoP(a.x,a.y);if(!inV(p.x,p.y))continue;const mv=a.route.length>0||!!a.dnc;const ip=a.inB&&!mv&&a.inB.t!=='tent'?intPos(a,dt):null;if(ip)p=ip.p;D.push({k:a.inB&&!mv?(a.inB.y+bsz(a.inB.t))*TS:p.y,f:()=>ip?intDraw(a,p,ip,now):drawAgent(a,p,mv,now)})}
@@ -5938,7 +5948,7 @@ function devPanel(){let P=$('devp');if(!DEVO.on){if(P)P.style.display='none';ret
  hd('Lumber Camp');add('Lumber Camp family: +1 working-age member',()=>devCampAddMember());add('Empty the firewood shed (splitting starts)',()=>{const s=devLumberCamp();if(s){s.st.firewood=0;s.splitOn=1}else log('Dev: no Lumber Camp family')});
  add('Fill the firewood shed',()=>{const s=devLumberCamp();if(s){s.st.firewood=FW_CAP;s.splitOn=0}});
  add('Go to the Lumber Camp',()=>{const s=devLumberCamp(),b=s&&campB(s);if(b){cam.z=cam.tz=1.2;centerOn(b.x+1,b.y+1);sel={i:S.bl.indexOf(b)};showInsp()}});
- hd('Farms (G1–G3)');add('Build scene: Farms test',()=>devSceneFarm());hd('Palace Complex');add('Kill the king (succession)',()=>log('Dev: '+devKillKing()));add('Kill the king, no male heir',()=>log('Dev: '+devKillKing(1)));
+ hd('Farms (G1–G3)');add('Build scene: Farms test',()=>devSceneFarm());hd('Palace Complex');add('Kill the king (succession)',()=>log('Dev: '+devKillKing()));add('Kill the king, no male heir',()=>log('Dev: '+devKillKing(1)));hd("Hunters' Lodge");add('Next boar kill: hunter is gored',()=>{S.devGore=1;log('Dev: the next boar kill gores the hunter')});add('Next boar kill: fatal goring',()=>{S.devGore=2;log('Dev: the next boar kill is fatal')});
  add('Farms: ripen all crops now',()=>{for(const s of S.eco.steads)if(s.pl)for(const i in s.pl){const r=s.pl[i];r.t=S.t-PL_T*DAYLEN*1.16}log('Dev: every sown plant is ripe')});
  add('Farms: sow every empty plot now (free seed)',()=>{let n=0;for(const s of S.eco.steads)if(s.pl)for(const i of s.f)if(!s.pl[i]){s.sc=(s.sc||0)+1;s.pl[i]={t:S.t,c:s.sc*7+3,h:0};n++}log('Dev: sowed '+n+' plots')});
  add('Farms: show per-plant yield (toggle)',()=>{S.devPl=!S.devPl});
