@@ -89,6 +89,430 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <div id="toast"></div><div id="tip"></div><div id="log" hidden></div>
 <div id="modal"><div class="panel glass" id="mbody"></div></div>
 
+<script>/* QUARRY v2 art (art-studio/quarry/v2/quarry.js, embedded; export adds TL,ZL,CW,CH,GX,GY for the game) */
+/* QUARRY v2 — rough stone only. Art + layout helpers, no game mechanics.
+ * SCALE (audited against the live game): tile 32 px; standing pawn = 24x32 sprite * PSC .72 (~17x23 px, head top ~21 px above the feet);
+ *   waist ~11 px, knee ~6 px. Beds 13x24 (lumber v4 cabin / tent convention). Tools drawn at the game's hand point, world scale (pawnTool sz 20).
+ *   rough block (yard/pit)  : 14 x 9 top, 8 px tall  (~0.45 x 0.3 tile, knee-to-waist)       drawQBlock(g,x,y,P,seed,1)
+ *   carried block           : s .5 -> 7 x 4.5 x 4 px (man-portable, held at the hand point)   drawQBlock(g,x,y,P,seed,.5)
+ *   pit terrace depth D     : 20 px  (= one pawn height). 3 terraces -> 60 px deep. Pit 7 x 5 tiles (224 x 160).
+ *   house                   : plan 76..98 x 56..70 px, front wall 16 px, door 10 x 15 px (pawn 17 wide x 21 tall walks through).
+ *                             9 beds 13x24 + mats fit (lumber v4 cabin is 78x60 for 6 beds).
+ * API (all world px, anchor noted):
+ *   Q2.PAL.A|B|C            stone palettes (B = Anatolian granite = game rock greys; default). Swap palette = swap style.
+ *   Q2.tool(g,k,s)          k 'pick'|'maul'|'wedge'|'chisel'|'smaul'; same convention as the game's PWN.toolSprite (origin = hand, haft +x).
+ *   Q2.block(g,x,y,P,seed,s)        anchor = ground centre of the block.
+ *   Q2.outcrop(g,x,y,P,stage,seed)  stage 0..5 (5 = worked out). anchor = ground centre. ~64 x 44 px.
+ *   Q2.pit(g,x,y,P,t,o)             anchor = top-left of the 224x160 rim box. o.workers=false hides nothing (workers are drawn by caller).
+ *   Q2.PIT                          {w,h,D,levels:[rects], work:[{x,y,dir,lvl}], ramp, ladders, sledgeIn}
+ *   Q2.yard(g,x,y,P,fill)           anchor = ground centre. 3x2 tiles, cap 15.  Q2.YARD.slots
+ *   Q2.houseVariant(seed)           -> {w,h,door,annex,shade,hatch,yardWall,clutter,beds[9],items}
+ *   Q2.house(g,h,P,o)               draws a placed house (h from placeQuarryHouses), o.interior, o.t, o.rise(0..1 build-in)
+ *   Q2.placeQuarryHouses(site,n,seed) deterministic + stable placer (see below).
+ *   Q2.cutter / Q2.carrier          pawn animation draws, POSE tables Q2.POSE_CUT / Q2.POSE_CARRY (game pose-table format).
+ * HOOKS for Hammurabi: when a family is assigned to the quarry call placeQuarryHouses(site, families.length, siteSeed) and use entry
+ *   [families.length-1] for the new family; earlier entries are bit-identical (stable). Store {seed,i} on the family to redraw.
+ *   Bed slots: house.beds[k] (local to house origin, rotate by house.rot about house centre: Q2.houseToWorld(h,pt)). rot = a + PI/2.
+ */
+(function(G){'use strict';const PI=Math.PI,TAU=PI*2;const OL=()=>(typeof PWN!=='undefined'&&PWN.OL)||'#2a1d12';
+const hs=(i,s)=>{const v=Math.sin(i*127.1+s*311.7)*43758.5453;return v-Math.floor(v)};
+function rng(seed){let a=(seed*2654435761)>>>0||1;return()=>{a^=a<<13;a>>>=0;a^=a>>>17;a^=a<<5;a>>>=0;return a/4294967296}}
+function poly(g,p,f,s,w){g.beginPath();p.forEach((q,i)=>i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1]));g.closePath();if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=w||.6;g.stroke()}}
+function rr(g,x,y,w,h,r,f,s,lw){r=Math.min(r,w/2,h/2);g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath();if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw||.6;g.stroke()}}
+function ell(g,x,y,rx,ry,f,s,lw){g.beginPath();g.ellipse(x,y,Math.max(.1,rx),Math.max(.1,ry),0,0,TAU);if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=lw||.5;g.stroke()}}
+function ln(g,a,b,c,d,s,w){g.strokeStyle=s;g.lineWidth=w||.5;g.beginPath();g.moveTo(a,b);g.lineTo(c,d);g.stroke()}
+const PAL={B:{n:'Anatolian granite (game rock greys)',hi:'#d8d2c4',top:'#c4beb0',front:'#8e897e',dark:'#5a564e',deep:'#3c3934',line:'#48443d',chip:'#aaa496',dust:'200,194,180',scar:'#a39a84',earth:'#8c7c5a',grass:'#86a060',spk:'rgba(40,36,30,.35)'},
+ A:{n:'Egyptian limestone',hi:'#ece2c8',top:'#ddd0b2',front:'#b4a582',dark:'#8f8166',deep:'#6a5e48',line:'#6e624a',chip:'#e4d8bc',dust:'230,220,196',scar:'#cbbb94',earth:'#b8a070',grass:'#b8a878',spk:'rgba(120,100,60,.25)'},
+ C:{n:'Riverbank sandstone',hi:'#e2c294',top:'#d2b184',front:'#a8865c',dark:'#6e5638',deep:'#4e3c26',line:'#5e4a30',chip:'#d8bc90',dust:'214,186,140',scar:'#c0a070',earth:'#a08458',grass:'#9aa26a',spk:'rgba(90,60,30,.3)'}};
+function speck(g,P,x,y,w,h,n,sd){g.fillStyle=P.spk;for(let i=0;i<n;i++)g.fillRect(x+hs(i,sd)*w,y+hs(i,sd+.5)*h,.6,.6)}
+/* ---------------- TOOLS (game toolSprite convention: hand at origin, haft along +x, s = size, world px) ---------------- */
+const WOOD='#9a6a38',WOODD='#6e4824',BRONZE='#c8903c',BRONZED='#8a5a22';
+function tool(g,k,s){const O=OL(),lw=Math.max(.6,s*.03);g.lineCap='round';const L=s*.62;
+ const haft=(len,c)=>{g.lineWidth=s*.055;g.strokeStyle=O;g.beginPath();g.moveTo(-s*.08,0);g.lineTo(len,0);g.stroke();g.lineWidth=s*.032;g.strokeStyle=c||WOOD;g.stroke();g.lineWidth=s*.012;g.strokeStyle='rgba(255,230,180,.35)';g.beginPath();g.moveTo(-s*.06,-s*.006);g.lineTo(len*.9,-s*.006);g.stroke()};
+ switch(k){
+ case'pick':{/* bronze-age quarry pick: socketed bronze head, long tapering point (striking side, -y = forward when swung), short blunt butt */
+  haft(L*.98);const hx=L*.95;poly(g,[[hx-s*.05,-s*.06],[hx+s*.02,-s*.31],[hx+s*.045,-s*.06],[hx+s*.05,s*.06],[hx+s*.03,s*.12],[hx-s*.03,s*.12],[hx-s*.05,s*.06]],BRONZE,O,lw);
+  poly(g,[[hx-s*.01,-s*.08],[hx+s*.02,-s*.27],[hx+s*.03,-s*.08]],'rgba(255,236,190,.45)');rr(g,hx-s*.06,-s*.045,s*.12,s*.09,s*.02,BRONZED,O,lw*.8);/* socket */
+  ln(g,hx-s*.065,-s*.02,hx+s*.065,-s*.02,'rgba(40,24,10,.5)',s*.012);break}
+ case'smaul':{/* hafted stone hammer: granite cobble lashed to the haft */haft(L*.8);const hx=L*.82;ell(g,hx,0,s*.1,s*.14,'#8e897e',O,lw);ell(g,hx-s*.02,-s*.04,s*.05,s*.05,'rgba(255,255,255,.25)');
+  g.strokeStyle='#c8a868';g.lineWidth=s*.02;for(let i=-1;i<=1;i++){g.beginPath();g.moveTo(hx-s*.09,i*s*.04);g.lineTo(hx+s*.09,i*s*.04+s*.02);g.stroke()}break}
+ case'maul':{/* wooden maul / beetle for driving wedges: heavy oak head, end grain, rope ring */haft(L*.72);const hx=L*.74,hw=s*.17,hh=s*.36;
+  rr(g,hx-hw/2,-hh/2,hw,hh,s*.04,'#8a6038',O,lw);g.fillStyle='rgba(255,220,170,.22)';g.fillRect(hx-hw/2+s*.02,-hh/2+s*.02,hw*.35,hh-s*.04);
+  ell(g,hx,-hh/2+s*.01,hw/2-s*.01,s*.03,'#b08454',O,lw*.6);ell(g,hx,hh/2-s*.01,hw/2-s*.01,s*.03,'#6e4824',O,lw*.6);
+  ln(g,hx-hw/2,-hh*.28,hx+hw/2,-hh*.28,'#3a2410',s*.018);ln(g,hx-hw/2,hh*.28,hx+hw/2,hh*.28,'#3a2410',s*.018);break}
+ case'chisel':{/* bronze chisel: short bar, flared edge, mushroomed head */poly(g,[[-s*.06,-s*.025],[s*.24,-s*.02],[s*.3,-s*.045],[s*.3,s*.045],[s*.24,s*.02],[-s*.06,s*.025]],BRONZE,O,lw);ell(g,-s*.07,0,s*.03,s*.04,BRONZED,O,lw*.7);break}
+ case'wedge':{/* wooden wedge (oak), soaked: point +x */poly(g,[[-s*.08,-s*.06],[s*.12,-s*.012],[s*.12,s*.012],[-s*.08,s*.06]],'#a0703c',O,lw);ln(g,-s*.07,-s*.06,-s*.07,s*.06,'#6e4824',s*.02);break}
+ }}
+/* ---------------- ROUGH BLOCK ---------------- */
+function block(g,x,y,P,seed,s){s=s||1;P=P||PAL.B;const O=OL();const w=14*s,d=9*s,h=8*s,j=i=>(hs(seed,i)-.5)*1.6*s;
+ const L=x-w/2,R=x+w/2,B=y,Tp=y-h;ell(g,x+1*s,y+.6*s,w*.62,2.4*s,'rgba(0,0,0,.24)');
+ const top=[[L+j(1),Tp-d*.55+j(2)],[L+w*.45+j(3),Tp-d*.62+j(4)],[R+j(5),Tp-d*.5+j(6)],[R+j(7)*.5,Tp+j(8)*.4],[L+j(9)*.5,Tp+j(10)*.4]];
+ poly(g,[top[4],top[3],[R+j(11)*.4,B],[L+j(12)*.4,B]],P.front,O,.55*Math.max(.7,s));/* front */
+ poly(g,[top[3],top[2],[R+j(13)*.3,B-d*.5],[R+j(11)*.4,B]],P.dark,O,.5*Math.max(.7,s));/* east side */
+ poly(g,top,P.top,O,.55*Math.max(.7,s));poly(g,[top[0],top[1],[top[1][0],top[1][1]+1.2*s],[top[0][0]+1*s,top[0][1]+1.4*s]],'rgba(255,255,255,.22)');
+ /* pick marks / split face texture */g.strokeStyle='rgba(30,26,20,.35)';g.lineWidth=.35*Math.max(.8,s);for(let i=0;i<Math.round(5*s+2);i++){const px=L+1.5*s+hs(seed,20+i)*(w-3*s),py=Tp+1.2*s+hs(seed,30+i)*(h-2.4*s);g.beginPath();g.moveTo(px,py);g.lineTo(px+1.1*s,py+.8*s);g.stroke()}
+ speck(g,P,L,Tp-d*.5,w,h+d*.5,Math.round(16*s*s),seed);if(s>=.8){ln(g,L+w*.62,Tp+1,L+w*.68,B-1.5,'rgba(30,26,20,.3)',.4)}}
+/* ---------------- BOULDER (prism with top + front + side, used by outcrop) ---------------- */
+function boulder(g,cx,cy,rx,ry,h,P,seed,cut){const O=OL();const n=9,pts=[];for(let i=0;i<n;i++){const a=i/n*TAU,r=.8+hs(seed,i)*.35;pts.push([cx+Math.cos(a)*rx*r,cy-h+Math.sin(a)*ry*r])}
+ ell(g,cx+3,cy+1,rx*1.1,ry*.55,'rgba(0,0,0,.22)');
+ /* front skirt: extrude the south half down by h */const south=pts.filter(p=>p[1]>=cy-h-ry*.1).sort((a,b)=>a[0]-b[0]);const sk=[...south,...south.slice().reverse().map(p=>[p[0],p[1]+h])];
+ poly(g,[[cx-rx*.98,cy-h],...south,[cx+rx*.98,cy-h],[cx+rx*.92,cy],[cx-rx*.92,cy]],P.front,O,.6);
+ g.save();g.beginPath();g.rect(cx,cy-h-ry,rx*1.2,h+ry*1.2);g.clip();poly(g,[[cx-rx*.98,cy-h],...south,[cx+rx*.98,cy-h],[cx+rx*.92,cy],[cx-rx*.92,cy]],'rgba(20,16,10,.25)');g.restore();
+ poly(g,pts,P.top,O,.6);ell(g,cx-rx*.3,cy-h-ry*.3,rx*.35,ry*.3,'rgba(255,255,255,.18)');
+ /* sheeting cracks + lichen */g.strokeStyle='rgba(30,26,20,.45)';g.lineWidth=.45;g.beginPath();let px=cx-rx*.6,py=cy-h+ry*.1;g.moveTo(px,py);for(let i=0;i<4;i++){px+=rx*.35;py+=(hs(seed,40+i)-.5)*3;g.lineTo(px,py)}g.stroke();
+ ln(g,cx+rx*.2,cy-h+ry*.6,cx+rx*.3,cy-2,'rgba(30,26,20,.35)',.4);for(let i=0;i<5;i++)ell(g,cx+(hs(seed,50+i)-.5)*rx*1.3,cy-h+(hs(seed,60+i)-.5)*ry,.9,.6,i%2?'#9aa070':'#b8b48a');
+ speck(g,P,cx-rx,cy-h-ry,rx*2,ry*2+h,Math.round(rx*ry*.4),seed);
+ if(cut){/* fresh split face (light) with a wedge-slot row along its top edge */const fx=cx+rx*cut;poly(g,[[fx-4,cy-h-ry*.2],[fx+2,cy-h-ry*.3],[fx+3,cy-1],[fx-3,cy]],'#b4ae9f',O,.5);for(let i=0;i<3;i++)rr(g,fx-3+i*2,cy-h-ry*.15,1,1.6,.3,P.deep);
+  g.strokeStyle='rgba(60,50,40,.35)';g.lineWidth=.35;for(let i=0;i<4;i++){g.beginPath();g.moveTo(fx-2.5+i*1.4,cy-h);g.lineTo(fx-1.5+i*1.4,cy-h+3);g.stroke()}}}
+function chips(g,P,x,y,w,h,n,sd){for(let i=0;i<n;i++){const px=x+hs(i,sd)*w,py=y+hs(i,sd+.3)*h,r=.5+hs(i,sd+.7)*1.1;if(r>1.2)ell(g,px,py,r,r*.65,i%3?P.chip:P.front,OL(),.25);else{g.fillStyle=i%2?P.chip:P.dark;g.fillRect(px,py,r,r*.6)}}}
+function stone(g,P,x,y,r,ti,sd){/* one irregular faceted stone: shadow, body tone, dark lower-right facet, lit upper-left facet, ridge, speckle */const O=OL(),T=[P.top,P.front,P.chip,P.dark,P.hi,P.front];const n=5+(Math.abs(sd*7|0)%3),pts=[];
+ for(let k=0;k<n;k++){const a=k/n*TAU+hs(sd,k)*.7,rr2=r*(.7+hs(sd,k+9)*.5);pts.push([x+Math.cos(a)*rr2,y+Math.sin(a)*rr2*.74])}
+ ell(g,x+r*.4,y+r*.42,r*.95,r*.42,'rgba(0,0,0,.3)');poly(g,pts,T[ti%6],O,Math.max(.22,r*.13));
+ const cx=x-r*.12,cy=y-r*.16,dk=[[cx,cy]],lt=[[cx,cy]];pts.forEach(p=>{const a=Math.atan2(p[1]-y,p[0]-x);if(a>-.5&&a<2.4)dk.push(p);if(a<-1.2||a>2.9)lt.push(p)});
+ if(dk.length>2)poly(g,dk,'rgba(20,16,10,.3)');if(lt.length>2)poly(g,lt,'rgba(255,255,255,.26)');if(r>1.3){ln(g,cx,cy,pts[1][0],pts[1][1],'rgba(20,16,10,.28)',.3);g.fillStyle=P.spk;g.fillRect(x-r*.3+hs(sd,3)*r*.6,y-r*.2,.5,.5);g.fillRect(x+hs(sd,4)*r*.4,y+hs(sd,5)*r*.3,.5,.5)}}
+function gravel(g,P,cx,cy,rx,ry,n,sd){for(let i=0;i<n;i++){const a=hs(i,sd)*TAU,r=Math.sqrt(hs(i,sd+1));const px=cx+Math.cos(a)*rx*r,py=cy+Math.sin(a)*ry*r;g.fillStyle=[P.chip,P.dark,P.front,P.top][i%4];const s2=.4+hs(i,sd+2)*.7;g.fillRect(px,py,s2,s2*.7)}}
+function rubble(g,P,cx,cy,rx,ry,n,sd){/* textured rubble pile: dust bed, gravel fill, many shaded stones (mostly small, a few big), mounded */ell(g,cx+rx*.15,cy+ry*.25,rx*1.05,ry*.62,'rgba(0,0,0,.16)');ell(g,cx,cy,rx,ry*.6,'rgba(150,138,114,.45)');gravel(g,P,cx,cy,rx,ry*.6,Math.round(n*2.2),sd+50);
+ const S=[];for(let i=0;i<n;i++){const a=hs(i,sd)*TAU,r=Math.sqrt(hs(i,sd+1)),sz=.7+Math.pow(hs(i,sd+2),2.4)*2.8;S.push({x:cx+Math.cos(a)*rx*r*.92,y:cy+Math.sin(a)*ry*r*.55-(1-r*r)*ry*.55,sz,ti:Math.floor(hs(i,sd+3)*6),k:i})}
+ S.sort((a,b)=>a.y-b.y).forEach(q=>stone(g,P,q.x,q.y,q.sz,q.ti,sd*31+q.k));gravel(g,P,cx,cy-ry*.1,rx*.8,ry*.4,Math.round(n*.6),sd+70)}
+function spoilHeap(g,P,cx,cy,rx,ry,h,n,sd){/* layered conical spoil heap with tipped-basket streaks running down from the crest */ell(g,cx+rx*.25,cy+ry*.3,rx*1.1,ry*.6,'rgba(0,0,0,.2)');
+ const LY=5;for(let L=0;L<LY;L++){const f=1-L/LY,yy=cy-h*L/LY;const p=[];for(let k=0;k<14;k++){const a=k/14*TAU;p.push([cx+Math.cos(a)*rx*f*(.9+hs(k,sd+L)*.2),yy+Math.sin(a)*ry*f*(.9+hs(k,sd+L+5)*.2)])}poly(g,p,L%2?'#9a917e':'#8e8572');gravel(g,P,cx,yy,rx*f,ry*f,Math.round(n*f*.9),sd+L*11);
+  const m=Math.round(n*f*.55),S=[];for(let i=0;i<m;i++){const a=hs(i,sd+L*7)*TAU,r=.55+.45*Math.sqrt(hs(i,sd+L*7+1));S.push({x:cx+Math.cos(a)*rx*f*r,y:yy+Math.sin(a)*ry*f*r,sz:.6+Math.pow(hs(i,sd+L*7+2),2.5)*2.4*(.6+f*.5),ti:Math.floor(hs(i,sd+L+9)*6),k:i})}S.sort((a,b)=>a.y-b.y).forEach(q=>{if(q.y>yy-ry*f*.2)stone(g,P,q.x,q.y,q.sz,q.ti,sd*13+L*97+q.k)})}
+ for(let k=0;k<5;k++){const a=.35+k/4*(PI-.7)+(hs(k,sd)-.5)*.2;const x0=cx+(hs(k,sd+1)-.5)*rx*.15,y0=cy-h+1,x1=cx+Math.cos(a)*rx*.95,y1=cy+Math.sin(a)*ry*.9;for(let q=0;q<7;q++){const u=q/6;stone(g,P,x0+(x1-x0)*u+(hs(q,k+sd)-.5)*1.4,y0+(y1-y0)*u,.6+u*1.1*hs(q,k),q%2?4:0,sd+k*17+q)}}
+ ell(g,cx,cy-h,rx*.12,ry*.1,'#a49a84')}
+
+/* ---------------- SURFACE OUTCROP, 6 stages ---------------- */
+function outcrop(g,x,y,P,stage,seed){P=P||PAL.B;stage=Math.max(0,Math.min(5,stage|0));seed=seed||1;
+ /* worked ground scar grows with stage */const sc=10+stage*7;ell(g,x+2,y+4,sc*1.6,sc*.6,'rgba(110,96,70,'+(.18+stage*.06)+')');ell(g,x-6,y+6,sc,sc*.3,'rgba(255,255,255,.06)');
+ const B=[{dx:-12,dy:-2,rx:13,ry:8,h:11},{dx:9,dy:-4,rx:11,ry:7,h:9},{dx:-1,dy:-10,rx:10,ry:6,h:9},{dx:18,dy:4,rx:7,ry:4.5,h:6},{dx:-22,dy:6,rx:6,ry:4,h:5},{dx:2,dy:6,rx:8,ry:5,h:6}];
+ const keep=[6,5,4,3,2,0][stage],shrink=[1,.95,.85,.75,.62,0][stage];
+ /* cut stubs where boulders have gone */for(let i=keep;i<B.length;i++){const b=B[i];ell(g,x+b.dx,y+b.dy,b.rx*.8,b.ry*.6,P.scar,OL(),.4);poly(g,[[x+b.dx-b.rx*.5,y+b.dy-1],[x+b.dx+b.rx*.5,y+b.dy-1.5],[x+b.dx+b.rx*.45,y+b.dy+1.5],[x+b.dx-b.rx*.5,y+b.dy+1.6]],P.front,OL(),.4);
+  poly(g,[[x+b.dx-b.rx*.5,y+b.dy-2.4],[x+b.dx+b.rx*.5,y+b.dy-2.8],[x+b.dx+b.rx*.5,y+b.dy-1.5],[x+b.dx-b.rx*.5,y+b.dy-1]],P.hi,OL(),.35);for(let k=0;k<3;k++)rr(g,x+b.dx-b.rx*.4+k*b.rx*.3,y+b.dy-2.6,.9,1.2,.2,P.deep)}
+ const order=B.slice(0,keep).map((b,i)=>({b,i})).sort((p,q)=>p.b.dy-q.b.dy);
+ for(const {b,i} of order){const s=i===keep-1&&stage>0?shrink:1;boulder(g,x+b.dx,y+b.dy,b.rx*s,b.ry*s,b.h*s,P,seed*7+i,stage>0&&i===0?.55:stage>1&&i===1?-.5:0)}
+ /* loose rock, rubble + chips grow, a freed rough block from stage 2 */rubble(g,P,x+20,y+12,8+stage*2,5,6+stage*4,seed+3);chips(g,P,x-26,y-4,52,18,10+stage*10,seed+9);
+ if(stage>=2&&stage<5)block(g,x-20,y+15,P,seed+5,1);if(stage>=3)block(g,x+24,y-6,P,seed+6,.85);
+ if(stage>=1&&stage<5){/* wedges left in a split */for(let k=0;k<3;k++){g.save();g.translate(x-8+k*2.6,y-12);g.rotate(PI/2);tool(g,'wedge',9);g.restore()}}}
+/* ---------------- THE PIT (endless bedrock quarry) ---------------- */
+const D=20;/* terrace depth = 1 pawn height */
+/* PIT definition is generated per growth stage: see pitState(stage) below. */
+function jag(pts,sd,amp){const o=[];for(let i=0;i<pts.length;i++){const a=pts[i],b=pts[(i+1)%pts.length];const n=Math.max(2,Math.round(Math.hypot(b[0]-a[0],b[1]-a[1])/7));for(let k=0;k<n;k++){const u=k/n;o.push([a[0]+(b[0]-a[0])*u+(hs(i*31+k,sd)-.5)*amp*(k?1:0),a[1]+(b[1]-a[1])*u+(hs(i*17+k,sd+1)-.5)*amp*(k?1:0)])}}return o}
+function face(g,P,x,y,w,h,k,sd){/* vertical cut face with strata, joints, tool marks, cracks, shade toward the bottom */const gr=g.createLinearGradient(0,y,0,y+h);gr.addColorStop(0,P.front);gr.addColorStop(1,P.dark);g.fillStyle=gr;g.fillRect(x,y,w,h);
+ for(let s=0;s<3;s++){const yy=y+h*(.28+s*.27)+(hs(s,sd)-.5)*2;g.fillStyle=s%2?'rgba(255,255,255,.07)':'rgba(0,0,0,.08)';g.fillRect(x,yy,w,h*.12);ln(g,x,yy,x+w,yy+(hs(s,sd+2)-.5)*2,'rgba(30,26,20,.28)',.4)}
+ g.strokeStyle='rgba(30,26,20,.25)';g.lineWidth=.35;for(let i=0;i<w/2.2;i++){const px=x+hs(i,sd+3)*w,py=y+1+hs(i,sd+4)*(h-3);g.beginPath();g.moveTo(px,py);g.lineTo(px+.9,py+1.3);g.stroke()}/* pick marks */
+ for(let q=x+14+hs(k,sd)*10;q<x+w-6;q+=18+hs(q,sd)*14){g.strokeStyle='rgba(25,22,18,.5)';g.lineWidth=.5;g.beginPath();g.moveTo(q,y);let yy=y;while(yy<y+h){yy+=3;g.lineTo(q+(hs(yy,q)-.5)*1.6,yy)}g.stroke()}/* joints */
+ speck(g,P,x,y,w,h,Math.round(w*h/14),sd);g.fillStyle='rgba(255,255,255,.22)';g.fillRect(x,y,w,.8)/* lit rim */}
+function halfBlock(g,P,x,y,w,h,prog,sd){/* a block being freed from a face: channels cut at the sides, wedge row along the top/back */const O=OL();
+ g.fillStyle=P.hi;g.globalAlpha=.25;g.fillRect(x,y,w,h);g.globalAlpha=1;g.strokeStyle=P.deep;g.lineWidth=.6;if(prog<.2){g.setLineDash([1.2,1]);g.strokeRect(x,y,w,h);g.setLineDash([])}
+ else{g.fillStyle=P.deep;g.fillRect(x-1.6,y,1.6,h);g.fillRect(x+w,y,1.6,h);if(prog>.5)g.fillRect(x-1.6,y-1.4,w+3.2,1.4)}
+ if(prog>.6){for(let i=0;i<Math.floor(w/3.4);i++){g.save();g.translate(x+1.8+i*3.4,y-.6);g.rotate(PI/2);tool(g,'wedge',8);g.restore()}}}
+function floorBlock(g,P,x,y,w,d,prog,sd){/* a block outlined in a floor (seen from above) with channel + wedges */g.fillStyle='rgba(255,255,255,.1)';g.fillRect(x,y,w,d);g.fillStyle=P.deep;g.fillRect(x-1.4,y-1.2,w+2.8,1.2);g.fillRect(x-1.4,y,1.4,d);if(prog>.5)g.fillRect(x+w,y,1.4,d);
+ for(let i=0;i<Math.floor(w/3.2);i++)rr(g,x+1+i*3.2,y+d-1,1.3,1.8,.3,'#a0703c',OL(),.3);ln(g,x,y+d,x+w,y+d,'rgba(30,26,20,.4)',.5)}
+function jar(g,x,y,s){s=s||1;const O=OL();ell(g,x+1,y,3*s,1.2*s,'rgba(0,0,0,.25)');poly(g,[[x-2.8*s,y-.3*s],[x-3*s,y-4*s],[x-1.4*s,y-6.2*s],[x+1.4*s,y-6.2*s],[x+3*s,y-4*s],[x+2.8*s,y-.3*s]],'#b0683a',O,.5);ell(g,x,y-6.2*s,1.5*s,.6*s,'#4a2a14');g.fillStyle='rgba(255,220,180,.25)';g.fillRect(x-2*s,y-5*s,1*s,3.5*s)}
+function ladder(g,x,y,h){const O=OL();for(const dx of[-2.5,2.5])rr(g,x+dx-.6,y-h,1.3,h+1,.5,'#8a6038',O,.35);for(let q=y-h+2;q<y;q+=3.2)ln(g,x-2.4,q,x+2.4,q,'#6e4824',.8)}
+function sledge(g,x,y,P,withBlock,sd){const O=OL();ell(g,x+1,y+1.5,11,2.6,'rgba(0,0,0,.22)');for(const dy of[-2.5,2.5])rr(g,x-11,y+dy-.8,22,1.8,.9,'#7a5232',O,.4);for(let k=-8;k<=8;k+=4)rr(g,x+k-.8,y-3.4,1.6,6.8,.6,'#8a6038',O,.35);
+ ln(g,x-11,y-2.5,x-16,y-5,'#c8a868',.6);ln(g,x-11,y+2.5,x-16,y+1,'#c8a868',.6);if(withBlock)block(g,x,y+1,P,sd||3,1)}
+function dust(g,P,x,y,t,sd){for(let k=0;k<3;k++){const u=((t/2400)+k/3+hs(sd,k))%1;g.fillStyle='rgba('+P.dust+','+(.5*(1-u))+')';g.beginPath();g.arc(x+u*5+(k-1)*3,y-u*9,1.2+u*4,0,TAU);g.fill()}}
+
+/* ---------------- GROWING PIT ----------------
+ * stage s is continuous 0..5 (p = s/5). The pit grows wider and one terrace deeper per stage, then a MINE ENTRANCE opens in the deepest face
+ * (s 4.6 -> 5) and the pit STOPS GROWING: stage 5 = final footprint. Houses must avoid PIT_FINAL (pit-local box 0,0,288,216).
+ *   stage 0  shallow scrape, 1 terrace ~8px, rim ~105x76      1  rim ~160x115, terrace 1 at full 20px, 2nd terrace opening
+ *   stage 2  rim ~215x155, 2 terraces                         3  rim ~260x185, 3 terraces
+ *   stage 4  rim 272x200 (final width), 4th terrace opening    5  4 terraces (20,20,20,24 px = 84px deep), mine adit, frozen
+ * pitState(s) -> {s, rim:{x,y,w,h}, levels:[{x,y,w,h,d,z}], ramps:[{lvl,a,b,zA,zB,y}], ladders:[{x,y,h}], work:[{x,y,dir,lvl,n}], mine:{x,y,a}|null}
+ * All coordinates pit-local (pit anchor = top-left of PIT_FINAL). z = screen drop of a terrace floor (cumulative depth). */
+
+/* ================= QUARRY GROWTH BY VISIBLE WORK =================
+ * The pit is a grid of block-sized CELLS (16 x 12 px plan; a rough block is 14x9 + channels). Each cell has a cut LEVEL (0 = ground ... 4).
+ * A deterministic WORK TIMELINE (units; 1 unit = one crew cutting one cell) runs:
+ *   cut terrace 0 (306 cells, 3 crews, expanding jagged from the north face) -> build ramp 0
+ *   cut terrace 1 (169 cells, rows from the north face, serpentine, 3 crews) -> build ramp 1 + ladder 1
+ *   cut terrace 2 (72 cells, 2 crews) -> ramp 2 + ladder 2 -> cut terrace 3 (20 cells, 2 crews) -> ramp 3 + ladder 3 -> build MINE ADIT -> frozen.
+ * Each cell goes: scribed (u 0-.2) -> channel cut (.2-.45) -> wedges (.45-.7) -> split + lifted out (.7-.9, floor drops) -> carried away (.9-1) -> cut floor.
+ * Ramp build: stake out (0-.15) -> rubble retaining wall course by course (.15-.55) -> earth fill (.55-.75) -> log sleepers one by one (.75-1).
+ * Ladder build: first pole (0-.2), second pole (.2-.35), rungs lashed one by one (.35-1). Mine: dig opening (0-.35), posts (.35-.6), lintel (.6-.8), lamp lit (.8-1).
+ * API: pitState(p) p = 0..1 of the timeline (or {units} / {cellsCut}); stageP(s) maps the 6 named stages to p; PIT_TIMELINE has phases + totals.
+ *   state = {p, units, cells[], cellsCut, cellsTotal, rim, ramps[{lvl,a,b,zA,zB,y,u}], ladders[{lvl,x,y,h,u}], mine{x,y,faceTop,u}|null,
+ *            work[{x,y,dir,task,lvl,ref}], final}.  task: scribe|pick|wedge|lift|carry|stake|wall|fill|sleeper|tamp|carry_rubble|carry_log|lash|dig|post|lintel|lamp|tend
+ * Final footprint PIT_FINAL 288 x 240 (pit-local), unchanged by growth; houses avoid it. */
+const PIT_FINAL={w:288,h:240},DL=[20,20,20,24],ZL=[0,20,40,60,84],CW=16,CH=12,GX=8,GY=8,NC=17,NR=18;
+const LFC=[{c0:0,c1:16,r0:0,r1:17},{c0:2,c1:14,r0:2,r1:14},{c0:4,c1:12,r0:4,r1:11},{c0:6,c1:10,r0:6,r1:9}];
+const LF=LFC.map(q=>({x:GX+q.c0*CW,y:GY+q.r0*CH,w:(q.c1-q.c0+1)*CW,h:(q.r1-q.r0+1)*CH}));
+const cl=(v,a,b)=>Math.max(a,Math.min(b,v));
+const TL=(function(){/* build the deterministic timeline once */const R=rng(4242);const cells=[];for(let r=0;r<NR;r++)for(let c=0;c<NC;c++){let m=0;LFC.forEach((q,i)=>{if(c>=q.c0&&c<=q.c1&&r>=q.r0&&r<=q.r1)m=i+1});cells.push({c,r,maxL:m,ev:[]})}
+ const at=(c,r)=>cells[r*NC+c];const phases=[];let U=0;const CREWS=[6,5,4,2];
+ const ramps=[],ladders=[];let prevB=null;for(let i=0;i<4;i++){const F=LF[i],d=DL[i],len=Math.min(4.2*d+6,F.w*.55);let a,dirW;
+  /* the ramp's TOP end sits exactly on the terrace edge: beyond it lies the upper floor (or ground) at the same height -> seamless joint */
+  if(i===0){a=F.x+F.w;dirW=true}else{const east=F.x+F.w,west=F.x;dirW=Math.abs(prevB-east)<Math.abs(prevB-west);a=dirW?east:west}
+  const b=dirW?a-len:a+len;prevB=b;ramps.push({lvl:i,a,b,zA:ZL[i],zB:ZL[i+1],y:F.y,dirW,W:20});if(i>0)ladders.push({lvl:i,x:dirW?F.x+F.w*.14:F.x+F.w*.86,y:F.y+ZL[i+1]+2,h:d+5})}
+ for(let i=0;i<4;i++){const q=LFC[i];let list=cells.filter(z=>z.c>=q.c0&&z.c<=q.c1&&z.r>=q.r0&&z.r<=q.r1);const K=CREWS[i],t0=U,cols=q.c1-q.c0+1;
+  /* crews work SEPARATE fronts: terrace 0 = angular sectors spreading from the north face; deeper terraces = column strips swept row by row from the face */
+  const crews=[...Array(K)].map(()=>[]);list.forEach(z=>{let k;if(i===0){const a=Math.atan2(Math.max(0,z.r-1)+.01,z.c-8.5);k=cl(Math.floor(a/PI*K),0,K-1);z.k=Math.hypot(z.c-8.5,(z.r-1)*1.25)+R()*1.6}else{k=cl(Math.floor((z.c-q.c0)/cols*K),0,K-1);const rr2=z.r-q.r0;z.k=rr2*100+(rr2%2?-z.c:z.c)+R()*.8}crews[k].push(z)});
+  let mx=0;crews.forEach((L2,k)=>{L2.sort((a,b)=>a.k-b.k);L2.forEach((z,j)=>{const st=t0+j+k*.17;z.ev.push({lvl:i,st,en:st+1,j,crew:k})});mx=Math.max(mx,L2.length)});U=t0+mx+.4;phases.push({type:'cut',lvl:i,t0,t1:U,n:list.length,crews:K});
+  const rb={type:'ramp',lvl:i,t0:U,t1:U+6};phases.push(rb);ramps[i].t0=rb.t0;ramps[i].t1=rb.t1;if(i>0){const lb={type:'ladder',lvl:i,t0:U+1.5,t1:U+5.5};phases.push(lb);ladders[i-1].t0=lb.t0;ladders[i-1].t1=lb.t1}U+=6.3}
+ const r3=ramps[3],F3=LF[3];const mine={x:Math.round(r3.dirW?F3.x+F3.w*.8:F3.x+F3.w*.22),y:F3.y+ZL[4],faceTop:F3.y+ZL[3],t0:U,t1:U+7};phases.push({type:'mine',t0:U,t1:U+7});U+=7.5;
+ const mid=(ph,f)=>ph.t0+(ph.t1-ph.t0)*f;const marks=[phases[0].t0+9,mid(phases[2],.35),mid(phases[5],.45),mid(phases[8],.5),mid(phases[11],.5),U];return{cells,phases,ramps,ladders,mine,total:U,marks,at}})();
+function stageP(s){s=cl(s,0,5);const M=[0,...TL.marks];const i=Math.min(4,Math.floor(s)),f=s-Math.floor(s);const a=TL.marks[i],b=s>=5?TL.marks[5]:TL.marks[Math.min(5,i+1)];const u=s>=5?TL.marks[5]:a+(b-a)*f;return u/TL.total}
+function cellLevel(z,U){let c=0;for(const e of z.ev)if(U>=e.st+.7)c=e.lvl+1;return c}
+function haulRoute(z,e,U){/* plan route (x,y + height z) from the split block out: upper floor beside the cell -> ramp lvl-1 bottom -> top -> ... -> rim exit */const lvl=e.lvl,cx=GX+z.c*CW+CW/2,cy=GY+z.r*CH;const P2=[];
+ if(lvl===0){P2.push({x:cx,y:cy+2,z:0},{x:cx,y:-2,z:0},{x:300,y:-2,z:0});return P2}
+ P2.push({x:cx,y:cy+CH*.5,z:ZL[lvl]});for(let k=lvl-1;k>=0;k--){const r=TL.ramps[k];if(U<r.t1)return null;const ry=LF[k].y+10;P2.push({x:r.b,y:ry,z:ZL[k+1]},{x:r.a,y:ry,z:ZL[k]})}P2.push({x:300,y:LF[0].y+10,z:0});return P2}
+function routeAt(R,v){const seg=[];let L=0;for(let i=1;i<R.length;i++){const d=Math.hypot(R[i].x-R[i-1].x,R[i].y-R[i-1].y+R[i].z-R[i-1].z);seg.push(d);L+=d}let d=v*L;for(let i=1;i<R.length;i++){if(d<=seg[i-1]||i===R.length-1){const u=seg[i-1]?Math.min(1,d/seg[i-1]):0,a=R[i-1],b=R[i];const dx=b.x-a.x,dy=(b.y+b.z)-(a.y+a.z);return{x:Math.round(a.x+dx*u),y:Math.round(a.y+a.z+dy*u),dir:Math.abs(dx)>Math.abs(dy)?(dx>0?0:2):(dy>0?1:3)}}d-=seg[i-1]}}
+function pitState(p){let U;if(p&&typeof p==='object'){if(p.units!=null)U=p.units;else if(p.cellsCut!=null){const evs=[];TL.cells.forEach(z=>z.ev.forEach(e=>evs.push(e.st+.7)));evs.sort((a,b)=>a-b);U=p.cellsCut<=0?0:evs[Math.min(evs.length-1,p.cellsCut-1)]+.001}}else U=cl(p==null?1:p,0,1)*TL.total;
+ const cells=TL.cells.map(z=>{const c=cellLevel(z,U);let act=null;for(const e of z.ev)if(U>=e.st&&U<e.en){act={lvl:e.lvl,u:(U-e.st)/(e.en-e.st)};break}return{c:z.c,r:z.r,x:GX+z.c*CW,y:GY+z.r*CH,level:c,maxL:z.maxL,act}});
+ const lv=(c,r)=>(c<0||r<0||c>=NC||r>=NR)?0:cells[r*NC+c].level;let cut=0,x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;cells.forEach(q=>{q.n=lv(q.c,q.r-1);q.s=lv(q.c,q.r+1);q.w=lv(q.c-1,q.r);q.e=lv(q.c+1,q.r);if(q.level>0){cut++;x0=Math.min(x0,q.x);y0=Math.min(y0,q.y);x1=Math.max(x1,q.x+CW);y1=Math.max(y1,q.y+CH)}});
+ cells.forEach(q=>{for(const e of TL.cells[q.r*NC+q.c].ev)if(U>=e.st+.7)cut+=0});
+ const uOf=(t0,t1)=>cl((U-t0)/(t1-t0),0,1),ramps=TL.ramps.map(r=>Object.assign({},r,{u:uOf(r.t0,r.t1)})).filter(r=>U>=r.t0),ladders=TL.ladders.map(l=>Object.assign({},l,{u:uOf(l.t0,l.t1)})).filter(l=>U>=l.t0);
+ const M=TL.mine,mine=U>=M.t0?Object.assign({},M,{u:uOf(M.t0,M.t1)}):null;let cellsCut=0;TL.cells.forEach(z=>z.ev.forEach(e=>{if(U>=e.st+.7)cellsCut++}));
+ /* active work slots */const work=[];cells.forEach(q=>{if(!q.act)return;const u=q.act.u;if(u>=.9)return;const task=u<.2?'scribe':u<.45?'pick':u<.7?'wedge':'lift';const zz=u<.7?ZL[q.act.lvl]:ZL[q.act.lvl+1];
+  work.push({x:q.x+CW/2,y:q.y+CH-1.5+zz,dir:3,task,lvl:q.act.lvl,ref:'cell '+q.c+','+q.r,u})});
+ ramps.forEach(r=>{if(r.u>=1)return;const F=LF[r.lvl],u=r.u,front=F.y+20,xf=r.a+(r.b-r.a)*Math.min(1,u<.15?u/.15:u<.75?.5:(u-.75)/.25),zf=r.zA+(r.zB-r.zA)*((xf-r.a)/(r.b-r.a));
+  const tA=u<.15?'stake':u<.55?'carry_rubble':u<.75?'carry_rubble':'carry_log',tB=u<.15?'stake':u<.55?'wall':u<.75?'fill':'sleeper';
+  work.push({x:Math.round(xf+(r.dirW?-6:6)),y:Math.round(front+r.zB+6),dir:3,task:tB,lvl:r.lvl,ref:'ramp '+r.lvl,u});const ox=(r.a+r.b)/2+(r.dirW?14:-14);work.push({x:Math.round(ox),y:Math.round(front+r.zB+8),dir:r.dirW?2:0,task:tA,lvl:r.lvl,ref:'ramp '+r.lvl,u})});
+ /* HAULERS: every other freshly split block is carried out along the floor to the ramps and up them, terrace by terrace, over the rim */
+ TL.cells.forEach(z=>z.ev.forEach(e=>{if(e.j%3)return;const v=(U-(e.st+.9))/1.8;if(v<0||v>=1)return;const R=haulRoute(z,e,U);if(!R)return;const p=routeAt(R,v);work.push({x:p.x,y:p.y,dir:p.dir,task:'haul',lvl:e.lvl,ref:'haul',u:v,seed:z.c*7+z.r})}));
+ const r0b=TL.ramps[0];if(U>=r0b.t1){/* sledge crew on the terrace-1 floor, south strip */const v=((U-r0b.t1)/26)%1,x=30+200*v;work.push({x:Math.round(x),y:197+ZL[1],dir:0,task:'sledge',lvl:0,ref:'sledge'})}
+ {/* water boy: north rim while terrace 0 is cut, then the west strip of terrace 1 */const done0=U>=TL.phases[0].t1,v=(U/14)%1,pp=v<.5?v*2:2-v*2;if(!done0)work.push({x:Math.round(30+220*pp),y:2,dir:v<.5?0:2,task:'water',lvl:0,ref:'water'});else work.push({x:20,y:Math.round(36+150*pp+ZL[1]),dir:v<.5?1:3,task:'water',lvl:0,ref:'water'})}
+ {const ph=TL.phases.find(q=>U>=q.t0&&U<q.t1);if(ph&&ph.type!=='cut'){/* while ramps/ladders/mine are built, a gang clears cut spoil from the newest floor to the rim heaps in baskets, and a scriber marks the next outline */const L=Math.min(4,(ph.lvl??3)+1),F=LF[Math.min(3,L)],z=ZL[L];
+  for(let k=0;k<3;k++){const v=((U-ph.t0)/3+k/3)%1,pp=v<.5?v*2:2-v*2;work.push({x:Math.round(F.x+14+(F.w-28)*pp),y:Math.round(F.y+F.h*(.35+k*.2)+z),dir:v<.5?0:2,task:'haul',item:v<.5?'basket':'none',lvl:L-1,ref:'clear'})}
+  if(L<4){const N=LF[L],v=((U-ph.t0)/5)%1;work.push({x:Math.round(N.x+N.w*(.2+.6*v)),y:Math.round(N.y+N.h*.5+ZL[L]),dir:1,task:'scribe',lvl:L-1,ref:'scribe'})}}}
+ ladders.forEach(l=>{if(l.u<1)work.push({x:Math.round(l.x+7),y:Math.round(l.y+4),dir:2,task:'lash',lvl:l.lvl,ref:'ladder '+l.lvl,u:l.u})});
+ if(mine&&mine.u<1){const u=mine.u,task=u<.35?'dig':u<.6?'post':u<.8?'lintel':'lamp';work.push({x:mine.x+(u<.35?0:-12),y:mine.y+10,dir:3,task,lvl:3,ref:'mine',u});if(u>=.35&&u<.8)work.push({x:mine.x+14,y:mine.y+11,dir:2,task:'carry_log',lvl:3,ref:'mine',u})}
+ const final=U>=TL.total-.01;if(final){/* steady-state slots (thinned): 1 on terrace 0, 2 on 1, 2 on 2, 1 on 3, 1 at the mine */
+  [[0,.3],[1,.3],[1,.7],[2,.3],[2,.7],[3,.45]].forEach(([i,f])=>{const F=LF[i],r=TL.ramps[i];let x=F.x+F.w*f;const lo=Math.min(r.a,r.b)-8,hi=Math.max(r.a,r.b)+8;const onR=x>lo&&x<hi;if(i===3&&Math.abs(x-M.x)<18)x=M.x+(M.x>F.x+F.w/2?-24:24);work.push({x:Math.round(x),y:Math.round(F.y+ZL[i+1]+(onR?20:12)),dir:3,task:'tend',lvl:i,ref:'face '+i})});
+  work.push({x:M.x,y:M.y+10,dir:3,task:'carry',lvl:3,ref:'mine adit (haul out)'})}
+ {/* keep 5-8 visible: trim surplus haulers, then top up with spoil-clearers walking between finished cells of the newest floor */
+  while(work.length>8){let i=work.findIndex(w=>w.ref==='haul');if(i<0)i=work.findIndex(w=>w.ref==='clear');if(i<0)i=work.findIndex(w=>w.task==='tend');if(i<0)break;work.splice(i,1)}
+  let Lm=Math.max(...cells.map(q=>q.level));let C=cells.filter(q=>q.level===Lm&&!q.act&&q.level===q.maxL);if(C.length<2){Lm=Math.max(0,Lm-1);C=cells.filter(q=>q.level===Lm&&!q.act)}let k=0;
+  while(work.length<5&&C.length>1&&k<6){const cyc=Math.floor(U/3+k*.37),A=C[Math.floor(hs(cyc,k+1)*C.length)],B=C[Math.floor(hs(cyc,k+7)*C.length)],v=(U/3+k*.37)%1,pp=v<.5?v*2:2-v*2;
+   const ax=A.x+CW/2,ay=A.y+CH*.6+ZL[Lm],bx=B.x+CW/2,by=B.y+CH*.6+ZL[Lm],dx=(bx-ax)*(v<.5?1:-1),dy=(by-ay)*(v<.5?1:-1);
+   work.push({x:Math.round(ax+(bx-ax)*pp),y:Math.round(ay+(by-ay)*pp),dir:Math.abs(dx)>Math.abs(dy)?(dx>0?0:2):(dy>0?1:3),task:'haul',item:v<.5?'basket':'none',lvl:Math.max(0,Lm-1),ref:'clear'});k++}}
+ return{p:U/TL.total,units:U,cells,cellsCut,cellsTotal:TL.cells.reduce((a,z)=>a+z.ev.length,0),rim:cut?{x:x0,y:y0,w:x1-x0,h:y1-y0}:null,ramps,ladders,mine,work,final,levels:LF.map((F,i)=>Object.assign({},F,{d:DL[i],z:ZL[i+1],i}))}}
+function pitFootprint(s){return pitState(stageP(s)).rim}
+const LVTONE=[null,'top','front','front','dark'];
+function drawCell(g,P,q,t){/* q: {x,y,level,n,s,w,e,act}. Floor at depth z(level), face on the north edge where the north cell is shallower, clipped by the south lip. */
+ const O=OL(),z=ZL[q.level],zs=ZL[Math.min(q.level,q.s)],zn=ZL[q.n],x=q.x,y=q.y,botVis=y+CH+zs;
+ if(q.level>0){const ft=y+z,fb=Math.min(y+CH+z,botVis);g.save();g.beginPath();g.rect(x-.3,y-1,CW+.6,botVis-y+1.2);g.clip();
+  if(fb>ft){g.fillStyle=P.scar;g.fillRect(x,ft,CW,fb-ft);g.fillStyle=P[LVTONE[q.level]];g.globalAlpha=.78;g.fillRect(x,ft,CW,fb-ft);g.globalAlpha=1;g.fillStyle='rgba(0,0,0,'+(.03+q.level*.05)+')';g.fillRect(x,ft,CW,fb-ft);
+   speck(g,P,x,ft,CW,fb-ft,6,q.x*3+q.y);if(hs(q.x,q.y)<.35){g.fillStyle=P.chip;g.fillRect(x+hs(q.y,1)*CW,ft+hs(q.x,2)*(fb-ft),.9,.6)}
+   if(q.w<q.level){const sg=g.createLinearGradient(x,0,x+7,0);sg.addColorStop(0,'rgba(10,8,6,.38)');sg.addColorStop(1,'rgba(10,8,6,0)');g.fillStyle=sg;g.fillRect(x,ft,7,fb-ft);ln(g,x+.3,ft,x+.3,fb,'rgba(20,16,10,.6)',.5)}
+   if(q.e<q.level){g.fillStyle='rgba(255,255,255,.12)';g.fillRect(x+CW-2,ft,2,fb-ft);ln(g,x+CW-.3,ft,x+CW-.3,fb,'rgba(20,16,10,.5)',.4)}
+   if(q.n<q.level){const sg2=g.createLinearGradient(0,ft,0,ft+5);sg2.addColorStop(0,'rgba(10,8,6,.32)');sg2.addColorStop(1,'rgba(10,8,6,0)');g.fillStyle=sg2;g.fillRect(x,ft,CW,5)}
+   const tv=(hs(q.c*7+3,q.r*5+1)-.5)*.12;g.fillStyle=tv>0?'rgba(255,255,255,'+tv+')':'rgba(0,0,0,'+(-tv)+')';g.fillRect(x,ft,CW,fb-ft);ln(g,x+CW,ft,x+CW,fb,'rgba(30,26,20,.28)',.4);ln(g,x,Math.min(fb,ft+CH),x+CW,Math.min(fb,ft+CH),'rgba(30,26,20,.22)',.4)/* block-cut seams: the floor reads as removed cells */}
+  if(q.n<q.level){/* the cut face: one block wide, strata at fixed offsets per terrace, a joint at the block edge, pick marks */const fh=z-zn,ytop=y+zn;const gr=g.createLinearGradient(0,ytop,0,ytop+fh);gr.addColorStop(0,P.front);gr.addColorStop(1,P.dark);g.fillStyle=gr;g.fillRect(x,ytop,CW,fh);
+   for(let k=q.n;k<q.level;k++){const yy=y+ZL[k];for(const f of[.3,.62]){ln(g,x,yy+DL[k]*f,x+CW,yy+DL[k]*f+(hs(x,k)-.5)*.8,'rgba(30,26,20,.28)',.4)}if(k>q.n)ln(g,x,yy,x+CW,yy,'rgba(255,255,255,.18)',.5)}
+   g.strokeStyle='rgba(30,26,20,.25)';g.lineWidth=.35;for(let i=0;i<fh/3;i++){const px=x+hs(i,x+y)*CW,py=ytop+1+hs(i,x-y)*(fh-3);g.beginPath();g.moveTo(px,py);g.lineTo(px+.9,py+1.3);g.stroke()}
+   ln(g,x+.2,ytop,x+.2,ytop+fh,'rgba(25,22,18,.45)',.45);speck(g,P,x,ytop,CW,fh,Math.round(fh/2),x*7+y);ln(g,x,ytop+.3,x+CW,ytop+.3,'rgba(255,255,255,.35)',.6);ln(g,x,ytop,x+CW,ytop,O,.6)}
+  g.restore();if(q.s<q.level)ln(g,x,botVis,x+CW,botVis,O,.55)/* lip of the shallower cell to the south */;
+  if(q.w<q.level&&q.n>=q.level)0;}
+ if(q.act){const u=q.act.u,zz=ZL[q.act.lvl],X=x+1,Y=y+zz+1,w=CW-2,h=CH-2;g.save();
+  if(u<.7){/* on the surface still at the old level */g.strokeStyle=P.deep;g.lineWidth=.55;if(u<.2){g.setLineDash([1.1,.9]);g.globalAlpha=.4+u*3;g.strokeRect(X,Y,w,h);g.setLineDash([]);g.globalAlpha=1}
+   else{const cw2=Math.min(1,(u-.2)/.25)*1.8+.4;g.fillStyle=P.deep;g.fillRect(X,Y,w,cw2);g.fillRect(X,Y,cw2,h);g.fillRect(X+w-cw2,Y,cw2,h);g.fillStyle='rgba(255,255,255,.18)';g.fillRect(X+cw2,Y+cw2,w-2*cw2,.6);
+    chips(g,P,X-2,Y+h-1,w+4,4,6+Math.round(u*10),x+y)}
+   if(u>=.45){const sink=(u-.45)/.25;for(let i=0;i<4;i++){g.save();g.translate(X+2+i*3.6,Y+h-.5+sink*.8);g.rotate(-PI/2);tool(g,'wedge',8-sink*2);g.restore()}if(u>.62)ln(g,X,Y+h,X+w,Y+h,'rgba(10,8,6,.7)',.6)}}
+  else if(u<.9){/* split and lifted out: rough block rising off the new floor */const lift=Math.sin((u-.7)/.2*PI)*3;g.translate(0,-lift);block(g,x+CW/2,y+ZL[q.act.lvl+1]+CH-2,P,x+y,1);}
+  g.restore()}}
+function cellDemo(g,x,y,P,u){/* 4x3 patch inside the pit on terrace 1 -> 2: centre cell at state u, its west neighbour already cut (for the cell-states sheet) */g.save();g.translate(x-GX,y-GY-ZL[1]);const lvl=u>=.7?2:1;
+ const qs=[];for(let r=0;r<3;r++)for(let c=0;c<4;c++){const L=(r===1&&c===1)?lvl:(r===1&&c===0)?2:1;qs.push({c,r,x:GX+c*CW,y:GY+r*CH,level:L})}const L=(c,r)=>(c<0||r<0||c>3||r>2)?1:qs[r*4+c].level;
+ qs.forEach(q=>{q.n=L(q.c,q.r-1);q.s=L(q.c,q.r+1);q.w=L(q.c-1,q.r);q.e=L(q.c+1,q.r);if(q.c===1&&q.r===1&&u<.9)q.act={lvl:1,u}});
+ qs.slice().sort((a,b)=>a.r-b.r).forEach(q=>drawCell(g,P,q,0));g.restore()}
+function rampBuild(g,P,r,t){const F=LF[r.lvl],u=r.u,O=OL();if(u>=1)return rampSeg(g,P,F,r.zA,r.zB,r.a,r.b,r.lvl);
+ const W=20,gy=F.y,a=r.a,b=r.b,zA=r.zA,zB=r.zB,Z=x=>zA+(zB-zA)*((x-a)/(b-a)),dd=zB-zA;
+ /* stake line along the future front edge */const ns=Math.floor(cl(u/.15,0,1)*Math.abs(a-b)/10);for(let i=0;i<=ns;i++){const x=a+(b-a)*(i*10/Math.abs(a-b));rr(g,x-.5,gy+W+zB-4,1.2,4,.4,'#8a6038',O,.3)}if(ns>1&&u<.55)ln(g,a,gy+W+zB-3.5,a+(b-a)*(ns*10/Math.abs(a-b)),gy+W+zB-3.5,'rgba(230,220,190,.8)',.4);
+ if(u>.15){/* retaining wall rising course by course */const wu=cl((u-.15)/.4,0,1),courses=Math.max(1,Math.ceil(wu*dd/2.6));const wall=[[a,gy+W+zA],[b,gy+W+zB],[a,gy+W+zB]];g.save();g.beginPath();g.rect(Math.min(a,b)-2,gy+W+zB-courses*2.6,Math.abs(a-b)+4,courses*2.6+1);g.clip();poly(g,wall,P.dark,O,.6);
+  gravel(g,P,(a+b)/2,gy+W+(zA+zB)/2,Math.abs(a-b)/2,dd/2,Math.round(Math.abs(a-b)*dd/5),r.lvl+5);for(let i=0;i<Math.abs(a-b)*dd/5;i++){const px=Math.min(a,b)+hs(i,r.lvl+90)*Math.abs(a-b),py=gy+W+zA+hs(i,r.lvl+91)*dd+2;stone(g,P,px,py,1.4+hs(i,r.lvl+93)*1.1,Math.floor(hs(i,r.lvl+94)*6),r.lvl*101+i)}g.restore();
+  /* loose rubble stock at the foot */rubble(g,P,(a+b)/2+(r.dirW?20:-20),gy+W+zB+8,8,4,Math.round(14*(1-wu)+4),r.lvl+5)}
+ if(u>.55){/* earth fill dumped from the top end down */const fu=cl((u-.55)/.2,0,1),xe=a+(b-a)*fu;const S=[[a,gy+zA],[xe,gy+Z(xe)],[xe,gy+W+Z(xe)],[a,gy+W+zA]];poly(g,S,'#9a8a6c',O,.5);g.save();poly(g,S);g.clip();for(let i=0;i<40;i++){g.fillStyle=i%3?'rgba(60,48,30,.35)':'rgba(220,210,190,.3)';g.fillRect(Math.min(a,xe)+hs(i,7)*Math.abs(xe-a),gy+Z(a)+hs(i,8)*(W+dd),.9,.6)}g.restore();
+  if(fu<1)ell(g,xe,gy+Z(xe)+W*.5,4,2.4,'#8c7c5a',O,.4)/* dump heap at the fill front */}
+ if(u>.75){/* sleepers laid one by one from the top */const su=cl((u-.75)/.25,0,1),all=[];for(let x=a+(b>a?5:-5);(b>a)?x<b-2:x>b+2;x+=(b>a?11:-11))all.push(x);all.slice(0,Math.ceil(su*all.length)).forEach(x=>{const z=Z(x);rr(g,x-.9,gy+z+1.5,1.8,W-3,.9,'#8a6038',O,.3)});
+  /* log stock */for(let i=0;i<Math.max(0,all.length-Math.ceil(su*all.length));i++)rr(g,(a+b)/2+(r.dirW?16:-30),gy+W+zB+6-i*1.6,14,1.8,.9,'#8a6038',O,.3)}}
+function ladderBuild(g,l){const O=OL(),u=l.u,x=l.x,y=l.y,h=l.h;if(u>0)rr(g,x-3.1,y-h,1.3,h+1,.5,'#8a6038',O,.35);if(u>.2)rr(g,x+1.9,y-h,1.3,h+1,.5,'#8a6038',O,.35);else if(u>0)rr(g,x+4,y-2,h*.9,1.3,.5,'#8a6038',O,.35)/* second pole lying ready */;
+ const n=Math.floor((h-2)/3.2),k=u<.35?0:Math.ceil((u-.35)/.65*n);for(let i=0;i<k;i++){const q=y-1-i*3.2;ln(g,x-2.4,q,x+2.4,q,'#6e4824',.8);ln(g,x-2.6,q,x-2,q+.6,'#d8c08a',.4);ln(g,x+2,q,x+2.6,q+.6,'#d8c08a',.4)}
+ if(u<1)for(let i=0;i<Math.max(0,n-k);i+=2)rr(g,x+6,y+2-i*.6,5,1,.4,'#6e4824',O,.25)/* rung stock */}
+function mineBuild(g,P,M,t){const u=M.u;if(u>=1)return mineAdit(g,P,Object.assign({},M,{a:1}),t);const O=OL(),x=M.x,yb=M.y,ft=M.faceTop,H=Math.min(yb-ft-1.5,22),W=16;
+ const du=cl(u/.35,0,1),hh=H*du,ww=W*(.5+.5*du);/* dig: opening grows from the floor up, spoil + chips */const gr=g.createLinearGradient(0,yb-hh,0,yb);gr.addColorStop(0,'#2a2016');gr.addColorStop(1,'#0c0806');g.fillStyle=gr;g.fillRect(x-ww/2+1,yb-hh+1,ww-2,hh-1);
+ g.strokeStyle=P.deep;g.lineWidth=.6;g.strokeRect(x-ww/2+1,yb-hh+1,ww-2,hh-1);g.strokeStyle=P.deep;g.setLineDash([1,1]);g.strokeRect(x-W/2,yb-H,W,H);g.setLineDash([]);rubble(g,P,x-(x>150?20:-20),yb+7,6+du*5,4,Math.round(6+du*12),78);chips(g,P,x-10,yb,20,6,20,79);
+ if(u>.35){const pu=cl((u-.35)/.25,0,1);[-1,1].forEach((sx,i)=>{if(pu>i*.5){const ph=(H-1)*cl((pu-i*.5)/.5,0,1)*1+0;rr(g,x+sx*W/2-1.4-sx*.4,yb-ph,2.8,ph,.8,'#8a6038',O,.5)}})}
+ if(u>.6){const lu=cl((u-.6)/.2,0,1),ly=yb-H-1.5-(1-lu)*6;rr(g,x-W/2-3,ly,W+6,3.4,1,'#9a6a38',O,.6)}
+ if(u>.8){const nx=x+W/2+7,ny=yb-H*.62;rr(g,nx-2.6,ny-3.5,5.2,5.5,2.4,'#1c140c',O,.4);ell(g,nx,ny+1,1.8,.8,'#b0683a',O,.3);if(u>.9){const f=.85+.15*Math.sin(t/90);ell(g,nx,ny-.6,.9*f,1.5*f,'#ffcf5a')}}}
+function floorDetail(g,P,st,t){/* finished-terrace dressing, deterministic per cell + worn paths along the ramp chain */const U=st.units;const phaseDone=l=>U>=TL.phases.find(q=>q.type==='cut'&&q.lvl===l).t1;
+ st.ramps.forEach(r=>{if(r.u<1)return;const i=r.lvl,y=LF[i].y+21+ZL[i+1],nx=TL.ramps[i+1]?TL.ramps[i+1].a:(LF[i].x+LF[i].w/2);const x0=Math.min(r.b,nx),x1=Math.max(r.b,nx);g.fillStyle='rgba(225,214,188,.2)';g.fillRect(x0,y,x1-x0,3.5);for(let x=x0;x<x1;x+=2.4){g.fillStyle='rgba(70,56,36,.28)';g.fillRect(x,y+.6+hs(x,i)*2.2,.8,.5)}});
+ st.cells.forEach(q=>{if(q.level<1||q.level!==q.maxL||q.act||!phaseDone(q.level-1))return;const z=ZL[q.level],zs=ZL[Math.min(q.level,q.s)],vis=CH-(z-zs);if(vis<9)return;
+  const R=TL.ramps[q.level-1];if(R&&q.r<=LFC[q.level-1].r0+1&&q.x+CW>Math.min(R.a,R.b)-2&&q.x<Math.max(R.a,R.b)+2)return;if(st.mine&&q.level===4&&Math.abs(q.x+CW/2-st.mine.x)<20)return;
+  if(TL.ladders.some(l=>l.lvl===q.level-1&&Math.abs(l.x-(q.x+CW/2))<12&&q.r<=LFC[q.level-1].r0+1))return;
+  const h=hs(q.c*13+1,q.r*7+3),X=q.x+CW/2+(hs(q.c,q.r)-.5)*4,Y=q.y+z+7,sd=q.c*31+q.r;
+  if(h<.06){ell(g,X+1,Y+2.4,8,2,'rgba(0,0,0,.22)');block(g,X,Y+2,P,sd,.95)}else if(h<.11)rubble(g,P,X,Y,5,3.5,14,sd);else if(h<.14){/* tool cache: dropped flat on the floor beside a basket, each with its own contact shadow */ell(g,X,Y+3.2,8,1.8,'rgba(0,0,0,.18)');
+   const lay=(k,x,y,L)=>{/* lying flat: shaft on the floor, head flat beside it, contact shadow under both */ell(g,x,y+.8,L*.55,.7,'rgba(0,0,0,.35)');ln(g,x-L/2,y+.2,x+L/2,y-.2,'#5a3a1e',1.3);ln(g,x-L/2,y-.2,x+L/2,y-.6,'#a07040',.5);
+     if(k==='pick'){poly(g,[[x+L/2-1,y-1.6],[x+L/2+3.5,y-.6],[x+L/2+3.8,y+.5],[x+L/2-1,y+1.2],[x+L/2-2.6,y+1.6],[x+L/2-1.2,y-.2]],'#8c8a84',OL(),.35);ln(g,x+L/2-.8,y-1.2,x+L/2+3,y-.5,'rgba(255,255,255,.4)',.3)}
+     else{poly(g,[[x+L/2-1,y-1.5],[x+L/2+2.2,y-1.5],[x+L/2+2.2,y+1.3],[x+L/2-1,y+1.3]],'#9a9488',OL(),.35);g.fillStyle='rgba(20,16,10,.3)';g.fillRect(x+L/2-1,y+.4,3.2,.9)}};
+   lay('pick',X-4,Y+1.6,10);lay('maul',X-3.5,Y+4,8);basket(g,X+5.5,Y+3.4,P,false);
+   for(let k=0;k<3;k++){ell(g,X+2.8+k*1.7,Y+4.9,.9,.35,'rgba(0,0,0,.35)');g.fillStyle=k%2?'#8a7a62':'#6e6250';g.fillRect(X+2.2+k*1.7,Y+4.2,1.3,.8)}}
+  else if(h<.17){ell(g,X,Y+3.4,5,1.2,'rgba(0,0,0,.22)');jar(g,X-2,Y+2,.9);jar(g,X+2.5,Y+3.5,.8);ell(g,X+5,Y+4.5,1.6,.6,'rgba(70,80,90,.35)')}else if(h<.29){for(let k=0;k<26;k++){const u=hs(k,sd),px=q.x+1+u*(CW-2),py=q.y+z+1+Math.pow(hs(k,sd+1),2)*6;g.fillStyle=k%3?P.chip:P.dark;g.fillRect(px,py,.8,.55)}gravel(g,P,X,q.y+z+3,6,2,14,sd)}
+  else if(h<.34){for(let k=0;k<4;k++){g.fillStyle=k%2?'#a8603a':'#8a4a2c';g.fillRect(X-4+hs(k,sd)*8,Y-2+hs(k,sd+2)*5,1.4,.9)}}else if(h<.41){g.strokeStyle='rgba(30,26,20,.4)';g.lineWidth=.4;g.beginPath();let px=q.x+2,py=Y-2;g.moveTo(px,py);for(let k=0;k<4;k++){px+=3;py+=(hs(k,sd)-.5)*3;g.lineTo(px,py)}g.stroke()}
+  else if(q.level>=3&&h<.5){ell(g,X,Y+1,5,1.8,'rgba(70,82,92,.45)');ell(g,X-1.4,Y+.6,2,.5,'rgba(220,230,240,.35)')}else if(h<.6){ell(g,X,Y,5,2,'rgba('+P.dust+',.22)')}})}
+function pit(g,x,y,P,t,o){P=P||PAL.B;o=o||{};t=t||0;const st=o.state||pitState(o.progress!=null?o.progress:stageP(o.stage==null?5:o.stage));g.save();g.translate(x,y);
+ const cf=st.cellsCut/st.cellsTotal;if(st.rim){const R0=st.rim;ell(g,R0.x+R0.w/2,R0.y+R0.h/2,R0.w*.62+8,R0.h*.62+8,'rgba(150,135,105,.35)');
+  /* spoil heaps grow with the cut volume */spoilHeap(g,P,R0.x-14,R0.y+R0.h*.45,6+cf*22,4+cf*12,3+cf*16,Math.round(20+cf*90),4);spoilHeap(g,P,R0.x+R0.w*.3,R0.y-9,10+cf*30,3+cf*8,2+cf*12,Math.round(16+cf*80),5);if(cf>.4)spoilHeap(g,P,R0.x+R0.w*.72,R0.y-8,6+cf*12,3+cf*4,2+cf*7,Math.round(cf*50),6)}
+ st.cells.slice().sort((a,b)=>a.r-b.r).forEach(q=>{if(q.level>0||q.act)drawCell(g,P,q,t)});
+ floorDetail(g,P,st,t);
+ /* finished-terrace props */const done=i=>st.ramps.some(r=>r.lvl===i&&r.u>=1);if(done(1)){{const x=LF[1].x+LF[1].w*.2,y=LF[1].y+ZL[2]+LF[1].h*.55;ell(g,x,y+.8,6,.7,'rgba(0,0,0,.35)');ln(g,x-5,y+.3,x+5,y-.3,'#5a3a1e',1.3);ln(g,x-5,y-.1,x+5,y-.7,'#a07040',.5);poly(g,[[x+4,y-1.6],[x+8.5,y-.6],[x+8.8,y+.5],[x+4,y+1.2],[x+2.4,y+1.6],[x+3.8,y-.2]],'#8c8a84',OL(),.35)}jar(g,LF[0].x+LF[0].w*.9,LF[0].y+ZL[1]+LF[0].h-24,1);jar(g,LF[0].x+LF[0].w*.93,LF[0].y+ZL[1]+LF[0].h-21,.9)}
+ if(done(3)){g.save();g.translate(LF[3].x+LF[3].w*.3,LF[3].y+ZL[4]+16);g.rotate(.4);tool(g,'maul',16);g.restore()}
+ st.ramps.forEach(r=>rampBuild(g,P,r,t));st.ladders.forEach(l=>ladderBuild(g,l));
+ const r1=st.ramps.find(q=>q.lvl===1&&q.u>=1);if(r1){const F=LF[1],u=.42,xx=r1.a+(r1.b-r1.a)*u,z=r1.zA+(r1.zB-r1.zA)*u;g.save();g.translate(xx,F.y+10+z);g.rotate(Math.atan((r1.zB-r1.zA)/(r1.b-r1.a)));sledge(g,0,0,P,true,21);g.restore()}
+ if(st.mine)mineBuild(g,P,st.mine,t);
+ st.work.forEach((w,i)=>{if(/pick|wedge|scribe|dig|tend/.test(w.task))dust(g,P,w.x+2,w.y-12,t+i*700,i)});g.restore();return st}
+const PIT=Object.assign({FINAL:PIT_FINAL,D,DL,ZL,CW,CH,TIMELINE:TL},pitState(1));
+
+function rampJoint(g,x,y,W,dir,col){/* worn transition across a ramp end: trodden earth feathering onto the terrace floor */const gr=g.createLinearGradient(x-dir*7,0,x+dir*7,0);gr.addColorStop(0,'rgba('+col+',0)');gr.addColorStop(.5,'rgba('+col+',.55)');gr.addColorStop(1,'rgba('+col+',0)');g.fillStyle=gr;g.fillRect(Math.min(x-dir*7,x+dir*7),y+1,14,W-2);for(let i=0;i<6;i++){g.fillStyle='rgba(60,48,30,.35)';g.fillRect(x+(hs(i,x)-.5)*10,y+2+hs(i,y)*(W-4),.9,.6)}}
+function rampSeg(g,P,F,zA,zB,a,b,k){/* sloped earth+rubble ramp against the north face of a terrace: surface descends from zA (x=a) to zB (x=b).
+  South retaining wall of stacked rubble (triangle), sleepers, ruts, darker with depth, cast shadow. */
+ const O=OL(),W=20,gy=F.y,Z=x=>zA+(zB-zA)*((x-a)/(b-a)),dd=zB-zA,tone=t=>{const c=[[168,151,122],[150,134,104],[133,117,88],[118,102,74],[104,90,64]][Math.min(4,t)];return'rgb('+c+')'};
+ poly(g,[[a,gy+W+zB],[b,gy+W+zB],[b+(a-b)*.15,gy+W+zB+3],[a,gy+W+zB+Math.min(7,dd*.35)]],'rgba(10,8,6,.3)');
+ const wall=[[a,gy+W+zA],[b,gy+W+zB],[a,gy+W+zB]];poly(g,wall,P.dark,O,.6);
+ g.save();poly(g,wall);g.clip();gravel(g,P,(a+b)/2,gy+W+(zA+zB)/2,Math.abs(a-b)/2,dd/2,Math.round(Math.abs(a-b)*dd/5),k+5);for(let i=0;i<Math.abs(a-b)*dd/5;i++){const px=Math.min(a,b)+hs(i,k+90)*Math.abs(a-b),py=gy+W+zA+hs(i,k+91)*dd+2;stone(g,P,px,py,1.4+hs(i,k+93)*1.1,Math.floor(hs(i,k+94)*6),k*101+i)}
+ const gr=g.createLinearGradient(0,gy+W+zA,0,gy+W+zB);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.35)');g.fillStyle=gr;g.fillRect(Math.min(a,b),gy+W+zA,Math.abs(a-b),dd+1);g.restore();
+ const S=[[a,gy+zA],[b,gy+zB],[b,gy+W+zB],[a,gy+W+zA]];const sg=g.createLinearGradient(a,0,b,0);sg.addColorStop(0,tone(k));sg.addColorStop(1,tone(k+1));poly(g,S,null);g.fillStyle=sg;g.fill();g.strokeStyle=O;g.lineWidth=.6;g.stroke();
+ g.save();poly(g,S);g.clip();for(let i=0;i<Math.abs(a-b)*1.4;i++){const u=hs(i,k+70),x=a+(b-a)*u,y=gy+Z(x)+1+hs(i,k+71)*(W-2);g.fillStyle=i%3?'rgba(60,48,30,.35)':'rgba(220,210,190,.3)';g.fillRect(x,y,.9,.6)}
+ for(let x=a+(b>a?5:-5);(b>a)?x<b-2:x>b+2;x+=(b>a?11:-11)){const z=Z(x);rr(g,x-.9,gy+z+1.5,1.8,W-3,.9,'#8a6038',O,.3);ln(g,x-.3,gy+z+2,x-.3,gy+z+W-2,'rgba(255,220,170,.3)',.4)}
+ for(const o of[6,14])ln(g,a,gy+zA+o,b,gy+zB+o,'rgba(50,38,22,.45)',.6);ln(g,a,gy+zA+.4,b,gy+zB+.4,'rgba(255,255,255,.18)',.6);g.restore();
+ {const dw=b<a?-1:1;rampJoint(g,a,gy+zA,W,dw,'176,160,128');rampJoint(g,b,gy+zB,W,dw,'150,134,104')}for(let x=Math.min(a,b)+2;x<Math.max(a,b)-1;x+=2.8){const z=Z(x);stone(g,P,x,gy+W+z-.3,1.2+hs(x,k)*.5,(x|0)%3===0?4:0,(x*5+k)|0)}}
+function basket(g,x,y,P,full){const O=OL();ell(g,x+.8,y+.6,4,1.4,'rgba(0,0,0,.25)');poly(g,[[x-3.6,y-4.5],[x+3.6,y-4.5],[x+3,y],[x-3,y]],'#b08a4a',O,.45);for(let q=-3;q<=3;q+=1.5)ln(g,x+q*.9,y-4.4,x+q*.8,y-.2,'rgba(90,60,20,.45)',.35);ell(g,x,y-4.5,3.6,1.3,full?'#7e7666':'#6e5030',O,.4);if(full){gravel(g,P,x,y-4.8,3,1,10,x|0);for(let i=0;i<6;i++)stone(g,P,x-2.4+hs(i,x)*4.8,y-5.2-hs(i,y)*1.2,.7+hs(i,x+y)*.5,i,(x*3+i)|0)}}
+function mineAdit(g,P,M,t){/* timber-framed adit cut into the deepest face: posts + lintel + caps, dark receding interior, lamp niche, sledge track, baskets, spoil */
+ const O=OL(),x=M.x,yb=M.y,ft=M.faceTop,H=Math.min(yb-ft-1.5,22),W=16;g.save();g.globalAlpha=M.a;
+ /* rough-dressed surround + spoil fan on the floor */for(let i=0;i<14;i++){const a=PI+i/13*PI;ell(g,x+Math.cos(a)*(W*.72),yb-H*.5+Math.sin(a)*H*.62,1.6,1.1,i%2?P.front:P.dark,O,.25)}
+ ell(g,x,yb+5,15,4,'rgba(30,24,16,.35)');
+ /* dark interior with depth: gradient + receding inner frame */const gr=g.createLinearGradient(0,yb-H,0,yb);gr.addColorStop(0,'#1a130c');gr.addColorStop(1,'#0a0705');g.fillStyle=gr;g.fillRect(x-W/2+1,yb-H+2,W-2,H-2);
+ const rg=g.createRadialGradient(x,yb-H*.45,1,x,yb-H*.45,W*.6);rg.addColorStop(0,'rgba(0,0,0,.6)');rg.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=rg;g.fillRect(x-W/2,yb-H,W,H);
+ g.strokeStyle='rgba(120,80,40,.55)';g.lineWidth=.7;g.strokeRect(x-W*.28,yb-H*.72,W*.56,H*.62);g.strokeStyle='rgba(120,80,40,.3)';g.strokeRect(x-W*.16,yb-H*.55,W*.32,H*.4);
+ /* timber set: posts, lintel, cap blocks, wedges */for(const sx of[-1,1]){rr(g,x+sx*W/2-1.4-sx*.4,yb-H+1,2.8,H-1,.8,'#8a6038',O,.5);ln(g,x+sx*W/2-.6,yb-H+2,x+sx*W/2-.6,yb-1,'rgba(255,220,170,.3)',.5);rr(g,x+sx*W/2-2,yb-1.5,4,2,.6,'#6e4824',O,.4)}
+ rr(g,x-W/2-3,yb-H-1.5,W+6,3.4,1,'#9a6a38',O,.6);ln(g,x-W/2-2,yb-H-.9,x+W/2+2,yb-H-.9,'rgba(255,220,170,.35)',.5);for(const sx of[-1,1])rr(g,x+sx*(W/2-1)-1.5,yb-H+1.8,3,2,.4,'#7a5232',O,.35);
+ /* lamp niche + flickering oil lamp */const nx=x+W/2+7,ny=yb-H*.62;rr(g,nx-2.6,ny-3.5,5.2,5.5,2.4,'#1c140c',O,.4);ell(g,nx,ny+1,1.8,.8,'#b0683a',O,.3);const f=.85+.15*Math.sin(t/90)+.08*Math.sin(t/37);ell(g,nx,ny-.6,.9*f,1.5*f,'#ffcf5a');ell(g,nx,ny-.3,.5,.8,'#fff2b0');
+ const lg=g.createRadialGradient(nx,ny,0,nx,ny,9);lg.addColorStop(0,'rgba(255,190,90,.28)');lg.addColorStop(1,'rgba(255,190,90,0)');g.fillStyle=lg;g.fillRect(nx-9,ny-9,18,18);
+ /* rail-less sledge track: two worn ruts out of the mouth across the floor */for(const o of[-3.5,3.5]){g.strokeStyle='rgba(30,22,12,.5)';g.lineWidth=.8;g.beginPath();g.moveTo(x+o,yb);g.quadraticCurveTo(x+o,yb+10,x+o-(M.x>150?18:-18),yb+14);g.stroke()}
+ /* baskets of ore/spoil + a small hand-sledge with a basket */basket(g,x-W/2-6,yb+6,P,true);basket(g,x-W/2-1,yb+9,P,false);
+ g.save();g.translate(x+W/2+5,yb+10);ell(g,0,1.2,7,1.8,'rgba(0,0,0,.22)');for(const dy of[-1.6,1.6])rr(g,-7,dy-.6,14,1.3,.6,'#7a5232',O,.35);rr(g,-5,-2.2,10,4.4,.8,'#8a6038',O,.35);basket(g,0,0,P,true);g.restore();
+ rubble(g,P,x-(M.x>150?24:-24),yb+8,8,5,12,77);g.restore()}
+/* ---------------- STONE YARD ---------------- */
+const YARD={cap:15,rows:[5,4,3,2,1],slots:[]};YARD.rows.forEach((n,r)=>{for(let c=0;c<n;c++)YARD.slots.push({x:(c-(n-1)/2)*14.5+(r%2?2:0),y:-r*7.5-r*1.2,z:r})});
+function yard(g,x,y,P,fill){P=P||PAL.B;const O=OL();ell(g,x,y+2,52,18,'#8a7a58');ell(g,x-12,y+8,26,6,'rgba(255,255,255,.07)');for(const sx of[-30,30])rr(g,x+sx-4,y-1,8,3,1,'#7a5232',O,.5);rr(g,x-38,y+1,76,2.4,1,'#8a6038',O,.5);
+ const n=Math.round((fill||0)*YARD.cap);for(let k=0;k<n;k++){const s=YARD.slots[k];block(g,x+s.x,y+s.y,P,k+3,1)}if(n>0)block(g,x+42,y+12,P,40,.9);chips(g,P,x-40,y+4,80,12,24,71)}
+/* ---------------- HOUSES (procedural variants + placer) ---------------- */
+const WALL_H=16;
+function houseVariant(seed,grow){grow=grow||0;const R=rng(seed*97+13+grow*1009);
+ /* axis-aligned only: 'H' = long side E-W, 'V' = long side N-S. Front (door) wall always faces S so the 3/4 wall is never skewed. */
+ const orient=R()<.5?'H':'V';const w=(orient==='H'?Math.round(72+R()*8)*2:Math.round(54+R()*4)*2)+grow*8,h=(orient==='H'?Math.round(52+R()*4)*2:Math.round(74+R()*8)*2)+grow*8;
+ const v={seed,orient,w,h,annex:R()<.45?{side:R()<.5?'W':'E',w:Math.round(26+R()*8),h:Math.round(28+R()*8)}:null,shade:R()<.6,hatch:R()<.7,roofMats:R()<.5,roofJars:Math.floor(R()*3),yardWall:R()<.6,yardSide:R()<.5?-1:1,clutter:Math.floor(3+R()*4),door:{x:Math.round(w*(.38+R()*.24)),w:12},roofTone:(R()-.5)*14};
+ /* interior: 9 axis-aligned beds (13x24) along the walls with >= 4px walking gaps, a clear corridor door -> hearth, hearth in the open centre */
+ const beds=[],hearth={x:Math.round(w*(.46+R()*.08)),y:Math.round(h*(.5+R()*.06))},inner={x:6,y:6,w:w-12,h:h-12};const corr={x:v.door.x-12,y:hearth.y+8,w:24,h:h-hearth.y};
+ const bx=b=>{const vert=Math.abs(Math.sin(b.rot))<.5;const hw=vert?6.5:12,hh=vert?12:6.5;return{x:b.x-hw,y:b.y-hh,w:hw*2,h:hh*2}};const ov=(p,q,m)=>p.x<q.x+q.w+m&&q.x<p.x+p.w+m&&p.y<q.y+q.h+m&&q.y<p.y+p.h+m;
+ const ok=b=>{const B=bx(b);if(B.x<8||B.y<8||B.x+B.w>w-8||B.y+B.h>h-8)return false;if(ov(B,{x:hearth.x-11,y:hearth.y-9,w:22,h:18},5))return false;if(ov(B,corr,1))return false;return beds.every(o=>!ov(B,bx(o),4))};
+ const cand=[],J=()=>Math.round((R()-.5)*2)*.5;let k=0;
+ for(let x=8+6.5;x<=w-8-6.5;x+=19)cand.push({x:x+J(),y:8+12,rot:0,p:R()});
+ for(let y=8+24+6+6.5;y<=h-8-6.5;y+=18){cand.push({x:8+12,y:y+J(),rot:-PI/2,p:R()+.1});cand.push({x:w-8-12,y:y+J(),rot:PI/2,p:R()+.1})}
+ for(let x=8+6.5;x<=w-8-6.5;x+=19)cand.push({x:x+J(),y:h-8-12,rot:PI,p:R()+.6});
+ cand.sort((p,q)=>p.p-q.p);for(const c of cand){if(beds.length>=9)break;if(ok(c))beds.push(c)}
+ beds.forEach((b,i)=>beds[i]={x:b.x,y:b.y,rot:+b.rot.toFixed(4),a:+(b.rot-PI/2).toFixed(4)});
+ v.beds=beds;v.hearth=hearth;v.corridor=corr;v.items=[];const taken=beds.map(bx);
+ for(let i=0;i<40&&v.items.length<9;i++){const side=Math.floor(R()*4),it={k:['jar','basket','bundle','quern','jar','pot','mat','loom','jar'][Math.floor(R()*9)],r:0};
+  it.x=side===1?11:side===2?w-11:12+R()*(w-24);it.y=side===0?11:side===3?h-11:12+R()*(h-24);if(side<1||side>2)it.x=12+R()*(w-24);if(side===1||side===2)it.y=12+R()*(h-24);
+  const B={x:it.x-5,y:it.y-5,w:10,h:10};if(it.k==='mat'){it.x=hearth.x+(R()<.5?-1:1)*20;it.y=hearth.y-2;B.x=it.x-6;B.y=it.y-4;B.w=12;B.h=8}
+  if(taken.some(t=>ov(B,t,2))||ov(B,corr,0)||ov(B,{x:hearth.x-8,y:hearth.y-7,w:16,h:14},2))continue;taken.push(B);v.items.push(it)}
+ v.yardItems=[];for(let i=0;i<v.clutter;i++)v.yardItems.push({k:['wood','jar','quern','block','basket','jar','pick'][Math.floor(R()*7)],u:R(),vv:R()});if(v.beds.length<9&&grow<6)return houseVariant(seed,grow+1);return v}
+const RUB=(g,P,X,Y,w,h,sd)=>{g.save();g.beginPath();g.rect(X-.5,Y-.5,w+1,h+1);g.clip();g.fillStyle='rgba(60,54,46,.5)';g.fillRect(X,Y,w,h);gravel(g,P,X+w/2,Y+h/2,w/2,h/2,Math.round(w*h/6),sd+3);const n=Math.round(w*h/7);for(let i=0;i<n;i++)stone(g,P,X+hs(i,sd)*w,Y+hs(i,sd+.5)*h,1.1+hs(i,sd+.9)*.8,Math.floor(hs(i,sd+.2)*6),sd*7+i);g.restore()};
+function bedDraw(g,b,col,sp){g.save();g.translate(b.x,b.y);g.rotate(b.rot);rr(g,-5.5,-10.5,13,24,2.5,'rgba(0,0,0,.2)');rr(g,-6.5,-12,13,24,2.5,col,OL(),.6);rr(g,-6.5,-12,13,24,2.5,null,'rgba(255,255,255,.15)',.4);ell(g,0,-8,4.2,2.3,'#e8dcc0',OL(),.35);
+ if(sp){g.drawImage(sp,-8,-14,16,22);rr(g,-5.8,-2,11.6,12.5,2.5,'#8a6a4a','rgba(40,20,10,.6)',.5)}else{rr(g,-5.6,0,11.2,10.5,2.5,'#a07a50','rgba(40,20,10,.45)',.5)}g.restore()}
+function item(g,it,P){const O=OL();g.save();g.translate(it.x,it.y);if(it.k==='jar'||it.k==='pot'){ell(g,0,0,it.k==='pot'?3:2.6,it.k==='pot'?2.2:2.6,it.k==='pot'?'#8a5a34':'#b0683a',O,.45);ell(g,0,0,1.2,1.1,'#3a2010')}else if(it.k==='basket'){ell(g,0,0,3.4,3,'#c8a060',O,.45);ell(g,0,0,2.2,1.9,'#a07a40')}else if(it.k==='bundle'){g.rotate(it.r);rr(g,-4,-2.5,8,5,2,'#8a7a5a',O,.45);ln(g,-1,-2.5,-1,2.5,'#5a4a30',.5)}else if(it.k==='quern'){ell(g,0,0,4,2.6,P.front,O,.45);ell(g,0,-.4,2.2,1.2,P.top,O,.35)}else if(it.k==='mat'){g.rotate(it.r);rr(g,-6,-4,12,8,1,'#c8b078',O,.4);for(let q=-5;q<6;q+=2)ln(g,q,-4,q,4,'rgba(120,90,40,.4)',.4)}else if(it.k==='loom'){g.rotate(it.r);rr(g,-5,-1,10,2,.6,'#8a6038',O,.4);for(let q=-4;q<5;q+=1.4)ln(g,q,1,q,5,'rgba(230,220,200,.7)',.3)}g.restore()}
+const SLEEP=[{sex:'m',sk:'#d09468',hair:'#3a2414',hs:'long',beard:'full'},{sex:'f',sk:'#e0a878',hair:'#24140c',hs:'braids'},{sex:'m',sk:'#c08458',hair:'#4a2c18',hs:'short',beard:'short'},{sex:'f',sk:'#d8a070',hair:'#6a3a20',hs:'long'},{sex:'m',sk:'#e8b890',hair:'#24140c',hs:'ponytail'},{sex:'f',sk:'#b8784e',hair:'#1a1010',hs:'bun'},{sex:'f',sk:'#d09468',hair:'#3a2414',hs:'braids'},{sex:'m',sk:'#e0a878',hair:'#4a2c18',hs:'short'},{sex:'m',sk:'#c08458',hair:'#24140c',hs:'long'}];
+const SPC={};const sleeper=i=>{if(typeof pawnSprB!=='function')return null;return SPC[i]||(SPC[i]=pawnSprB(Object.assign({cls:'laborer',g:'tunic',t:['#8e2a1c','#6a5a3a','#a07a3a','#5a6a7a','#c8b490'][i%5]},SLEEP[i%9]),1,4))};
+/* draw a house in its local frame (origin top-left of the ground plan). Caller rotates. */
+function houseLocal(g,v,P,o){o=o||{};const O=OL(),w=v.w,h=v.h,t=o.t||0,S={wall:'#9a948a',wallTop:'#b6b0a2',roof:'#7a6a4e',roofD:'#5a4a34',floor:'#8a7a5c'};const rt=v.roofTone;const rc=c=>{const n=parseInt(c.slice(1),16);const f=x=>Math.max(0,Math.min(255,x+rt|0));return'rgb('+f(n>>16)+','+f(n>>8&255)+','+f(n&255)+')'};
+ /* small walled yard with clutter (in front, to one side of the door) */const yx=v.yardSide<0?-6:w*.45,yw=w*.6,yy=h+WALL_H-2,yh=26;
+ ell(g,w/2+4,h+WALL_H+2,w*.62,10,'rgba(120,100,70,.3)');if(v.yardWall){g.save();for(const seg of[[yx,yy+yh,yw,3.5],[yx+(v.yardSide<0?0:yw-3.5),yy,3.5,yh]])RUB(g,P,seg[0],seg[1],seg[2],seg[3],seg[0]|0);g.restore()}
+ v.yardItems.forEach((it,i)=>{const ix=yx+6+it.u*(yw-12),iy=yy+6+it.vv*(yh-10);if(Math.abs(ix-v.door.x)<9)return;g.save();if(it.k==='wood'){for(let q=0;q<4;q++)rr(g,ix-6+q*.6,iy-q*1.6,12,2,1,q%2?'#8a6038':'#7a5232',O,.35)}else if(it.k==='jar')jar(g,ix,iy,.9);else if(it.k==='quern'){ell(g,ix,iy,4.5,2.6,P.front,O,.45);ell(g,ix,iy-1,3,1.5,P.top,O,.4)}else if(it.k==='block')block(g,ix,iy,P,i+v.seed,.9);else if(it.k==='basket'){ell(g,ix,iy,3.4,2.4,'#c8a060',O,.45)}else if(it.k==='pick'){g.translate(ix,iy);g.rotate(-.2);tool(g,'pick',18)}g.restore()});
+ const an=v.annex;const box=(x,y,bw,bh,wh,roof)=>{/* drop shadow, front wall (rubble), roof */g.fillStyle='rgba(20,14,8,.28)';g.fillRect(x+5,y+6,bw,bh+wh);rr(g,x,y+bh,bw,wh,1,S.wall,O,.7);RUB(g,P,x+.5,y+bh+.5,bw-1,wh-1,(x+y)|0);g.fillStyle='rgba(0,0,0,.18)';g.fillRect(x,y+bh+wh-3,bw,3);
+  if(roof){rr(g,x-1.5,y-1.5,bw+3,bh+3,2,rc(S.roofD),O,.8);rr(g,x+1,y+1,bw-2,bh-2,1.5,rc(S.roof));g.fillStyle='rgba(0,0,0,.08)';for(let i=0;i<bw*bh/40;i++)g.fillRect(x+2+hs(i,x)*(bw-4),y+2+hs(i,y)*(bh-4),2,.8);
+   for(let q=x+5;q<x+bw-3;q+=7)rr(g,q-1.2,y+bh,2.4,2.4,.8,'#6e4824',O,.35)/* beam ends */;/* earth roof life: parapet stones, reed-patch repairs, mud cracks, drain spout */for(let q=x+1;q<x+bw-1;q+=2.6+hs(q,y)*1.4){ell(g,q,y+.4,1.3,.9,hs(q,1)<.5?P.front:P.top,O,.25);ell(g,q,y+bh-.6,1.2,.8,hs(q,2)<.5?P.front:P.top,O,.25)}
+   for(let q=y+3;q<y+bh-2;q+=2.8){ell(g,x+.6,q,.9,1.2,P.front,O,.25);ell(g,x+bw-.6,q,.9,1.2,P.top,O,.25)}
+   const pr=rng((x*13+y*7+bw)|0);for(let i=0;i<2;i++){const px=x+6+pr()*(bw-26),py=y+6+pr()*(bh-20),pw=10+pr()*12,ph=6+pr()*6;rr(g,px,py,pw,ph,2,i?'rgba(200,176,104,.55)':'rgba(60,44,28,.25)')}
+   g.strokeStyle='rgba(40,28,16,.35)';g.lineWidth=.4;for(let i=0;i<5;i++){let px=x+5+pr()*(bw-10),py=y+5+pr()*(bh-10);g.beginPath();g.moveTo(px,py);for(let k=0;k<3;k++){px+=(pr()-.5)*7;py+=(pr()-.5)*5;g.lineTo(px,py)}g.stroke()}
+   rr(g,x+bw*.7,y+bh-1,2,4,.6,'#8a6038',O,.35);ln(g,x,y+bh,x+bw,y+bh,'rgba(255,255,255,.2)',.6)}};
+ if(an){const ax=an.side==='W'?-an.w+2:w-2,ay=h-an.h;if(o.interior){rr(g,ax,ay,an.w,an.h,1,S.wallTop,O,.6);RUB(g,P,ax,ay,an.w,an.h,7);rr(g,ax+4,ay+4,an.w-8,an.h-8,1,S.floor);item(g,{k:'jar',x:ax+9,y:ay+9},P);item(g,{k:'jar',x:ax+14,y:ay+12},P);item(g,{k:'basket',x:ax+an.w-9,y:ay+an.h-9},P)}else box(ax,ay,an.w,an.h,WALL_H-3,true)}
+ if(o.interior){/* cut-away: walls at waist height (thickness 5), floor, 9 beds, hearth, belongings */g.fillStyle='rgba(20,14,8,.28)';g.fillRect(5,6,w,h);rr(g,0,0,w,h,2,S.wallTop,O,.8);RUB(g,P,0,0,w,h,v.seed);rr(g,5,5,w-10,h-10,1.5,S.floor);g.fillStyle='rgba(0,0,0,.07)';for(let i=0;i<60;i++)g.fillRect(6+hs(i,81)*(w-12),6+hs(i,82)*(h-12),2,.7);
+  g.fillStyle='rgba(0,0,0,.18)';g.fillRect(5,5,w-10,2.5);g.fillRect(5,5,2.5,h-10);/* wall shade */rr(g,v.door.x-v.door.w/2,h-5.5,v.door.w,6,1,'#7a5a3a',O,.5);
+  v.items.filter(i=>i.k==='mat').forEach(i=>item(g,i,P));const BC=['#c8b090','#9a6a4a','#b85a3a','#6a7a9a','#d8c8a0','#7a5a8a','#a89060','#8a5a4a','#c0a888'];const ns=o.sleepers==null?9:o.sleepers;
+  v.beds.forEach((b,i)=>bedDraw(g,b,BC[(i+v.seed)%9],i<ns?sleeper((i+v.seed)%9):null));v.items.filter(i=>i.k!=='mat').forEach(i=>item(g,i,P));
+  const H=v.hearth;for(let i=0;i<8;i++){const a=i/8*TAU;ell(g,H.x+Math.cos(a)*4.6,H.y+Math.sin(a)*3.4,1.5,1.1,P.front,O,.3)}ell(g,H.x,H.y,3.2,2.3,'#3a2414');const f=.8+.2*Math.sin(t/180);ell(g,H.x,H.y-.5,2.2*f,1.6*f,'#e88a2a');ell(g,H.x,H.y-.8,1*f,.8*f,'#ffd060');
+  /* tool corner: pick + maul leaning */g.save();g.translate(w-8,12);g.rotate(PI/2+.25);tool(g,'pick',16);g.restore();g.save();g.translate(w-12,14);g.rotate(PI/2-.1);tool(g,'maul',14);g.restore()}
+ else{box(0,0,w,h,WALL_H,true);/* door */rr(g,v.door.x-v.door.w/2,h+WALL_H-15,v.door.w,15,1.5,'#2e2218',O,.6);rr(g,v.door.x-v.door.w/2-1.5,h+WALL_H-16.5,v.door.w+3,2.2,.8,'#6e4824',O,.4);
+  /* roof additions */if(v.hatch){rr(g,w*.25,h*.3,9,7,1,'#3a2a1c',O,.5);ladder(g,w*.25+12,h*.3+8,9)}if(v.roofMats){rr(g,w*.55,h*.15,16,11,1,'#c8b078',O,.4);for(let q=0;q<5;q++)ln(g,w*.55+2+q*3,h*.15,w*.55+2+q*3,h*.15+11,'rgba(120,90,40,.4)',.4)}for(let i=0;i<v.roofJars;i++)jar(g,w*.8+i*5,h*.35+i*2,.8);
+  /* chimney smoke through the roof vent */const vx=v.hearth.x,vy=v.hearth.y-h*.25;ell(g,vx,vy,2.2,1.4,'#2a1d12');for(let k=0;k<3;k++){const u=((t/2400)+k/3)%1;g.fillStyle='rgba(220,215,205,'+(.45*(1-u))+')';g.beginPath();g.arc(vx+u*5,vy-2-u*14,1.4+u*3,0,TAU);g.fill()}
+  if(v.shade){/* reed shade on posts over the door side */const sx=Math.max(2,v.door.x-16),sw=Math.min(30,w-sx-2);for(const px of[sx+1,sx+sw-1])rr(g,px-1,h+WALL_H-12,2,12,.6,'#7a5232',O,.4);rr(g,sx-1,h+WALL_H-17,sw+2,8,1.5,'#c8b068',O,.55);for(let q=sx+1;q<sx+sw;q+=2)ln(g,q,h+WALL_H-17,q,h+WALL_H-9,'rgba(120,90,30,.5)',.4)}}}
+/* placed house: {x,y,rot,v,...}; house anchored at its ground-plan centre */
+function house(g,H,P,o){o=o||{};P=P||PAL.B;const rise=o.rise==null?1:o.rise;g.save();g.translate(H.x,H.y);g.rotate(H.rot);g.translate(-H.v.w/2,-H.v.h/2);
+ if(rise<1){/* build-in: foundation ring, rising walls, fade */const u=Math.max(0,Math.min(1,rise));g.globalAlpha=Math.min(1,u*1.6);rr(g,-3,-3,H.v.w+6,H.v.h+WALL_H+6,3,'rgba(120,100,70,.35)');g.save();g.beginPath();g.rect(-40,H.v.h+WALL_H-(H.v.h+WALL_H+40)*u,H.v.w+80,H.v.h+WALL_H+80);g.clip();houseLocal(g,H.v,P,Object.assign({},o,{interior:u<.7,sleepers:0}));g.restore();
+  if(u<.95){rubble(g,P,H.v.w+8,H.v.h+WALL_H+4,10,6,14,H.v.seed);block(g,-8,H.v.h+WALL_H+6,P,H.v.seed,1)}g.globalAlpha=1}else houseLocal(g,H.v,P,o);g.restore()}
+function houseToWorld(H,p){const c=Math.cos(H.rot),s=Math.sin(H.rot),lx=p.x-H.v.w/2,ly=p.y-H.v.h/2;return{x:H.x+lx*c-ly*s,y:H.y+lx*s+ly*c}}
+/* PLACER. site = {bounds:{x,y,w,h}, avoid:[{x,y,w,h}] (pit, yard, outcrops...), paths:[{x1,y1,x2,y2,w}], centre:{x,y}}.
+   House i depends only on seed + houses 0..i-1 -> stable as N grows. Candidates sample a jittered ring around the pit; score favours the pit,
+   loose clustering (nearest neighbour 22..70 px), doors facing the pit, and a seeded random preference (irregularity). */
+function placeQuarryHouses(site,n,seed){const out=[];const c=site.centre,b=site.bounds;
+ const boxOf=(x,y,v,rot)=>{const ex=v.w/2+(v.annex?v.annex.w:0)+4,ey=(v.h+WALL_H+28)/2;const cs=Math.abs(Math.cos(rot)),sn=Math.abs(Math.sin(rot));const hw=ex*cs+ey*sn,hh=ex*sn+ey*cs;return{x:x-hw,y:y-hh+8,w:hw*2,h:hh*2}};
+ const ov=(a,q,m)=>a.x<q.x+q.w+m&&q.x<a.x+a.w+m&&a.y<q.y+q.h+m&&q.y<a.y+a.h+m;
+ const segD=(px,py,s)=>{const dx=s.x2-s.x1,dy=s.y2-s.y1,l=dx*dx+dy*dy;let u=l?((px-s.x1)*dx+(py-s.y1)*dy)/l:0;u=Math.max(0,Math.min(1,u));return Math.hypot(px-s.x1-u*dx,py-s.y1-u*dy)};
+ for(let i=0;i<n;i++){const R=rng(seed*7919+i*104729+1);const v=houseVariant(seed*31+i*17+1);let best=null;
+  for(let k=0;k<120;k++){const a=R()*TAU,r=site.ring[0]+R()*(site.ring[1]-site.ring[0]);const x=c.x+Math.cos(a)*r*1.25,y=c.y+Math.sin(a)*r;
+   /* door faces the pit: base rot so the front (+y) points toward the pit is only allowed within +-0.35 rad of 'front down' to keep 3/4 view sane */const rot=0;const x0=Math.round((x-v.w/2)/16)*16+v.w/2,y0=Math.round((y-v.h/2)/16)*16+v.h/2;const bx=boxOf(x0,y0,v,0);
+   if(bx.x<b.x||bx.y<b.y||bx.x+bx.w>b.x+b.w||bx.y+bx.h>b.y+b.h)continue;if(site.avoid.some(q=>ov(bx,q,40)))continue;if(out.some(o=>o&&ov(bx,o.box,64+R()*24)))continue;
+   if(site.paths.some(s=>segD(x0,y0,s)<s.w/2+Math.max(bx.w,bx.h)/2*.8))continue;
+   const dp=Math.hypot(x0-c.x,y0-c.y);let nn=1e9;out.forEach(o=>o&&(nn=Math.min(nn,Math.hypot(o.x-x,o.y-y))));const nnTerm=out.length?-Math.abs(Math.min(nn,200)-110)*.5:0;
+   const sc=-dp*.6+nnTerm+(y>c.y?6:0)+R()*40;if(!best||sc>best.sc)best={x:x0,y:y0,rot:0,v,box:bx,sc,i}}
+  if(best){delete best.sc;out.push(best)}else out.push(null)}return out}
+/* ---------------- PAWN ANIMS (pose-table format; PWN.swing evaluator) ---------------- */
+const sw=(c,K)=>{const f=(typeof PWN!=='undefined'&&PWN.swing)||(typeof swing==='function'?swing:null);return f?f(c,K):K[0][1]};
+/* cutting: 0-.5 three pick blows (raise high, slow drop), .5-1 kneel-ish with maul driving wedges, three blows. 6000 ms. */
+const POSE_CUT={period:6000,hits:[.155,.32,.485,.655,.815,.975],chipLen:.07,
+ swing:[[0,.3],[.09,-1.9,'io'],[.155,.55,'in'],[.2,.4,'out'],[.25,-1.9,'io'],[.32,.55,'in'],[.36,.4,'out'],[.415,-1.9,'io'],[.485,.55,'in'],[.5,.3,'io'],[.58,-1.5,'io'],[.655,.35,'in'],[.7,.2,'out'],[.75,-1.5,'io'],[.815,.35,'in'],[.86,.2,'out'],[.91,-1.5,'io'],[.975,.35,'in'],[1,.3]],
+ squash:[[0,1],[.09,1.04,'io'],[.155,.92,'in'],[.22,1,'out'],[.25,1.04,'io'],[.32,.92,'in'],[.38,1,'out'],[.415,1.04,'io'],[.485,.92,'in'],[.5,.94],[.58,.95,'io'],[.655,.88,'in'],[.72,.94,'out'],[.75,.95,'io'],[.815,.88,'in'],[.88,.94,'out'],[.91,.95,'io'],[.975,.88,'in'],[1,1]],
+ lean:[[0,0],[.09,-1.2,'io'],[.155,1.8,'in'],[.22,.4,'out'],[.25,-1.2,'io'],[.32,1.8,'in'],[.38,.4,'out'],[.415,-1.2,'io'],[.485,1.8,'in'],[.5,1.2],[.58,.2,'io'],[.655,2,'in'],[.72,1,'out'],[.75,.2,'io'],[.815,2,'in'],[.88,1,'out'],[.91,.2,'io'],[.975,2,'in'],[1,0]]};
+const POSE_CARRY={period:1500,bob:1.6,lean:1.6,squash:.96,sway:.6};
+const LK={sex:'m',sk:'#d09468',hair:'#3a2414',hs:'short',beard:'full',cls:'laborer',g:'tunic',t:'#9a6a3a',t2:'#6a4226',hat:'band',hc:'#c84a2c',sash:'#5a3a20'};
+const PC=new Map();const pSpr=(o,d,r)=>{const k=JSON.stringify(o)+d+'|'+r;let s=PC.get(k);if(!s){s=pawnSprB(o,d,r);PC.set(k,s)}return s};
+const K=()=>(typeof PSC!=='undefined'?PSC:.72);
+function body(g,X,Y,d,o,res,sq,lean,bob){const k=K(),fl=d===2?-1:1;g.save();g.translate(X,Y);g.scale(k,k);g.drawImage(shadowSpr(),-7,-2,14,6);if(d===0||d===2)g.rotate(fl*lean*.05);g.scale(1,sq);g.drawImage(pSpr(o,d,res),-12+(d===0||d===2?fl*lean*.3:0),-29-bob,24,32);g.restore()}
+function burst(g,x,y,u,P,sd){for(let i=0;i<8;i++){const a=-PI*(.1+hs(i,sd)*.8),v=3+hs(i,sd+1)*6;g.fillStyle=i%2?P.chip:P.dark;g.fillRect(x+Math.cos(a)*v*u*1.3,y+Math.sin(a)*v*u+u*u*7,.9,.6)}g.fillStyle='rgba('+P.dust+','+(.6*(1-u))+')';g.beginPath();g.arc(x+u*2,y-u*3,1+u*4,0,TAU);g.fill()}
+/* the hand point is the game's: hx = X + (d1 ? 5 : d3 ? -5 : fl*4), hy = Y - 10 (world px); tool via pawnTool transform, size 18 (pick) / 16 (maul) */
+function toolXf(X,Y,d,sq,lean){const fl=d===2?-1:1,side=d===0||d===2;const hx=X+(d===1?5:d===3?-5:fl*4)+(side?fl*lean*.4:0),hy=Y-10*sq+(1-sq)*2;const ang=d===1?PI/2+.6:d===3?-PI/2-.4:d===2?PI:0;return{hx,hy,ang,fl,side}}
+function cutter(g,X,Y,P,d,o){o=o||{};P=P||PAL.B;const C=POSE_CUT;let cyc=((o.now||0)/C.period+(o.idx||0)*.37)%1;if(o.tool==='pick')cyc=cyc*.5;else if(o.tool==='maul')cyc=.5+cyc*.5;const _c=0,res=o.res||6;const k=cyc<.5?'pick':'maul',sz=k==='pick'?18:16;
+ const sq=sw(cyc,C.squash),lean=sw(cyc,C.lean),s=sw(cyc,C.swing);const T=toolXf(X,Y,d,sq,lean);
+ /* swing sign: side views rotate up (-) away from the facing; S/N views shorten the arc */const a=T.ang+(T.side?T.fl*s:s*.55*(d===1?1:-1));
+ const drawT=()=>{g.save();g.translate(T.hx+Math.cos(T.ang)*4,T.hy+Math.sin(T.ang)*3);g.rotate(a);tool(g,k,sz);if(k==='maul'&&cyc>=.5){/* nothing else in hand: the wedge sits in the rock */}g.restore()};
+ if(d===3)drawT();body(g,X,Y,d,o.look||LK,res,sq,T.side?lean:0,0);if(d!==3)drawT();
+ /* strike point = the tool head at the moment of the hit (computed from the same transform -> chips come from the real contact) */
+ for(const h of C.hits){const u=(cyc-h)/C.chipLen;if(u>=0&&u<1){const hk=h<.5?'pick':'maul',hs2=sw(h,C.swing),ha=T.ang+(T.side?T.fl*hs2:hs2*.55*(d===1?1:-1)),L=(hk==='pick'?18*.62*.97:16*.62*.74);const ox=T.hx+Math.cos(T.ang)*4+Math.cos(ha)*L,oy=T.hy+Math.sin(T.ang)*3+Math.sin(ha)*L;burst(g,ox,oy,u,P,Math.round(h*100))}}
+ return{cyc,tool:k}}
+function carrier(g,X,Y,P,d,o){o=o||{};P=P||PAL.B;const C=POSE_CARRY,cyc=((o.now||0)/C.period+(o.idx||0)*.37)%1,mv=o.moving!==false,res=o.res||6,fl=d===2?-1:1,side=d===0||d===2;
+ const bob=mv?Math.abs(Math.sin(cyc*TAU))*C.bob:0,sway=mv?Math.sin(cyc*TAU)*C.sway:0,lean=mv?C.lean:.6,sq=mv?C.squash+.04*Math.abs(Math.cos(cyc*TAU)):.97;
+ /* block clasped against the chest at the hand point; world-scale block s .5 */const hx=X+(d===1?0:d===3?0:fl*4)+sway*.3,hy=Y-9-bob*.8;const blk=()=>{if(o.item==='basket')basket(g,hx,hy+3,P,true);else if(o.item==='log'){rr(g,hx-9,hy-1,18,2.6,1.2,'#8a6038',OL(),.45);ell(g,hx+9,hy+.3,1,1.3,'#c8a070',OL(),.3)}else if(o.item==='jar')jar(g,hx,hy+5,.75);else if(o.item==='earth')basket(g,hx,hy+3,{front:'#8c7c5a',top:'#a08c68',dark:'#6e5e40'},true);else if(o.item!=='none')block(g,hx,hy+2.5,P,o.seed||9,.55)};
+ if(d===3)blk();g.save();g.translate(sway*.3,0);body(g,X,Y,d,o.look||LK,res,sq,side?lean:0,bob);g.restore();if(d!==3)blk()}
+
+/* worker for a work slot (task from pitState().work). Armless body motion; the item sits at the game hand point. */
+function worker(g,X,Y,P,w,now,i){const o={now,idx:i||0,look:w.look};switch(w.task){
+ case'scribe':case'pick':case'dig':case'tend':return cutter(g,X,Y,P,w.dir,Object.assign(o,{tool:'pick'}));
+ case'wedge':case'stake':case'wall':case'fill':case'sleeper':case'tamp':return cutter(g,X,Y,P,w.dir,Object.assign(o,{tool:'maul'}));
+ case'lift':return carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:false}));
+ case'carry':return carrier(g,X,Y,P,1,Object.assign(o,{moving:true}));
+ case'carry_rubble':return carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:true,item:w.u>.55&&w.u<.75?'earth':'basket'}));
+ case'carry_log':case'post':case'lintel':return carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:w.task==='carry_log',item:'log'}));
+ case'haul':return carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:true,seed:w.seed},w.item?{item:w.item}:{}));
+ case'water':return carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:true,item:'jar'}));
+ case'sledge':{sledge(g,X,Y,P,true,7);carrier(g,X+18,Y-1,P,0,Object.assign(o,{moving:true,item:'none'}));carrier(g,X+26,Y+2,P,0,Object.assign(o,{moving:true,item:'none',idx:(i||0)+1}));ln(g,X-11,Y-2.5,X+16,Y-4,'#c8a868',.6);return}
+ case'lash':{const cyc=(now/900)%1;carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:false,item:'none'}));const hx=X+(w.dir===2?-4:4),hy=Y-10+Math.sin(cyc*TAU)*1.2;ell(g,hx+Math.cos(cyc*TAU)*1.4,hy,1.5,1.1,'#d8c08a',OL(),.35);return}
+ case'lamp':{carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:false,item:'none'}));const hx=X+(w.dir===3?-5:5),hy=Y-10;ell(g,hx,hy,1.8,.8,'#b0683a',OL(),.3);ell(g,hx,hy-1,.7,1.1,'#ffcf5a');return}
+ default:return cutter(g,X,Y,P,w.dir,o)}}
+G.Q2={TL,ZL,CW,CH,GX,GY,basket,stone,gravel,spoilHeap,haulRoute,worker,cellDemo,stageP,rampBuild,ladderBuild,mineBuild,pitState,pitFootprint,PIT_FINAL,mineAdit,PAL,tool,block,boulder,outcrop,pit,PIT,yard,YARD,houseVariant,house,houseLocal,houseToWorld,placeQuarryHouses,cutter,carrier,POSE_CUT,POSE_CARRY,sledge,jar,ladder,rubble,chips,dust,WALL_H,D,LK};
+})(typeof window!=='undefined'?window:globalThis);
+
+</script>
 <script>
 /* Early-game Palace Complex v2 (art-studio/palace-complex/v2/palace-complex-v2.js by Ningal, option A approved by Weston); verbatim */
 /* Bronze and Blood: EARLY-GAME PALACE COMPLEX v2 (replaces BLD.holding as the starting building), built on the CURRENT PALACE's
@@ -966,8 +1390,8 @@ garden:{n:'Public Park',cost:{wood:5,food:5,silver:10},tier:1,sz:2,d:'Fenced flo
 tree:{n:'Shade Tree',cost:{wood:2,food:4},tier:1,d:'Planted tree: +1 desirability'},
 farm:{n:'Farm',cost:{wood:20},job:'farmer',tier:1,sz:2,d:'2x2 wheat field, +2 farmer jobs/lvl'}, tavern:{n:'Beer Hall',cost:{wood:40,stone:15},tier:1,d:'Off-duty villagers drink and talk here: +3 happiness (+3 more with beer in stock)'}, shrine:{n:'Shrine',cost:{stone:20,wood:5},tier:0,d:'Small household shrine: +2 happiness; villagers pray here off duty'}, senet:{n:'Senet Boards',cost:{wood:8},tier:0,d:'Game tables in the shade: +1 happiness each (max 3)'}, plaza:{n:'Plaza',cost:{stone:30},tier:1,d:'Paved gathering square: +2 happiness, evening crowds'}, trainingcamp:{n:'Training Camp',cost:{wood:40,stone:10},tier:1,d:'Basic drill for all recruits: needed to raise any company; recruits start Trained'}, spearschool:{n:'Spear School',cost:{wood:40,stone:20},tier:1,d:'Trains spearmen, heavy spearmen and guards'}, archery:{n:'Archery Range',cost:{wood:50},tier:1,d:'Trains archers and composite bowmen'}, slingfield:{n:'Slinger Field',cost:{wood:15,stone:25},tier:1,d:'Trains slingers'}, axehall:{n:'Axe & Sword Hall',cost:{wood:40,stone:30,copper:10},tier:2,d:'Trains axemen and macemen'}, stables:{n:'Stables & Chariot Yard',cost:{wood:80,stone:20},tier:2,d:'Trains light and heavy chariots'}, gatherhut:{n:"Gatherer's Hut",cost:{wood:25},job:'harvester',tier:0,d:'Family camp: one family lives here and gathers wild food from the bushes nearby, tithing part of it'}, bakery:{n:'Bakery',cost:{wood:20},tier:0,sz:2,d:'Cheap early bakehouse: a waiting family moves in as bakers. They walk grain in from the Stockyard, bake 600 loaves from every 1,200 grain at the oven, and carry the bread out to the Stockyard or market (1 loaf = 3 wheat of food)'}, brewery:{n:'Brewery',cost:{wood:75,stone:40},tier:1,sz:2,d:'Premium early option (brewers normally rise by petition): a waiting family moves in as brewers, walks to the Stockyard for grain and brews beer (+happiness while in stock)'}, storehouse:{n:'Storehouse',cost:{wood:30,stone:10},tier:1,sz:2,d:'Haulers deliver goods here: +150 storage/lvl'},
 house:{n:'House',cost:{wood:25,stone:5},tier:1,sz:2,d:'+5 housing/lvl; multi-story at Lv4+'},
-qhouse:{n:'Quarry family house',cost:{wood:25,stone:5},tier:1,sz:2,hide:1,d:'Home of an extra quarry family (added from the Quarry info box)'},
-quarry:{n:'Quarry',cost:{wood:30},job:'quarrier',tier:1,sz:2,d:'Family camp (near rock): one family lives here and cuts stone blocks from the outcrops and bedrock nearby, tithing part of the stone'},
+qhouse:{n:'Quarry family house',cost:{wood:25,stone:5},tier:1,sz:8,hide:1,d:'Home of an extra quarry family (added from the Quarry info box)'},
+quarry:{n:'Quarry',cost:{wood:30},job:'quarrier',tier:1,sz:12,d:'Family camp (near rock): one family lives here and cuts stone blocks from the outcrops and bedrock nearby, tithing part of the stone'},
 barracks:{n:'Barracks',cost:{wood:50,stone:20},tier:1,sz:2,d:'Train troops; +6 army cap/lvl'},
 granary:{n:'Granary',cost:{wood:40,stone:30},tier:1,sz:2,d:'+250 storage/lvl; becomes the hub'},
 well:{n:'Fountain',cost:{stone:20,wood:10,silver:30},tier:1,d:'Clean water: slows plague, helps fight fires'},
@@ -1916,7 +2340,7 @@ EIT.firewood={n:'Firewood',v:EIT.timber.v/4,rot:EIT.timber.rot,c:'#c89a5a'};/* E
 const FW_STK=40,FW_LONE=100;/* yard log stack holds up to 40 logs (160 bundles); a lone worker splits until 100 bundles */
 function fwStkPt(F){return{x:F.stk[0]+.5,y:F.stk[1]-.45}}
 function fwStkArt(X,Y,n){const O='#2a1d12',m=Math.min(15,Math.ceil(n/2.7));vx.fillStyle='rgba(0,0,0,.22)';vx.beginPath();vx.ellipse(X,Y+6,15,4,0,0,7);vx.fill();const RW=[5,4,3,2,1];let k=0;for(let r=0;r<5&&k<m;r++)for(let c=0;c<RW[r]&&k<m;c++,k++){const lx=X+(c-(RW[r]-1)/2)*5.4,ly=Y+2-r*4.4;rr(vx,lx-2.6,ly-3,5.2,6,1.5,'#8a5a30',O,.6);circ(vx,lx,ly,2.4,'#d8b07a','#5a3a1a',.5);circ(vx,lx,ly,1,null,'#9a6a3a',.4)}if(n>0){vx.fillStyle='rgba(255,240,200,.95)';vx.font='bold 8px sans-serif';vx.textAlign='center';vx.fillText(Math.round(n)+' logs',X,Y+15);vx.textAlign='left'}}
-function campCarry(s,b){const sz=bsz(b.t);return{x:b.x+sz/2+.6,y:b.y+sz+.4}}
+function campCarry(s,b){if(b&&b.t==='quarry'&&bsz('quarry')===12)return{x:b.x+QYX/TS,y:b.y+QYY/TS+.55};const sz=bsz(b.t);return{x:b.x+sz/2+.6,y:b.y+sz+.4}}
 /* shed + 2 blocks: a clear 6x4 patch near the camp: walkable, no buildings, roads, bushes, trees or props */
 function fwSite(s,b){if(bsz(b.t)===6)return fwSite4(s,b);if(s.fw&&s.fw.v===2){if(!s.fw.stk){s.fw.stk=[s.fw.x+3,s.fw.y+4];try{worldChanged()}catch(e){}}return s.fw}/* E11: v2 = shed + four splitting blocks (older 2-block yards are re-sited) */if(!S.rn)return null;const sz=bsz(b.t),cx=b.x+sz/2,cy=b.y+sz/2;
  const PR=props.filter(p=>Math.abs(p.gx-cx)<32&&Math.abs(p.gy-cy)<32);let best=null,bd=1e9;
@@ -2116,10 +2540,10 @@ const QBLK=10,QS_MAX=120,QSWN=5,QSW=3,QU_F=1.15,QR=CAMP_R*1.4;
 EIT.stone={n:'Rough stone',v:.01,rot:0/* stone never spoils */,c:'#b8b2a4'};
 function qState(){return S.qd||(S.qd={s:{},u:{}})}
 function QL(){const E=S.eco;return E.qry||(E.qry={bs:0,bu:0,st:0,m:0,g:0,dep:0})}
-function qIn(s,x,y){const Z=(s.qh?qMain(s):s).wz;/* extra families use the quarry's work zone */if(Z)return x>=Z[0]&&x<=Z[2]+.99&&y>=Z[1]&&y<=Z[3]+.99;return Math.hypot(x-s.x-1,y-s.y-1)<=QR}
+function qIn(s,x,y){const Z=(s.qh?qMain(s):s).wz;/* extra families use the quarry's work zone */if(Z)return x>=Z[0]&&x<=Z[2]+.99&&y>=Z[1]&&y<=Z[3]+.99;const h=bsz('quarry')/2;return Math.hypot(x-s.x-h,y-s.y-h)<=QR+h-1}
 /* surface outcrops in reach: untouched rock props plus the ones already being worked (S.qd.s) */
 function qSurf(s){const Q=qState(),o=[];for(const p of props){if(p.k!=='rock')continue;const i=(p.gy|0)*MW+(p.gx|0);if(Q.s[i])continue;if(qIn(s,p.gx,p.gy))o.push({i,x:p.gx,y:p.gy,a:QS_MAX,p})}for(const k in Q.s){const d=Q.s[k];if(d.a>0&&qIn(s,d.x,d.y))o.push({i:+k,x:d.x,y:d.y,a:d.a})}return o}
-function qUnder(s){const o=[],Z=s.wz,x0=Z?Z[0]:Math.floor(s.x+1-QR),x1=Z?Z[2]:Math.ceil(s.x+1+QR),y0=Z?Z[1]:Math.floor(s.y+1-QR),y1=Z?Z[3]:Math.ceil(s.y+1+QR);for(let y=Math.max(0,y0);y<=Math.min(MH-1,y1);y++)for(let x=Math.max(0,x0);x<=Math.min(MW-1,x1);x++){const i=y*MW+x;if(TER[i]!==T_ROCK||occ[i]||roadSet[i]||!walkC(x,y))continue;if(!qIn(s,x+.5,y+.5))continue;o.push({i,x:x+.5,y:y+.5,u:1})}return o}
+function qUnder(s){const o=[],Z=s.wz,qh=bsz('quarry')/2,qr=QR+qh-1,x0=Z?Z[0]:Math.floor(s.x+qh-qr),x1=Z?Z[2]:Math.ceil(s.x+qh+qr),y0=Z?Z[1]:Math.floor(s.y+qh-qr),y1=Z?Z[3]:Math.ceil(s.y+qh+qr);for(let y=Math.max(0,y0);y<=Math.min(MH-1,y1);y++)for(let x=Math.max(0,x0);x<=Math.min(MW-1,x1);x++){const i=y*MW+x;if(TER[i]!==T_ROCK||occ[i]||roadSet[i]||!walkC(x,y))continue;if(!qIn(s,x+.5,y+.5))continue;o.push({i,x:x+.5,y:y+.5,u:1})}return o}
 function qTouch(d){const Q=qState();if(Q.s[d.i])return;Q.s[d.i]={x:d.x,y:d.y,a:QS_MAX};/* the outcrop leaves the baked props and is drawn by qVis, shrinking as it is cut */props=props.filter(p=>p!==d.p&&!(p.k==='rock'&&((p.gy|0)*MW+(p.gx|0))===d.i));try{visProps.src=null}catch(e){}}
 function qDrop(a){a.qj=null;a.hvk=null;a.hvTool=null;a.carry=null;if(a.state==='work')a.state='idle';a.t=.5}
 /* Weston's chain: (1) CUT a rough block at the deposit face (pick to channel it out, then wedges and hammer to split it free),
@@ -2130,12 +2554,14 @@ function qMain(s){const b=campB(s);return b&&campOf(b)||s}
 function qFams(b){return S.eco?S.eco.steads.filter(q=>q.camp==='quarry'&&q.x===b.x&&q.y===b.y):[]}
 function quarryThink(a,s,b,cx,cy){const Y=campCarry(s,b),j=a.qj,Q=qState();
  if(a.route.length){a.t=.5;return}
+ if(qBig(b)&&!s.qhs&&!(s.qhT>S.t)){s.qhT=S.t+120;qHouseSync(b)}
+ if(j&&j.bs){qBuildThink(a,s,b,j);return}
  if(j){const P=j.p;
-  if(j.ph==='go'){if(!j.u&&!(Q.s[j.i]&&Q.s[j.i].a>0)){qDrop(a);return}if(Math.hypot(a.x-P.x,a.y-P.y)>1.6){if((j.tr=(j.tr||0)+1)>4){qDrop(a);return}go(a,P,'towork');a.t=1;return}
+  if(j.ph==='go'){if(!j.u&&!(Q.s[j.i]&&Q.s[j.i].a>0)){qDrop(a);return}if(j.qi!=null&&qP(s).d[j.qi]){qDrop(a);return}if(Math.hypot(a.x-P.x,a.y-P.y)>1.6){if((j.tr=(j.tr||0)+1)>4){qDrop(a);return}go(a,P,'towork');a.t=1;return}
    j.ph='cut';j.n=0;a.state='work';a.hvk='q'+j.i;a.hvTool='pick';a.dir=Math.abs(j.x-a.x)>Math.abs(j.y-a.y)?(j.x>a.x?1:3):(j.y>a.y?0:2);a.t=QR_CUT_T*(j.u?QU_F:1);return}
   if(j.ph==='cut'){if(Math.hypot(a.x-P.x,a.y-P.y)>1.8){j.ph='go';go(a,P,'towork');a.t=1;return}/* a meal or the night broke off the work: walk back */
    a.state='work';a.hvk='q'+j.i;j.n++;const f=j.u?QU_F:1;if(j.n<QR_CUT){a.hvTool='pick';a.t=QR_CUT_T*f;return}if(j.n<QR_CUT+QR_WEDGE){a.hvTool='hammer';/* driving the wedges */a.t=QR_WEDGE_T*f;return}
-   if(j.u)Q.u[j.i]=(Q.u[j.i]||0)+1;else{const d=Q.s[j.i];if(!d||d.a<=0){qDrop(a);return}d.a=Math.max(0,d.a-QRGH);if(d.a<=0)QL().dep++}
+   if(j.u){if(j.qi!=null){const qp=qP(s);if(qp.d[j.qi]){qDrop(a);return}qp.d[j.qi]=1;qp.c=(qp.c||0)+1}else if(!qBig(b))Q.u[j.i]=(Q.u[j.i]||0)+1}else{const d=Q.s[j.i];if(!d||d.a<=0){qDrop(a);return}d.a=Math.max(0,d.a-QRGH);if(d.a<=0)QL().dep++}
    QL()[j.u?'bu':'bs']++;a.hvk=null;a.hvTool=null;a.state='idle';a.carry='stone';j.ph='carryR';go(a,Y,'carry');a.t=1;return}
   if(j.ph==='carryR'){if(Math.hypot(a.x-Y.x,a.y-Y.y)>2.2&&(j.tc=(j.tc||0)+1)<4){a.carry='stone';go(a,Y,'carry');a.t=1;return}
    a.carry=null;s.st.stone=(s.st.stone||0)+QRGH;s.cpdG=s.cpdG||{};s.cpdG.stone=(s.cpdG.stone||0)+QRGH;s.prod=(s.prod||0)+QRGH*EIT.stone.v;QL().st+=QRGH;a.qj=null;a.state='idle';a.t=.8;return}
@@ -2143,6 +2569,7 @@ function quarryThink(a,s,b,cx,cy){const Y=campCarry(s,b),j=a.qj,Q=qState();
  /* cut the next block: nearest surface outcrop, else the nearest free bedrock face */
  const used=new Map();for(const q of agents)if(q.qj&&q.qj.i!=null&&q!==a)used.set(q.qj.i,(used.get(q.qj.i)||0)+1);const D=(p)=>Math.hypot(p.x-cx,p.y-cy);
  let L=qSurf(s).filter(d=>(used.get(d.i)||0)<Math.min(2,Math.ceil(d.a/QRGH))).sort((p,q)=>D(p)-D(q)),u=0;
+ if(!L.length&&qBig(b)){if(qUnder(qMain(s)).length){const pj=qPitJob(a,s,b);if(pj){a.qj=pj;go(a,pj.p,'towork');a.t=1;return}}a.hvk=null;a.hvTool=null;idleLeis(a,a.home);return}/* QV2: underground = the pit (cells in order, build steps, then the finished pit's faces) */
  if(!L.length){L=qUnder(s).filter(d=>!used.has(d.i)).sort((p,q)=>D(p)-D(q)||((Q.u[q.i]||0)-(Q.u[p.i]||0)));u=1}
  if(!L.length){a.hvk=null;a.hvTool=null;idleLeis(a,a.home);return}/* no deposit in reach: leisure, no filler */
  const d=L[0];if(!u)qTouch(d);const P=u?walkNear(d.x-.7,d.y+.4):walkNear(d.x-.8,d.y+.35);a.qj={ph:'go',i:d.i,x:d.x,y:d.y,u,p:P};go(a,P,'towork');a.t=1}
@@ -2151,20 +2578,101 @@ const QFAM_MAX=5,QH_COST={wood:25,stone:5};
 function qCanAdd(s){const b=campB(s);return!!(b&&qUnder(qMain(s)).length&&qFams(b).length<QFAM_MAX)}
 function qAddFam(id){const E=S.eco,s0=E&&E.steads.find(q=>q.id===id),b=s0&&campB(s0);if(!b)return;if(!qCanAdd(s0)){log('This quarry cannot take another family (bedrock needed; up to '+QFAM_MAX+').');return}
  const P=campPend().sort((p,q)=>q.m.filter(m=>m.a>=WORK_AGE).length-p.m.filter(m=>m.a>=WORK_AGE).length);if(!P.length){log('No family is waiting in the tents to move to the quarry.');return}
- let spot=null;for(let r=3;r<10&&!spot;r++)for(let k=0;k<24&&!spot;k++){const x=Math.round(b.x+Math.cos(k/24*6.283)*r),y=Math.round(b.y+Math.sin(k/24*6.283)*r);if(!placeErrBase('qhouse',x,y,true))spot=[x,y]}
+ const big=qBig(b);let spot=null;if(big){const f=qHouseFind(b);if(f)spot=[f.gx,f.gy]}else for(let r=3;r<10&&!spot;r++)for(let k=0;k<24&&!spot;k++){const x=Math.round(b.x+Math.cos(k/24*6.283)*r),y=Math.round(b.y+Math.sin(k/24*6.283)*r);if(!placeErrBase('qhouse',x,y,true))spot=[x,y]}
  if(!spot){log('No room for another family house near the quarry.');return}if(!pay(QH_COST)){log('Not enough materials: a quarry family house costs 25 wood and 5 stone.');return}
- const F=P[0];S.bl.push({t:'qhouse',l:1,x:spot[0],y:spot[1]});rebuildOcc();try{worldChanged()}catch(e){}
+ const F=P[0];if(!big){S.bl.push({t:'qhouse',l:1,x:spot[0],y:spot[1]});rebuildOcc();try{worldChanged()}catch(e){}}
  const s={id:++E.sid,x:b.x,y:b.y,camp:'quarry',land:'hills',qh:spot,f:[],claim:[],n:F.m.length,main:'auto',st:{grain:F.m.length*FOOD_DAY()*4},sv:Math.max(5,F.sv||0),sk:{},hap:60,ow:0,away:0,an:0,prod:0,hun:0,pile:0};
  {const take=s.n;let idle=S.pop-employed();if(idle<take){let need=take-Math.max(0,idle);const ks=Object.keys(S.jobs).filter(j=>S.jobs[j]>0);for(const j of ks){while(need>0&&S.jobs[j]>0){S.jobs[j]--;need--}}if(need>0)S.pop+=need}}
- F.sv=0;F.st='stead';F.l=s.id;famTentRm(F);E.steads.push(s);rosterSig='';try{famSync()}catch(e){}qlog('The '+F.sn+' family moved into a new house at the Quarry and cut stone there.',[spot[0]+1,spot[1]+1]);try{showInsp()}catch(e){}}
+ F.sv=0;F.st='stead';F.l=s.id;famTentRm(F);E.steads.push(s);if(big){s.qh=1;const h=qHouseAdd(s,b);if(h)spot=[h.x,h.y]}rosterSig='';try{famSync()}catch(e){}qlog('The '+F.sn+' family moved into a new house at the Quarry and cut stone there.',[spot[0]+1,spot[1]+1]);try{showInsp()}catch(e){}}
 /* drawing: worked outcrops (shrinking), bedrock cut pits, the block pile in the quarry yard */
-function qVis(D,now,inV){const Q=S.qd;if(Q){for(const k in Q.s){const d=Q.s[k];if(d.a<=0)continue;const X=d.x*TS,Y=d.y*TS;if(!inV(X,Y))continue;const f=Math.max(.3,Math.sqrt(d.a/QS_MAX)),vv=(hsh(d.x*7|0,d.y*7|0)*3)|0;D.push({k:Y+2,f:()=>{const sp=propSpr('rock',vv);vx.drawImage(sp.c,X-24*f,Y+24-48*f-(1-f)*14,48*f,48*f)}})}
+function qVis(D,now,inV){const Q=S.qd;if(Q){for(const k in Q.s){const d=Q.s[k];const X=d.x*TS,Y=d.y*TS;if(!inV(X,Y))continue;const stg=Math.max(0,Math.min(5,Math.round((1-Math.max(0,d.a)/QS_MAX)*5))),sd=(+k)%997+1;/* QV2: Q2.outcrop stage follows the stone left (120 -> 0 = stage 0 -> 5) */D.push({k:Y+20,f:()=>Q2.outcrop(vx,X,Y+18,Q2.PAL.B,stg,sd)})}
   for(const k in Q.u){const i=+k,X=(i%MW)*TS,Y=((i/MW)|0)*TS;if(!inV(X,Y))continue;const n=Math.min(1,Q.u[k]/12);D.push({k:Y-TS,f:()=>{const w=TS*(.45+.45*n),h=TS*(.3+.35*n),x=X+(TS-w)/2,y=Y+(TS-h)/2;vx.fillStyle='rgba(70,62,52,.55)';vx.fillRect(x,y,w,h);vx.fillStyle='rgba(205,196,178,.7)';vx.fillRect(x,y,w,2.5);vx.fillRect(x,y,2.5,h);vx.strokeStyle='rgba(40,34,28,.6)';vx.lineWidth=1;for(let q=1;q<3;q++){vx.beginPath();vx.moveTo(x+w*q/3,y+3);vx.lineTo(x+w*q/3,y+h);vx.stroke()}}})}}
  const E=S.eco;if(!E)return;for(const s of E.steads){if(s.camp!=='quarry')continue;const b=campB(s);if(!b)continue;
-  if(s.qh)continue;const fs=qFams(b),tot=fs.reduce((t,q)=>t+(q.st.stone||0),0);const Y=campCarry(s,b),n=Math.min(15,Math.ceil(tot/QBLK/2)),X0=(Y.x+1.2)*TS,Y0=(Y.y-.2)*TS;if(!inV(X0,Y0))continue;
+  if(qBig(b)&&!s.qhs&&!(s.qhT>S.t)){s.qhT=S.t+60;qHouseSync(b)}
+  if(s.qh||qBig(b))continue;const fs=qFams(b),tot=fs.reduce((t,q)=>t+(q.st.stone||0),0);const Y=campCarry(s,b),n=Math.min(15,Math.ceil(tot/QBLK/2)),X0=(Y.x+1.2)*TS,Y0=(Y.y-.2)*TS;if(!inV(X0,Y0))continue;
   D.push({k:Y0+6,f:()=>{const O='#3a342c';vx.fillStyle='rgba(0,0,0,.22)';vx.beginPath();vx.ellipse(X0,Y0+5,16,4.5,0,0,7);vx.fill();const RW=[5,4,3,2,1];let k=0;for(let r=0;r<5&&k<n;r++)for(let c=0;c<RW[r]&&k<n;c++,k++){const bx=X0+(c-(RW[r]-1)/2)*6.4-3,by=Y0-r*4.6-2;rr(vx,bx,by,6,4.6,.8,(k*7%3)?'#c8bea8':'#b4aa94',O,.6);vx.fillStyle='rgba(255,255,255,.25)';vx.fillRect(bx+.6,by+.6,4.8,1)}if(n>0){vx.fillStyle='rgba(255,240,200,.95)';vx.font='bold 8px sans-serif';vx.textAlign='center';vx.fillText(Math.round(tot)+' stone',X0,Y0+15);vx.textAlign='left'}}})}}
 function qInsp(s,b){const B=t=>'<b>'+t+'</b>',S1=qSurf(s),U=qUnder(s),L=QL(),dl=Object.values(qState().s).filter(d=>d.a<=0&&qIn(s,d.x,d.y)).length,sa=S1.reduce((t,d)=>t+d.a,0);
- return(s.wz?'Work zone '+B((s.wz[2]-s.wz[0]+1)+'×'+(s.wz[3]-s.wz[1]+1))+' tiles · cutting only inside it':'No work zone: cutting the nearest deposits')+'<br>Surface outcrops in reach: '+B(S1.length)+' (~'+Math.round(sa)+' stone left) · worked out: '+dl+'<br>Bedrock faces (never run out): '+B(U.length)+(S1.length?' · used once the outcrops are gone':U.length?' · <i>cutting the bedrock now</i>':'')+'<br>Rough stone on the yard: '+B(Math.round(s.st.stone||0))+'<br>Families at this quarry: '+B(qFams(b).length+' / '+(U.length?QFAM_MAX:1))+(s.qh?' (this family lives in its own house here)':'')+'<br>Rough stone cut this year: '+Math.round((s.prod||0)/EIT.stone.v)+'<br><span class="small muted">Cutting a rough block ('+QRGH+' stone) at the face: '+QR_CUT+' pick strokes + '+QR_WEDGE+' wedge blows (~'+Math.round(QR_CUT*QR_CUT_T+QR_WEDGE*QR_WEDGE_T)+' s, bedrock +15%), then it is carried on the shoulder to the stone yard, one block a trip. An outcrop holds '+QS_MAX+' stone ('+(QS_MAX/QRGH)+' blocks) and shrinks as it is cut; bedrock blocks take 15% longer. Stone never spoils: 20% is tithed every 3 days (none in hard times), the rest goes to market, where families building their homes barter for it (at least 10% is kept).</span><br><button class="btn" style="margin-top:4px" onclick="wzStart('+s.id+')">Paint work zone</button>'+(qCanAdd(s)?' <button class="btn" style="margin-top:4px" onclick="qAddFam('+s.id+')">Add family (house: 25 wood, 5 stone)</button>':'')}
+ return(s.wz?'Work zone '+B((s.wz[2]-s.wz[0]+1)+'×'+(s.wz[3]-s.wz[1]+1))+' tiles · cutting only inside it':'No work zone: cutting the nearest deposits')+'<br>Surface outcrops in reach: '+B(S1.length)+' (~'+Math.round(sa)+' stone left) · worked out: '+dl+'<br>Bedrock faces (never run out): '+B(U.length)+(S1.length?' · used once the outcrops are gone':U.length?' · <i>cutting the bedrock now</i>':'')+(qBig(b)?(()=>{const qp=qP(s),Q=qQueue(),st=qPitState(qp),nx=qPitDone(qp)?null:qNextItem(qp,s);return'<br>Pit: '+B(st.cellsCut+' / '+Q.filter(q=>q.cell).length+' cells cut')+(qPitDone(qp)?' · finished: cutting at the standing faces (bedrock never runs out)':nx&&!nx.cell?' · building: '+nx.ref+' ('+nx.t+')':'')+(qp.wait==='logs'?' · <i>waiting for logs from the palace stores</i>':'')})():'')+'<br>Rough stone on the yard: '+B(Math.round(s.st.stone||0))+'<br>Families at this quarry: '+B(qFams(b).length+' / '+(U.length?QFAM_MAX:1))+(s.qh?' (this family lives in its own house here)':'')+'<br>Rough stone cut this year: '+Math.round((s.prod||0)/EIT.stone.v)+'<br><span class="small muted">Cutting a rough block ('+QRGH+' stone) at the face: '+QR_CUT+' pick strokes + '+QR_WEDGE+' wedge blows (~'+Math.round(QR_CUT*QR_CUT_T+QR_WEDGE*QR_WEDGE_T)+' s, bedrock +15%), then it is carried on the shoulder to the stone yard, one block a trip. An outcrop holds '+QS_MAX+' stone ('+(QS_MAX/QRGH)+' blocks) and shrinks as it is cut; bedrock blocks take 15% longer. Stone never spoils: 20% is tithed every 3 days (none in hard times), the rest goes to market, where families building their homes barter for it (at least 10% is kept).</span><br><button class="btn" style="margin-top:4px" onclick="wzStart('+s.id+')">Paint work zone</button>'+(qCanAdd(s)?' <button class="btn" style="margin-top:4px" onclick="qAddFam('+s.id+')">Add family (house: 25 wood, 5 stone)</button>':'')}
+/* ---- QUARRY v2 (Weston: Ningal's art, "try it for now"). The quarry is a 12x12 site: the pit (final 288x240 px) top-left at local (QPX,QPY),
+   the 3x2-tile stone yard below it. Families live in placer houses (Q2.placeQuarryHouses) around the site, one 8x8-tile house each. ---- */
+const QPX=40,QPY=36,QYX=196,QYY=334,QV_FLAT={m:{flat:1,lights:[]},c:null},QV_SOL={m:{lights:[]},c:null};
+const QSTEP={ramp:[{t:'stake',d:30,tool:'hammer'},{t:'wall',d:45,rub:1,tool:'hammer'},{t:'wall',d:45,rub:1,tool:'hammer'},{t:'wall',d:45,rub:1,tool:'hammer'},{t:'fill',d:30,rub:1,tool:'pick'},{t:'fill',d:30,rub:1,tool:'pick'},{t:'sleeper',d:40,log:1,tool:'hammer'},{t:'sleeper',d:40,log:1,tool:'hammer'}],
+ ladder:[{t:'poles',d:40,log:1,tool:'hammer'},{t:'lash',d:50,tool:'hammer'}],
+ mine:[{t:'dig',d:90,tool:'pick'},{t:'dig',d:90,tool:'pick'},{t:'post',d:50,log:2,tool:'hammer'},{t:'lintel',d:50,log:1,tool:'hammer'},{t:'lamp',d:20,tool:null}]};
+let QQ=null;
+/* one ordered work queue from the art timeline: every pit cell (key = its timeline start+.7, as Q2.pitState({cellsCut})) and every build step (spread evenly over the build's t0..t1) */
+function qQueue(){if(QQ)return QQ;const T=Q2.TL,it=[];T.cells.forEach(z=>z.ev.forEach(e=>it.push({k:e.st+.7,cell:1,c:z.c,r:z.r,lvl:e.lvl})));
+ const add=(ref,kind,t0,t1,lvl)=>{const L=QSTEP[kind];L.forEach((st,i)=>it.push(Object.assign({k:t0+(t1-t0)*(i+.5)/L.length+1e-4,ref,kind,t0,t1,i,n:L.length,lvl},st)))};
+ T.ramps.forEach(r=>add('ramp '+r.lvl,'ramp',r.t0,r.t1,r.lvl));T.ladders.forEach(l=>add('ladder '+l.lvl,'ladder',l.t0,l.t1,l.lvl));add('mine','mine',T.mine.t0,T.mine.t1,3);
+ it.sort((p,q)=>p.k-q.k);it.forEach((q,i)=>q.ix=i);return QQ=it}
+function qP(s){const m=qMain(s);if(!m.qp)m.qp={d:{},c:0,pre:0,logs:0};return m.qp}
+function qPitDone(qp){return qp.pre>=qQueue().length}
+function qPre(qp){const Q=qQueue();while(qp.pre<Q.length&&qp.d[qp.pre])qp.pre++;return qp.pre}
+function qBuildDone(qp,ref){let n=0;for(const k in qp.d){const q=qQueue()[+k];if(q&&q.ref===ref)n++}return n}
+/* the pit state for drawing: the done prefix sets the timeline; ramp/ladder/mine progress = their done steps */
+function qPitState(qp){const Q=qQueue(),pre=qPre(qp),U=pre>0?Q[pre-1].k+.001:0,T=Q2.TL;let cc=0;for(const k in qp.d)if(Q[+k]&&Q[+k].cell)cc++;
+ const st=Q2.pitState({units:pre>=Q.length?T.total:U});const dn={};for(const k in qp.d){const q=Q[+k];if(q&&q.ref)dn[q.ref]=(dn[q.ref]||0)+1}
+ const un=(ref,n)=>(dn[ref]||0)/n;st.ramps=T.ramps.filter(r=>U>=r.t0||dn['ramp '+r.lvl]).map(r=>Object.assign({},r,{u:un('ramp '+r.lvl,QSTEP.ramp.length)}));
+ st.ladders=T.ladders.filter(l=>U>=l.t0||dn['ladder '+l.lvl]).map(l=>Object.assign({},l,{u:un('ladder '+l.lvl,QSTEP.ladder.length)}));
+ st.mine=(U>=T.mine.t0||dn.mine)?Object.assign({},T.mine,{u:un('mine',QSTEP.mine.length)}):null;if(pre>=Q.length){st.mine=Object.assign({},T.mine,{u:1})}st.cellsCut=cc;return st}
+/* the next item for a worker: cells in order; an unfinished build step blocks every later item (the next terrace waits for the ramp) */
+function qNextItem(qp,s){const Q=qQueue(),cl=new Set();const qk=qMain(s).id;for(const q of agents)if(q.qj&&q.qj.qi!=null&&q.qj.qk===qk)cl.add(q.qj.qi);
+ for(let i=qPre(qp);i<Q.length;i++){if(qp.d[i])continue;const q=Q[i];if(q.cell){if(!cl.has(i))return q;continue}
+  if(cl.has(i))return null;if(q.log&&(S.eco.hold.timber||0)<q.log){qp.wait='logs';return null}qp.wait=null;return q}return null}
+function qSlot(q){if(q.cell){const Z=Q2.ZL[q.lvl];return{x:Q2.GX+q.c*Q2.CW+Q2.CW/2,y:Q2.GY+q.r*Q2.CH+Q2.CH-1.5+Z,dir:3}}
+ const st=Q2.pitState({units:q.k}),w=st.work.find(w=>w.ref===q.ref)||st.work.find(w=>w.ref&&w.ref.indexOf(q.ref.split(' ')[0])===0);return w?{x:w.x,y:w.y,dir:w.dir}:{x:20,y:20,dir:0}}
+let QFIN=null;function qFinal(){return QFIN||(QFIN=Q2.pitState({units:Q2.TL.total}).work.filter(w=>w.ref&&w.ref.indexOf('face ')===0))}
+const qW=(b,p)=>({x:b.x+(QPX+p.x)/TS,y:b.y+(QPY+p.y)/TS});
+function qRim(b){return{x:b.x+(QPX+300)/TS,y:b.y+(QPY+60)/TS}}
+/* a pit job: a cell (the usual rough-block cut at its slot) or a build step */
+function qPitJob(a,s,b){const qp=qP(s);if(qPitDone(qp)){const F=qFinal(),k=(a.idx||0)%F.length,w=F[k];const P=qW(b,{x:w.x,y:w.y});return{ph:'go',i:'pf'+k,x:P.x,y:P.y-.3,u:1,p:P}}
+ const q=qNextItem(qp,s);if(!q)return null;const w=qSlot(q),P=qW(b,w);if(q.cell)return{ph:'go',qk:qMain(s).id,i:'pc'+q.ix,qi:q.ix,x:P.x,y:P.y-.3,u:1,p:P};
+ const j={ph:q.rub||q.log?'fetch':'go',qk:qMain(s).id,i:'pb'+q.ix,qi:q.ix,bs:1,x:P.x,y:P.y-.3,u:1,p:P};return j}
+function qBuildThink(a,s,b,j){const Q=qQueue(),q=Q[j.qi],qp=qP(s);if(!q||qp.d[j.qi]){qDrop(a);return}
+ if(j.ph==='fetch'){const R=qRim(b);if(Math.hypot(a.x-R.x,a.y-R.y)>2.5&&(j.tf=(j.tf||0)+1)<5){go(a,R,'towork');a.t=1;return}
+  if(q.log){const E=S.eco;if((E.hold.timber||0)<q.log){qDrop(a);return}E.hold.timber-=q.log;qp.logs=(qp.logs||0)+q.log;QL().logs=(QL().logs||0)+q.log}
+  a.carry=q.log?'log':'stone';j.ph='go';go(a,j.p,'carry');a.t=1;return}
+ if(j.ph==='go'){if(Math.hypot(a.x-j.p.x,a.y-j.p.y)>1.6){if((j.tr=(j.tr||0)+1)>5){qDrop(a);return}go(a,j.p,a.carry?'carry':'towork');a.t=1;return}a.carry=null;j.ph='bld';j.n=0}
+ if(j.ph==='bld'){if(Math.hypot(a.x-j.p.x,a.y-j.p.y)>1.8){j.ph='go';go(a,j.p,'towork');a.t=1;return}
+  const cyc=5,N=Math.ceil(q.d/cyc);a.state='work';a.hvk=j.i;a.hvTool=q.tool;a.dir=0;if(j.n<N){j.n++;a.t=Math.min(cyc,q.d-(j.n-1)*cyc);return}
+  qp.d[j.qi]=1;QL().bstep=(QL().bstep||0)+1;a.hvk=null;a.hvTool=null;a.state='idle';a.qj=null;a.t=.6;
+  if(q.i===q.n-1)try{qlog('Quarry: the '+(q.kind==='mine'?'mine adit':q.kind+' to terrace '+(q.lvl+1))+' is finished.',[b.x+6,b.y+6])}catch(e){}return}
+ qDrop(a)}
+/* houses: Q2.placeQuarryHouses around the site; house i is stable as more families come */
+function qSite(b){const c={x:b.x*TS+192,y:b.y*TS+192};return{bounds:{x:c.x-640,y:c.y-464,w:1280,h:928},centre:c,ring:[290,470],avoid:[{x:b.x*TS-8,y:b.y*TS-8,w:400,h:400}],paths:[]}}
+const QHC=new Map();
+function qHouseH(h){const k=h.qH;if(!k)return null;const ck=k.seed+'|'+k.i+'|'+k.q;let H=QHC.get(ck);if(!H){const qb={x:k.q[0],y:k.q[1]};H=Q2.placeQuarryHouses(qSite(qb),k.i+1,k.seed)[k.i];QHC.set(ck,H)}return H}
+function qHome(h,j){const H=qHouseH(h);if(!H)return null;const bd=H.v.beds[j%H.v.beds.length],p=Q2.houseToWorld(H,bd),d=qDoor(h);return{x:p.x/TS,y:p.y/TS,b:h,door:d,rot:bd.rot||0}}
+function qDoor(h){const H=qHouseH(h);if(!H)return null;const p=Q2.houseToWorld(H,{x:H.v.door.x+H.v.door.w/2,y:H.v.h});return{x:p.x/TS,y:p.y/TS+.55}}
+function qHouseFind(b){const seed=(b.x*131+b.y*7)%9973+1,used=new Set(S.bl.filter(h=>h.t==='qhouse'&&h.qH&&h.qH.q[0]===b.x&&h.qH.q[1]===b.y).map(h=>h.qH.i));
+ for(let i=0;i<24;i++){if(used.has(i))continue;const H=Q2.placeQuarryHouses(qSite(b),i+1,seed)[i];if(!H)continue;const gx=Math.floor(H.box.x/TS),gy=Math.floor(H.box.y/TS);if(gx<1||gy<1||gx+8>=MW||gy+8>=MH)continue;if(placeErrBase('qhouse',gx,gy,true))continue;if(S.bl.some(q=>(q.t==='quarry'||q.t==='qhouse')&&gx<q.x+bsz(q.t)+1&&q.x<gx+9&&gy<q.y+bsz(q.t)+1&&q.y<gy+9))continue;
+  return{gx,gy,seed,i}}return null}
+function qHouseAdd(s,b){const f=qHouseFind(b);if(!f)return null;const h={t:'qhouse',l:1,x:f.gx,y:f.gy,qH:{seed:f.seed,i:f.i,q:[b.x,b.y]}};S.bl.push(h);s.qhs={x:f.gx,y:f.gy,seed:f.seed,i:f.i};rebuildOcc();try{worldChanged()}catch(e){}rosterSig='';return h}
+/* every family at a 12x12 quarry gets its placer house (the first family's house comes with the quarry; extra families pay QH_COST) */
+function qHouseSync(b){if(!qBig(b))return;for(const f of qFams(b)){if(f.qhs&&S.bl.some(h=>h.t==='qhouse'&&h.x===f.qhs.x&&h.y===f.qhs.y))continue;f.qhs=null;qHouseAdd(f,b)}}
+function qBig(b){return b&&b.t==='quarry'&&bsz('quarry')===12}
+/* drawing: the site (pit + yard) cached per state; the house per interior flag */
+const QSC=new Map();
+function qSiteDraw(b,X,Y,now){const s=campOf(b);const fs=qFams(b),tot=fs.reduce((t,q)=>t+(q.st.stone||0),0),fill=Math.min(1,tot/QBLK/Q2.YARD.cap);
+ const qp=s?qP(s):{d:{},c:0,pre:0},key=Object.keys(qp.d).length+'|'+qp.pre+'|'+Math.round(fill*Q2.YARD.cap);let c=QSC.get(b);
+ if(!c||c.k!==key){if(!c){c=mk(800,800);QSC.set(b,c)}const[cv,g]=c;g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,800,800);g.setTransform(2,0,0,2,16,16);
+  g.fillStyle='rgba(150,134,100,.16)';g.beginPath();g.ellipse(192,200,196,186,0,0,7);g.fill();Q2.pit(g,QPX,QPY,Q2.PAL.B,0,{state:qPitState(qp)});Q2.yard(g,QYX,QYY,Q2.PAL.B,fill);c.k=key}
+ vx.drawImage(c[0],X-8,Y-8,400,400);if(cam.z>=.9){vx.fillStyle='rgba(255,240,200,.95)';vx.font='bold 8px sans-serif';vx.textAlign='center';vx.fillText(Math.round(tot)+' stone',X+QYX,Y+QYY+24);vx.textAlign='left'}}
+const QHD=new Map();
+function qHouseDraw(h,int){const H=qHouseH(h);if(!H)return;const B=H.box,k=(int?1:0)+'|'+H.v.seed;let c=QHD.get(h);
+ if(!c||c.k!==k){const W=Math.ceil(B.w+120),Hh=Math.ceil(B.h+120);c=mk(W*2,Hh*2);c.k=k;c.ox=B.x-60;c.oy=B.y-60;c.w=W;c.h=Hh;const g=c[1];g.setTransform(2,0,0,2,-c.ox*2,-c.oy*2);Q2.house(g,H,Q2.PAL.B,{interior:int,t:0,sleepers:0});QHD.set(h,c)}
+ vx.drawImage(c[0],c.ox,c.oy,c.w,c.h)}
+/* old saves: 2x2 quarries grow to the 12x12 site (nearest free spot that covers / is near the old one); families move with it; old small qhouses are replaced by placer houses */
+function qMig12(){if(!qBigOn()||!S||!S.bl)return;const L=S.bl.filter(b=>b.t==='quarry'&&!b.q12);const out=[];
+ for(const b of L){const fs=S.eco?S.eco.steads.filter(q=>q.camp==='quarry'&&q.x===b.x&&q.y===b.y):[];for(const f of fs)if(Array.isArray(f.qh)){const i=S.bl.findIndex(h=>h.t==='qhouse'&&h.x===f.qh[0]&&h.y===f.qh[1]);if(i>=0)S.bl.splice(i,1);f.qh=1}
+  const i=S.bl.indexOf(b);S.bl.splice(i,1);rebuildOcc();let at=null,bd=1e9;for(let y=b.y-24;y<=b.y+14;y++)for(let x=b.x-24;x<=b.x+14;x++){const d=Math.hypot(x+6-(b.x+1),y+6-(b.y+1));if(d<bd&&!placeErrBase('quarry',x,y,true)){bd=d;at=[x,y]}}
+  const was=b.x+','+b.y;if(at){b.x=at[0];b.y=at[1];for(const f of fs){f.x=b.x;f.y=b.y;if(f.wz==null)f.wz=null}}b.q12=1;S.bl.splice(i,0,b);rebuildOcc();out.push(was+(at?' -> '+b.x+','+b.y:' (kept, no free ground)'))}
+ S.bl=S.bl.filter(h=>!(h.t==='qhouse'&&!h.qH));rebuildOcc();for(const b of S.bl)if(b.t==='quarry')qHouseSync(b);rosterSig='';if(out.length)try{log('Quarry enlarged to the 12x12 site for the new art: '+out.join('; '))}catch(e){}}
+function qBigOn(){return bsz('quarry')===12}
+{const _wc=worldChanged;worldChanged=function(){_wc();try{if(S&&S.bl&&!S.q12&&qBigOn()){S.q12=1;if(S.bl.some(b=>b.t==='quarry'||b.t==='qhouse')){qMig12();_wc()}}}catch(e){console.error(e)}}}
+/* dev: complete the next n pit items (cells and build steps) in order, no logs used */
+function devQPit(n){const b=S.bl.find(q=>q.t==='quarry'),s=b&&campOf(b);if(!s)return;const qp=qP(s),Q=qQueue();let k=0;for(let i=qPre(qp);i<Q.length&&k<n;i++){if(qp.d[i])continue;qp.d[i]=1;k++}qPre(qp);log('Dev: quarry pit at item '+qp.pre+' / '+Q.length)}
+function devQPitTo(pred){const b=S.bl.find(q=>q.t==='quarry'),s=b&&campOf(b);if(!s)return;const qp=qP(s),Q=qQueue();for(let i=qPre(qp);i<Q.length;i++){if(pred(Q[i]))break;qp.d[i]=1}qPre(qp)}
 /* ---- H5/H7: Gatherer's Hut pickers: closest bush with ripe berries first (inside the work zone if one is painted), ~6 s a pick of a third of a full bush, basket of 300, carried to the hut store (2,000) and counted there ---- */
 const GHF={n:0};const GH_BASKET=300,GH_STORE=2000,GH_PICK=6;
 function ghBooked(k,a){const o=CAMPT.get(k);if(!o||o===a.key)return false;const b=agents.find(q=>q.key===o);if(b&&b.gj&&b.gj.k===k)return true;CAMPT.delete(k);return false}
@@ -2759,7 +3267,7 @@ const CS=8;
 const SPR={};
 
 // ---- buildings (hi-res sprites, multi-tile) ----
-const SZFIX={shrine:3};const bsz=t=>SZFIX[t]||(BLD[t]&&BLD[t].sz)||1;
+const SZFIX={shrine:3,quarry:12,qhouse:8}/* QV2: the quarry site and its family houses (all map scales) */;const bsz=t=>SZFIX[t]||(BLD[t]&&BLD[t].sz)||1;
 // realistic proportions: buildings at true scale vs ~0.65-tile people (art drawn at design size then scaled)
 
 const NSZ_A={pcomplex:28,holding:8,stead:5,craft:5,tavern:5,shrine:2,senet:2,plaza:6,trainingcamp:8,spearschool:6,archery:8,slingfield:6,axehall:5,stables:7,gatherhut:5,storehouse:6,bakery:4,brewery:4,tent:3,campfire:1,stockpile:3,garden:4,farm:8,house:4,lodge:4,lumber:6,quarry:6,barracks:8,granary:6,well:1,copper:6,tin:6,smelter:5,temple:14,market:10,palace:28,statue:2};
@@ -2805,7 +3313,7 @@ function astar(sx,sy,tx,ty){sx=Math.max(0,Math.min(MW-1,sx|0));sy=Math.max(0,Mat
  const s0=sy*MW+sx,goal=ty*MW+tx;AS[s0]=st;AG[s0]=0;AP[s0]=-1;push(s0,h(sx,sy));let it=0;const GO=gOwn(),ok0=GO?GO[s0]:0,ok1=GO?GO[goal]:0,okS=PATH_ST+1;
  while(heap.length&&it++<20000){const[,n]=pop();if(n===goal)break;if(AC[n]===st)continue;AC[n]=st;/* E12: skip stale heap entries so detours round work zones and grants finish inside the step budget */const x=n%MW,y=(n/MW)|0;for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const X=x+dx,Y=y+dy;if(X<0||Y<0||X>=MW||Y>=MH||X<bx0||X>bx1||Y<by0||Y>by1)continue;const m=Y*MW+X;let c=walkC(X,Y);if(m===goal&&!c)c=1;if(!c)continue;if(GO){const o=GO[m];if(o&&o!==okS&&o!==ok0&&o!==ok1)c+=GRANT_PEN}const ng=AG[n]+c;if(AS[m]!==st||ng<AG[m]){AS[m]=st;AG[m]=ng;AP[m]=n;push(m,ng+h(X,Y)*.4)}}}
  if(AS[goal]!==st)return null;const out=[];let n=goal;while(n!==-1&&out.length<400){out.push({x:n%MW+.5,y:((n/MW)|0)+.5});n=AP[n]}return out.reverse()}
-function doorOf(b){if(b.t==='pcomplex'&&bsz('pcomplex')===28)return{x:b.x+PAL_DROP[0]/32,y:b.y+PAL_DROP[1]/32};if(b.t==='gatherhut'&&bsz('gatherhut')===5)return{x:b.x+GH5_DOOR[0]/32,y:b.y+GH5_DOOR[1]/32};const fd=bfp(b)?fpDoor(b):null;if(fd)return fd;const s=bsz(b.t),c=[[b.x+(s>>1),b.y+s],[b.x+s,b.y+(s>>1)],[b.x+(s>>1),b.y-1],[b.x-1,b.y+(s>>1)]];for(const[x,y]of c)if(walkC(x,y))return{x:x+.5,y:y+.5};return{x:c[0][0]+.5,y:c[0][1]+.5}}
+function doorOf(b){if(b.t==='qhouse'&&b.qH){const d=qDoor(b);if(d)return d}if(b.t==='pcomplex'&&bsz('pcomplex')===28)return{x:b.x+PAL_DROP[0]/32,y:b.y+PAL_DROP[1]/32};if(b.t==='gatherhut'&&bsz('gatherhut')===5)return{x:b.x+GH5_DOOR[0]/32,y:b.y+GH5_DOOR[1]/32};const fd=bfp(b)?fpDoor(b):null;if(fd)return fd;const s=bsz(b.t),c=[[b.x+(s>>1),b.y+s],[b.x+s,b.y+(s>>1)],[b.x+(s>>1),b.y-1],[b.x-1,b.y+(s>>1)]];for(const[x,y]of c)if(walkC(x,y))return{x:x+.5,y:y+.5};return{x:c[0][0]+.5,y:c[0][1]+.5}}
 function hubB(){return S.bl.find(b=>b.t==='granary')||S.bl.find(b=>b.t==='palace')||S.bl.find(b=>b.t==='campfire')}
 function hubT(){const b=hubB();if(b){if(b.t==='campfire')return{x:b.x+.5,y:b.y+1.5};return doorOf(b)}return{x:S.center.x+.5,y:S.center.y+.5}}
 // ---- people (hi-res 24x32) ----
@@ -2884,8 +3392,8 @@ function kidThink(a,s){const b=steadBld(s),sz=b?bsz(b.t):bsz('stead');const D=da
  a.dnc=null;if(!D&&S.t-(s.dnL||-1e9)>DAYLEN*.25&&Math.random()<.3){const K=agents.filter(q=>q.st===a.st&&q.age!=null&&q.age<WORK_AGE&&q.age>=3&&q.state!=='home');if(K.length>=2&&danceStart(s,K)){a.t=.2;return}}
  go(a,{x:s.x+sz/2+(Math.random()-.5)*3,y:s.y+sz+.3+Math.random()*1.5},'play');a.t=2+Math.random()*2}
 
-function steadBld(s){if(s.camp){if(s.qh)return S.bl.find(b=>b.t==='qhouse'&&b.x===s.qh[0]&&b.y===s.qh[1])||campB(s);return campB(s)}return S.bl.find(b=>b.t==='stead'&&b.x===s.x&&b.y===s.y)}
-function rosterHome(a,q,homes,h,n){if(q){a.st=q[1];a.fid=q[2];a.mi=q[3];a.age=q[4];if(a.age<12){a.o.kid=1}const s=S.eco.steads.find(x=>x.id===q[1]),b=s&&steadBld(s);if(s&&s.ph===0&&s.yd){a.home={x:s.x+1+(a.idx%3)*.3,y:s.yd.y0+1.1};return}a.home=b?inSpot({b,gx:b.x,gy:b.y,s:bsz(b.t)},a.idx,1):h;if(b&&b.t==='lumber'&&bsz('lumber')===6)a.home={x:b.x+4.3+(a.idx%3)*.3,y:b.y+3.2,b};return}
+function steadBld(s){if(s.camp){if(s.qhs){const h=S.bl.find(b=>b.t==='qhouse'&&b.x===s.qhs.x&&b.y===s.qhs.y);if(h)return h}if(Array.isArray(s.qh))return S.bl.find(b=>b.t==='qhouse'&&b.x===s.qh[0]&&b.y===s.qh[1])||campB(s);return campB(s)}return S.bl.find(b=>b.t==='stead'&&b.x===s.x&&b.y===s.y)}
+function rosterHome(a,q,homes,h,n){if(q){a.st=q[1];a.fid=q[2];a.mi=q[3];a.age=q[4];if(a.age<12){a.o.kid=1}const s=S.eco.steads.find(x=>x.id===q[1]),b=s&&steadBld(s);if(s&&s.ph===0&&s.yd){a.home={x:s.x+1+(a.idx%3)*.3,y:s.yd.y0+1.1};return}a.home=b?inSpot({b,gx:b.x,gy:b.y,s:bsz(b.t)},a.idx,1):h;if(b&&b.t==='lumber'&&bsz('lumber')===6)a.home={x:b.x+4.3+(a.idx%3)*.3,y:b.y+3.2,b};if(b&&b.t==='qhouse'&&b.qH){const hm=qHome(b,+(String(a.key).split('#')[1]||0)%16);if(hm)a.home=hm}return}
  // landless: home is their own family tent (FAMK), else a stable pick (no random re-roll)
  let hb=null;const r=FAMK[a.key];if(r&&palB()&&palHouse(r[0])){const P=palB(),d=palDoor(palHouse(r[0]));a.home={x:P.x+d[0]/32,y:P.y+d[1]/32,b:P};return}if(r&&r[0]===holdFamId()&&holdB()){const H=holdB();a.home={x:H.x+3.1,y:H.y+6.45,b:H};return}if(r){const tb=S.bl.find(b=>b.t==='tent'&&b.fam===r[0]);if(tb)hb={b:tb,gx:tb.x,gy:tb.y,s:bsz('tent')}}if(!hb&&homes.length)hb=homes[(a.idx+n)%homes.length];a.home=hb?inSpot(hb,a.idx+n,1):h}
 // #15: each pawn has its own daily routine (role, age and a personal offset): wake, work, meals, leisure, sleep
@@ -3496,7 +4004,7 @@ function autoRoadFor(b){if(S.tier<1||S.autoRoad===false||NOROAD[b.t]||touchesRoa
  for(let i=0;i<MW*MH;i++)if(roadSet[i]&&!occ[i]){const x=i%MW,y=(i/MW)|0,dd=Math.abs(x+.5-d.x)+Math.abs(y+.5-d.y);if(dd<bd){bd=dd;tg={x:x+.5,y:y+.5}}}
  if(!tg){const hb=hubB();if(!hb||hb===b){const i=Math.floor(d.y)*MW+Math.floor(d.x);if(!occ[i]){roadSet[i]=1;return 1}return 0}tg=hb.t==='campfire'?{x:hb.x+.5,y:hb.y+1.5}:doorOf(hb)}
  const p=astar(d.x,d.y,tg.x,tg.y);if(!p)return 0;let n=0;p.forEach(q=>{const i=Math.floor(q.y)*MW+Math.floor(q.x);if(!occ[i]&&!roadSet[i]&&TER[i]!==T_WATER){roadSet[i]=1;n++}});return n}
-function walkC(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const i=y*MW+x,t=TER[i];if(t===T_WATER||(CLIFF&&CLIFF[i]))return 0;const o=occ[i];if(o){const b=S.bl[o-1];if(b&&(b.t==='lumber'||b.t==='gatherhut'||b.t==='pcomplex')&&LWALK.has(i))return 1.6;if(!b||!(b.t==='gate'||b.t==='campfire'||FLATB[b.t]||b.t==='garden'))return 0;if(b.t!=='gate')return 2.5}const r=roadSet[i];return r?[0,.55,.45,.35][r]:t===T_FOREST?5:t>=T_HILL?2.2:1.6}
+function walkC(x,y){if(x<0||y<0||x>=MW||y>=MH)return 0;const i=y*MW+x,t=TER[i];if(t===T_WATER||(CLIFF&&CLIFF[i]))return 0;const o=occ[i];if(o){const b=S.bl[o-1];if(b&&(b.t==='lumber'||b.t==='gatherhut'||b.t==='pcomplex')&&LWALK.has(i))return 1.6;if(b&&(b.t==='quarry'||b.t==='qhouse')&&bsz(b.t)>=8)return 1.6;/* QV2: the quarry site (pit, yard) and the quarry houses are walked through */if(!b||!(b.t==='gate'||b.t==='campfire'||FLATB[b.t]||b.t==='garden'))return 0;if(b.t!=='gate')return 2.5}const r=roadSet[i];return r?[0,.55,.45,.35][r]:t===T_FOREST?5:t>=T_HILL?2.2:1.6}
 function placeErr(t,x,y,ignoreNear){const e=placeErrBase(t,x,y,ignoreNear);if(e)return e;if(t!=='gate'){const s=bsz(t),FM=CURFP&&CURFP.t===t?fpMask(t,CURFP):null;for(let yy=y;yy<y+s;yy++)for(let xx=x;xx<x+s;xx++)if((!FM||FM[(yy-y)*s+xx-x])&&roadSet[yy*MW+xx])return'Road in the way'}return''}
 function autoPlace(t,l,ignoreNear,cx0,cy0){const sv=CURFP;if(FP[t]){const n=FP[t].length;CURFP={t,v:Math.floor(Math.random()*n),r:Math.floor(Math.random()*4),m:Math.random()<.5?1:0}}try{return _autoPlace(t,l,ignoreNear,cx0,cy0)}finally{CURFP=sv}}
 function _autoPlace(t,l,ignoreNear,cx0,cy0){const c={x:cx0??S.center.x,y:cy0??S.center.y},s=bsz(t),R=RAD[S.tier]+1;let best=null,bs=-1e9;
@@ -3582,7 +4090,7 @@ function intGrid(m){if(m._wg)return m._wg;const R=m.R;if(!R)return null;const n=
 function intCell(G,x,y){const i=Math.max(0,Math.min(G.n-1,x/G.C|0)),j=Math.max(0,Math.min(G.n-1,y/G.C|0));return j*G.n+i}
 function intNear(G,c){if(G.w[c])return c;const n=G.n,q=[c],seen=new Uint8Array(n*n);seen[c]=1;while(q.length){const k=q.shift();if(G.w[k])return k;const x=k%n,y=k/n|0;for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1]]){const X=x+a,Y=y+b;if(X<0||Y<0||X>=n||Y>=n)continue;const nk=Y*n+X;if(!seen[nk]){seen[nk]=1;q.push(nk)}}}return c}
 function intPath(G,a0,b0){const n=G.n,prev=new Int32Array(n*n).fill(-1);const q=[a0];prev[a0]=a0;while(q.length){const k=q.shift();if(k===b0)break;const x=k%n,y=k/n|0;for(const[a,b]of[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]){const X=x+a,Y=y+b;if(X<0||Y<0||X>=n||Y>=n)continue;const nk=Y*n+X;if(prev[nk]>=0||!G.w[nk])continue;if(a&&b&&(!G.w[y*n+X]||!G.w[Y*n+x]))continue;prev[nk]=k;q.push(nk)}}if(prev[b0]<0)return[b0];const P=[];for(let k=b0;k!==a0;k=prev[k])P.push(k);return P.reverse()}
-function intPos(a,dt){const b=a.inB,sp=b.t==='pcomplex'&&palHouseA(a)?{m:palIntM(palHouseA(a))}:b.t==='holding'&&isHoldFam(a)?{m:holdIntM()}:b.t==='gatherhut'&&bsz('gatherhut')===5?gh5Int(b,0):b.t==='tent'||b.t==='gatherhut'?tentIntSpr(b):b.t==='lumber'&&bsz('lumber')===6?lumIntSpr(b,lumBeds(b)):bSpr(b);if(!sp||!sp.m||!sp.m.R)return null;const m=sp.m,G=intGrid(m);if(!G)return null;const nt=night(),want=a.state==='home'&&nt?'bed':'seat';
+function intPos(a,dt){if(a.inB&&a.inB.t==='qhouse'){const h=a.home;if(!h||h.b!==a.inB)return null;return{p:isoP(h.x,h.y),pose:a.state==='home'&&night()?'lie':null,r:(h.rot||0)-Math.PI/2,mv:false}}const b=a.inB,sp=b.t==='pcomplex'&&palHouseA(a)?{m:palIntM(palHouseA(a))}:b.t==='holding'&&isHoldFam(a)?{m:holdIntM()}:b.t==='gatherhut'&&bsz('gatherhut')===5?gh5Int(b,0):b.t==='tent'||b.t==='gatherhut'?tentIntSpr(b):b.t==='lumber'&&bsz('lumber')===6?lumIntSpr(b,lumBeds(b)):bSpr(b);if(!sp||!sp.m||!sp.m.R)return null;const m=sp.m,G=intGrid(m);if(!G)return null;const nt=night(),want=a.state==='home'&&nt?'bed':'seat';
  let occ=ISP.get(b);if(!occ){occ=new Map();ISP.set(b,occ)}const here=ax().inB.get(b)||[];for(const k of occ.keys())if(!here.some(q=>q.key===k))occ.delete(k);
  let o=occ.get(a.key);if(!o||o.k!==want){const taken=new Set([...occ.values()].filter(v=>v!==o).map(v=>v.i));const L=(m.spots||[]).map((q,i)=>({q,i})).filter(z=>z.q.k===want&&!taken.has(z.i));const z=L[0]||(m.spots||[]).map((q,i)=>({q,i})).find(z=>!taken.has(z.i));o=z?{k:want,i:z.i}:{k:want,i:-1};occ.set(a.key,o)}
  let tgt=o.i>=0?m.spots[o.i]:null;if(!tgt){if(!o.free){const fr=[];for(let k=0;k<G.w.length;k++)if(G.w[k])fr.push(k);const used=new Set([...occ.values()].map(v=>v.free).filter(Boolean));let c=fr[(hsh((a.idx||0)*7,(a.key||'').length,31)*fr.length)|0];for(let t=0;t<20&&used.has(c);t++)c=fr[(hsh((a.idx||0)*7,t,32)*fr.length)|0];o.free=c}tgt={x:(o.free%G.n+.5)*G.C,y:((o.free/G.n|0)+.5)*G.C}}if(a._ib!==b||a._ixy==null){a._ib=b;const d=b.t==='pcomplex'&&palHouseA(a)?(q=>({x:b.x+q[0]/32,y:b.y+q[1]/32}))(palDoor(palHouseA(a))):b.t==='gatherhut'&&bsz('gatherhut')===5?{x:b.x+GH5_DOOR[0]/32,y:b.y+(GH5_DOOR[1]-4)/32}:fpDoor(b);const dx=d?(d.x-b.x)*32:G.n*G.C/2,dy=d?(d.y-b.y)*32:G.n*G.C-6;a._ixy=[dx,dy];a._ipath=null;a._it=null}
@@ -3674,8 +4182,8 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
   vx.imageSmoothingEnabled=true;const ks=Object.keys(CH),nv=(c1-c0+1)*(r1-r0+1),lim=Math.max(220,nv*2+20);if(ks.length>lim){ks.sort((p,q)=>(CH[p].used||0)-(CH[q].used||0));ks.slice(0,ks.length-lim+30).forEach(k=>{if(CH[k].used!==now)delete CH[k]})}lowPrefill(c0,c1,r0,r1,z,now);TF()}
  const wt=now/1000;if(z>=.5){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){if(hsh(gx,gy,9)>.18||!isWat(RT[gy*MW+gx]))continue;const X=(gx+hsh(gx,gy,4))*TS,Y=(gy+hsh(gx,gy,5))*TS,ph=(wt*.9+hsh(gx,gy,3)*6)%3;if(ph<1.6){vx.globalAlpha=Math.sin(ph/1.6*Math.PI)*.5;ln(vx,X+ph*5,Y,X+ph*5+7,Y,'#d8eef6',1);vx.globalAlpha=1}}}
  const D=[],blist=blds(),flats=[];FPB.on=1;FPB.n=1;
- blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):bspr(b.t,b.l,v);
-  const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.cp?()=>siteDraw(b,sp,X,Y,s,now):b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{if(b.t==='pcomplex'&&s===28){palBlit(b,X,Y,v==='burn',o.i,z,now,dt);return}if(b.t==='holding'&&s===8){holdBlit(b,X,Y,v==='burn',o.i,z);return}if(b.t==='gatherhut'&&s===5){gh5Blit(b,X,Y,v==='burn',now,0);return}if(b.t==='gatherhut'&&s===3){tentBlit(b,X,Y,v==='burn',now);ghYard(b,X,Y);return}/* H6: the family lives in the hut (tent art for now) */{const cb=z<=.8&&sp.m.walled?roofCombo(b,o.i,sp,z,dt):null;if(cb){vx.drawImage(cMip(cb,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);return}}if(b.t==='tent'&&s===3){tentBlit(b,X,Y,v==='burn',now);return}if(b.t==='lumber'&&s===6){lumBlit(X,Y,v==='burn',now);return}vx.drawImage(cMip(sp.c,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
+ blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):b.t==='quarry'&&s===12&&!b.cp?QV_FLAT:b.t==='qhouse'&&b.qH?QV_SOL:bspr(b.t,b.l,v);
+  const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.cp?()=>siteDraw(b,sp,X,Y,s,now):b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{if(b.t==='quarry'&&s===12&&!b.cp){qSiteDraw(b,X,Y,now);return}if(b.t==='qhouse'&&b.qH){qHouseDraw(b,z>=2.2||(sel&&S.bl[sel.i]===b));return}if(b.t==='pcomplex'&&s===28){palBlit(b,X,Y,v==='burn',o.i,z,now,dt);return}if(b.t==='holding'&&s===8){holdBlit(b,X,Y,v==='burn',o.i,z);return}if(b.t==='gatherhut'&&s===5){gh5Blit(b,X,Y,v==='burn',now,0);return}if(b.t==='gatherhut'&&s===3){tentBlit(b,X,Y,v==='burn',now);ghYard(b,X,Y);return}/* H6: the family lives in the hut (tent art for now) */{const cb=z<=.8&&sp.m.walled?roofCombo(b,o.i,sp,z,dt):null;if(cb){vx.drawImage(cMip(cb,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);return}}if(b.t==='tent'&&s===3){tentBlit(b,X,Y,v==='burn',now);return}if(b.t==='lumber'&&s===6){lumBlit(X,Y,v==='burn',now);return}vx.drawImage(cMip(sp.c,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
  ecoDrawFields(vl,vr,vt,vb,z);FPB.on=0;flats.forEach(e=>e.f());if(z>=.45&&S.stk)blist.forEach(o=>{const b=o.b;if(S.stk[bid(b)])stkDraw(b,o.gx*TS,o.gy*TS,o.s)});
  if(z<.3){propBake.up=[];propBake.on=1}else if(z<(GFX.q==='high'?.85:GFX.q==='low'?1.6:PBZ)){propBake(vl,vr,vt,vb,now);propBake.on=1}else visProps(vl,vr,vt,vb).forEach(pr=>{const X=pr.gx*TS,Y=pr.gy*TS;if(!inV(X,Y))return;const vv=(hsh(pr.gx*7|0,pr.gy*7|0)*3)|0,sp=propSpr(pr.k,vv),big=pr.k==='oak'||pr.k==='palm'||pr.k==='olive';const sw=big?Math.sin(wt*1.3+pr.gx)*.6:0;D.push({k:Y+(big?10:2),f:()=>rnDrawProp(pr,X,Y,sp,sw,big)})});
  critters.forEach(c=>{c.t-=dt;if(c.t<=0){const rg=c.k==='deer'?2.5:1.4;c.tx=c.hx+(Math.random()-.5)*rg*2;c.ty=c.hy+(Math.random()-.5)*rg;if(!walkC(c.tx|0,c.ty|0)&&c.k!=='deer'){c.tx=c.x;c.ty=c.y}c.t=1+Math.random()*3}
@@ -3685,7 +4193,7 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
  for(const a of agents){if(a.dnc&&!a.route.length)try{danceStep(a,dt)}catch(e){a.dnc=null}if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?(SCLA?RSPD_A[rl]:RSPD[rl])*Math.max(.35,congF(ri)):1,sp=(SCLA?WALK_A*(a.role==='kid'||(a.o&&a.o.age==='old')?.8:1)/* Weston: carrying never slows anyone down */:(a.role==='kid'?1.4:1))*(a.sick?.6:1)*(a.limp?.55:1)/* gored hunter limps */*rd*dt;
    if(rl)TR[ri]+=dt*(a.carry&&S.tier>=2?2:1);if(!rl||(rl===1&&WORN&&WORN[ri]))wearStep(ri,dt);if(d>.01)a.dir=dirOf(dx,dy);a.ft+=dt*(a.role==='kid'?10:7);if(d<=sp){a.x=p.x;a.y=p.y;a.route.shift();if(!a.route.length){if(a.state==='towork'){a.state='work';a.t=3+Math.random()*4}else if(a.state==='home')a.t=3}}else{a.x+=dx/d*sp;a.y+=dy/d*sp}}
   else{a.t-=dt;if(a.t<=0){// job/path decisions are spread over frames: at most ~2 ms of thinking per frame (min 3 pawns), the rest wait a frame
- const TB=think.fb!==vframe.t0?(think.fb=vframe.t0,think.n=0,think.dl=performance.now()+2):0;if(think.n<3||performance.now()<think.dl){think.n++;think(a)}}}a.sick=!!sickP&&a.idx%3===0&&a.role!=='soldier';if(a.state==='home'&&!a.route.length&&!a.inB)continue;if(z<.5)continue;let p=isoP(a.x,a.y);if(!inV(p.x,p.y))continue;const mv=a.route.length>0||!!a.dnc;const ip=a.inB&&!mv&&a.inB.t!=='tent'?intPos(a,dt):null;if(ip)p=ip.p;D.push({k:a.inB&&!mv?(a.inB.y+bsz(a.inB.t))*TS:p.y,f:()=>ip?intDraw(a,p,ip,now):drawAgent(a,p,mv,now)})}
+ const TB=think.fb!==vframe.t0?(think.fb=vframe.t0,think.n=0,think.dl=performance.now()+2):0;if(think.n<3||performance.now()<think.dl){think.n++;think(a)}}}a.sick=!!sickP&&a.idx%3===0&&a.role!=='soldier';if(a.state==='home'&&!a.route.length&&!a.inB)continue;if(z<.5)continue;let p=isoP(a.x,a.y);if(!inV(p.x,p.y))continue;const mv=a.route.length>0||!!a.dnc;if(a.inB&&a.inB.t==='qhouse'&&!mv&&!(z>=2.2||(sel&&S.bl[sel.i]===a.inB)))continue;/* QV2: inside a roofed quarry house */const ip=a.inB&&!mv&&a.inB.t!=='tent'?intPos(a,dt):null;if(ip)p=ip.p;D.push({k:a.inB&&!mv?(a.inB.y+bsz(a.inB.t))*TS:p.y,f:()=>ip?intDraw(a,p,ip,now):drawAgent(a,p,mv,now)})}
  vis.migr=vis.migr.filter(m=>{if(!m.route.length)return false;const p=m.route[0],dx=p.x-m.x,dy=p.y-m.y,d=Math.hypot(dx,dy),sp=.9*dt;m.dir=dirOf(dx,dy);m.ft+=dt*7;if(d<=sp){m.x=p.x;m.y=p.y;m.route.shift()}else{m.x+=dx/d*sp;m.y+=dy/d*sp}const P=isoP(m.x,m.y);if(z>=.5)D.push({k:P.y,f:()=>drawAgent(m,P,true,now)});return m.route.length>0});
  if(vis.raid&&z>=.5){const c=S.center,R=RAD[S.tier];for(let k=0;k<Math.min(10,vis.raid);k++){const p=isoP(c.x-R-1+(k%2)*.7,c.y-2+k*.6);const a={o:OUTFIT.raider,dir:0,ft:now/140+k,role:'soldier',idx:k};D.push({k:p.y,f:()=>drawAgent(a,p,true,now)})}}
  if(vis.caravan&&z>=.5){const h=hubT();for(let k=0;k<3;k++){const c={k:'goat',x:h.x+1+k*.8,y:h.y+.4,dir:1};D.push({k:c.y*TS,f:()=>{critDraw(c,now);rr(vx,c.x*TS-5,c.y*TS-6,10,5,1,k%2?PB.red[3]:PB.glaze[3],OUTL,.6)}})}const mp=isoP(h.x+.4,h.y-.4);D.push({k:mp.y,f:()=>drawAgent({o:OUTFIT.merchant,dir:1,ft:0,idx:0},mp,false,now)})}
@@ -4829,7 +5337,7 @@ function fpMask(t,f){if(!f||!FP[t])return null;const k=t+'|'+(f.v||0)+(f.r||0)+(
   let any=0;for(const v of M)any|=v;if(!any)M=null}
  FPM.set(k,M);return M}
 delete FP.gatherhut;/* H6: the hut is drawn as a family tent (whole 3x3, door south) until Ningal's art */let CURFP=null,PV={v:0,r:0,m:0};
-const bfp=b=>{if(!b||!FP[b.t])return null;if(b.fv)return b.fv;if(b._af===undefined){const ok=SCLA&&b.t==='palace'?[0]:FP[b.t].map((v,i)=>v.legacy?-1:i).filter(i=>i>=0);b._af=ok.length?{v:ok[(hsh(b.x|0,b.y|0,5)*ok.length)|0],r:SCLA&&b.t==='palace'?0:(hsh(b.x|0,b.y|0,6)*4)|0,m:hsh(b.x|0,b.y|0,7)<.5?1:0}:null}return b._af};
+const bfp=b=>{if(!b||!FP[b.t])return null;if(b.t==='quarry'&&SZFIX.quarry===12)return null;/* QV2: the quarry is one square site */if(b.fv)return b.fv;if(b._af===undefined){const ok=SCLA&&b.t==='palace'?[0]:FP[b.t].map((v,i)=>v.legacy?-1:i).filter(i=>i>=0);b._af=ok.length?{v:ok[(hsh(b.x|0,b.y|0,5)*ok.length)|0],r:SCLA&&b.t==='palace'?0:(hsh(b.x|0,b.y|0,6)*4)|0,m:hsh(b.x|0,b.y|0,7)<.5?1:0}:null}return b._af};
 function fpDoor(b){const f=bfp(b);if(!f)return null;const V=FP[b.t][f.v||0];if(!V||V.legacy||!V.door)return null;const s=bsz(b.t),d=fpT(V.door[0],V.door[1],f),M=fpMask(b.t,f);if(!M)return null;
  let best=null,bd=1e9;for(let j=0;j<s;j++)for(let i=0;i<s;i++){if(!M[j*s+i])continue;for(const[a,c]of[[1,0],[-1,0],[0,1],[0,-1]]){const ii=i+a,jj=j+c;if(ii>=0&&jj>=0&&ii<s&&jj<s&&M[jj*s+ii])continue;const dd=((ii+.5)/s-d[0])**2+((jj+.5)/s-d[1])**2;if(dd<bd&&walkC(b.x+ii,b.y+jj)&&fpOpen(M,s,ii,jj,b)){bd=dd;best={x:b.x+ii+.5,y:b.y+jj+.5}}}}return best}
 /* a door cell must open to the outside: an empty cell boxed in by the footprint's own parts (a pocket between hut, byre and dome), or whose way out is built over by a neighbour, cannot be reached */
@@ -5984,7 +6492,7 @@ function devSceneLumber(){const h=holdB();if(!h||!S.eco){log('Dev: needs a Stock
  PL('lumber',1);PL('lodge',1);PL('gatherhut',0);try{rnBuild()}catch(e){}
  const GR=W=>{let d=0;for(let r=14;r<=200&&!d;r+=3)for(let a=0;a<16&&!d;a++){const an=a/16*6.283+r,x=Math.round(h.x+Math.cos(an)*r-W/2),y=Math.round(h.y+Math.sin(an)*r-W/2);const g=grantEval({gx:x,gy:y},{gx:x+W,gy:y+W});if(g&&!g.err&&pendFam()>0&&grantMakeMulti(g))d=1}try{famSync()}catch(e){}return d};
  GR(33);devSkip(DAYLEN,()=>{GR(49);devSkip(DAYLEN,()=>{const s=devLumberCamp(),b=s&&campB(s);if(b){cam.z=cam.tz=1.2;centerOn(b.x+1,b.y+1);sel={i:S.bl.indexOf(b)};showInsp()}log('Dev: Lumber Camp test scene ready'+(s?'':' (no family took the camp yet: skip a day)'))})})}
-function devSceneQuarry(){/* Q dev: the Lumber Camp scene plus a Quarry on the rock nearest the town */devSceneLumber();if(S.bl.some(b=>b.t==='quarry'))return;const c=S.center;for(let r=4;r<90;r++){const K=Math.max(32,r*7);for(let k=0;k<K;k++){const x=Math.round(c.x+Math.cos(k/K*6.283)*r),y=Math.round(c.y+Math.sin(k/K*6.283)*r);let bad=0;for(let yy=y;yy<y+2;yy++)for(let xx=x;xx<x+2;xx++){const i=yy*MW+xx;if(xx<0||yy<0||xx>=MW||yy>=MH||occ[i]||roadSet[i]||!walkC(xx,yy)||wzAt(xx,yy)||ter(xx,yy)===T_ROCK)bad=1}if(bad)continue;let rk=0,hl=0;for(let yy=y-6;yy<y+8;yy++)for(let xx=x-6;xx<x+8;xx++){const t=ter(xx,yy);if(t===T_ROCK)rk++;else if(t===T_HILL)hl++}if(rk<8||hl<6)continue;S.bl.push({t:'quarry',l:1,x,y});rebuildOcc();try{campDaily()}catch(e){}log('Dev: Quarry placed');return}}log('Dev: no rock near the town for a Quarry')}
+function devSceneQuarry(){/* Q dev: the Lumber Camp scene plus a Quarry on the rock nearest the town */devSceneLumber();if(S.bl.some(b=>b.t==='quarry'))return;const c=S.center;for(let r=4;r<90;r++){const K=Math.max(32,r*7);for(let k=0;k<K;k++){const x=Math.round(c.x+Math.cos(k/K*6.283)*r),y=Math.round(c.y+Math.sin(k/K*6.283)*r);const QZ=bsz('quarry');let bad=0;for(let yy=y;yy<y+QZ&&!bad;yy++)for(let xx=x;xx<x+QZ;xx++){const i=yy*MW+xx;if(xx<0||yy<0||xx>=MW||yy>=MH||occ[i]||roadSet[i]||!walkC(xx,yy)||wzAt(xx,yy)||ter(xx,yy)===T_ROCK){bad=1;break}}if(bad)continue;let rk=0,hl=0;for(let yy=y-6;yy<y+QZ+6;yy++)for(let xx=x-6;xx<x+QZ+6;xx++){const t=ter(xx,yy);if(t===T_ROCK)rk++;else if(t===T_HILL)hl++}if(rk<8||hl<6)continue;S.bl.push({t:'quarry',l:1,x,y,q12:1});rebuildOcc();try{campDaily()}catch(e){}log('Dev: Quarry placed');return}}log('Dev: no rock near the town for a Quarry')}
 function devFarm(){const E=S.eco;if(!E)return null;const b=sel&&S.bl[sel.i];if(b&&b.t==='stead'){const s=E.steads.find(q=>q.x===b.x&&q.y===b.y);if(s&&s.pl)return s}return E.steads.filter(s=>s.pl&&!s.camp).sort((p,q)=>q.n-p.n||q.f.length-p.f.length)[0]||null}
 function devFarmRep(){const E=S.eco;if(!E)return[];return E.steads.filter(s=>!s.camp&&s.ph!=null).map(s=>({fam:plFsn(s),n:s.n,plots:s.f.length,sown:s.pl?Object.keys(s.pl).length:0,harvest:Math.round(s.hvY||0),last:Math.round(s.hvL||0),total:Math.round(s.hvT||0),food:+(plFood(s)/(s.n*FOOD_DAY())).toFixed(1),hard:s.hard?1:0,relief:Math.round(s.relY||0),cut:s.plCut||0,early:s.plEarly||0,over:s.plOver||0,loss:Math.round(s.plLoss||0),pile:Math.round((s.hsp&&s.hsp.g)||0),hauled:Math.round(s.hauled||0),cart:s.hc?1:0}))}
 function devSceneFarm(){const h=holdB();if(!h||!S.eco){log('Dev: needs a Stockyard (start a game first)');return}
@@ -6006,7 +6514,7 @@ function devPanel(){let P=$('devp');if(!DEVO.on){if(P)P.style.display='none';ret
  add('+5000 wheat in the Stockyard',()=>{if(S.eco){S.eco.hold.grain=(S.eco.hold.grain||0)+5000;log('Dev: +5000 wheat at the Stockyard')}});
  const hd=t=>{const d=document.createElement('div');d.style.cssText='margin:8px 0 2px;color:#ffcc66;font-weight:bold';d.textContent=t;P.appendChild(d)};
  hd('Animation');add('Animation preview + GIF recorder',()=>apvOpen());
- hd('Test scenes');add('Build scene: Lumber Camp test',()=>devSceneLumber());add('Build scene: Quarry test',()=>devSceneQuarry());
+ hd('Test scenes');add('Build scene: Lumber Camp test',()=>devSceneLumber());add('Build scene: Quarry test',()=>devSceneQuarry());add('Quarry pit: +20 items',()=>devQPit(20));add('Quarry pit: to the next build',()=>{const b=S.bl.find(q=>q.t==='quarry'),s=b&&campOf(b);if(s){const p=qPre(qP(s));devQPitTo(q=>q.ix>=p&&!q.cell)}});add('Quarry pit: finish',()=>devQPit(9999));
  add('Save current game as a test scene…',()=>{const n=prompt('Scene name','lumber-'+(S.eco?S.eco.yr:1)+'-'+calInfo().day);if(n)scnSave(n.replace(/[^\w\- ]/g,'').slice(0,40))});
  for(const n of scnList()){const r=document.createElement('div');r.style.cssText='display:flex;gap:4px;margin:2px 0';const l=btn('Load "'+n+'"',()=>{devT();scnLoad(n);devPanel()});l.style.cssText='flex:1;font-size:11px;padding:3px';const x=btn('✕',()=>{scnDel(n);devPanel()});x.style.cssText='font-size:11px;padding:3px 6px';r.appendChild(l);r.appendChild(x);P.appendChild(r)}
  hd('Real pawn work (fast-forward)');add('Run real pawn work: 1 day',()=>devWork(1));add('Run real pawn work: 5 days',()=>devWork(5));add('Run real pawn work: 24 days (1 year)',()=>devWork(24));
