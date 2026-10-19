@@ -89,6 +89,120 @@ body.nohap #hapc,body.nohap #beautb{display:none!important}#heatb{display:none!i
 <div id="toast"></div><div id="tip"></div><div id="log" hidden></div>
 <div id="modal"><div class="panel glass" id="mbody"></div></div>
 
+<script>/* STONE SLEDGE art (art-studio/sledge/sledge.js, embedded) */
+/* Bronze and Blood: STONE SLEDGE + CREWS (art only, no mechanics), by Ningal.
+ * Matches the game: the quarry v2 code already in the game (Q2.sledge line ~701 is a 22x7 px hand-sledge; worker task 'sledge' line ~997 has
+ * 2 carriers + a rope). This replaces it with a full-size sledge: 38 x 22 px (~1.2 x 0.7 tile), runners with up-curved fronts, 4 crossbeams,
+ * rawhide lashings, deck slats, granite blocks (Q2.block, palette Q2.PAL.B), tow ropes to the pullers' hand points.
+ * SCALE: tile 32; pawn 24x32 sprite * PSC .72 (~17x23), hand point hx = X + (S:5 | N:-5 | E:+4 | W:-4), hy = Y-10 (game convention).
+ * API (world px; the anchor (x,y) is the ground centre of the sledge; dir = 0..7, 0 E, 2 S, 4 W, 6 N, odd = diagonals):
+ *   drawSledge(g,x,y,dir,load,t,o)        load 0..3 blocks; t ms (only for the wet-streak shimmer); o.P palette, o.seed, o.wet (streak behind), o.roller
+ *   SLEDGE.DIM {L:38,W:22,deck:3.2}
+ *   SLEDGE.attach(x,y,dir)               -> [[x,y],[x,y]] tow-rope eyes (left, right) at the runner tips, screen px
+ *   SLEDGE.slots(x,y,dir,cfg)            -> [{role:'pull'|'push',x,y,d}] crew feet positions + pawn facing d (0 E,1 S,2 W,3 N)
+ *   SLEDGE.CFG {'1pull','1push','2pull','2pull1push'}
+ *   SLEDGE_SPEED                         art guidance only (tiles/s): base .275 (= half of WALK_A .55); crew factor {1:.35,2:.6,3:.85}
+ *   SLEDGE.motion(cfg,t)                 -> {s (px travelled), crew (px, crew feet advance), lean 0..1, heave 0..1, bob, slack}: step-synced so feet never slide:
+ *                                           bodies move only during their step and stand planted while heaving; the sledge jerks forward once per heave.
+ *   SLEDGE.crew(g,c,M,o)                 draws one crew member (c from slots, M from motion): puller leans hard into the rope, pusher shoulder-in.
+ *   SLEDGE.draw(g,x,y,dir,load,cfg,t,o)  whole group (sledge + ropes + crew), depth sorted; returns the slot list.
+ */
+(function(G){'use strict';const PI=Math.PI,TAU=PI*2,KY=.7;const OL=()=>(typeof PWN!=='undefined'&&PWN.OL)||'#2a1d12';
+const hs=(i,s)=>{const v=Math.sin(i*127.1+s*311.7)*43758.5453;return v-Math.floor(v)};
+const DIM={L:38,W:22,deck:3.2};
+const ang=d=>d*PI/4;
+const pj=(x,y,a,u,v,z)=>[x+u*Math.cos(a)-v*Math.sin(a),y+(u*Math.sin(a)+v*Math.cos(a))*KY-(z||0)];
+const pawnDir=d=>{const a=ang(d),c=Math.cos(a),s=Math.sin(a);return c>.38?0:c<-.38?2:s>0?1:3};
+const SLEDGE_SPEED={note:'art guidance only; tiles per second. Walk WALK_A = .55',base:.275,crew:{1:.35,2:.6,3:.85},pxs:n=>.275*({1:.35,2:.6,3:.85}[n]||0)*32};
+const CFG={'1pull':{pull:1,push:0},'1push':{pull:0,push:1},'2pull':{pull:2,push:0},'2pull1push':{pull:2,push:1}};
+function poly(g,p,f,s,w){g.beginPath();p.forEach((q,i)=>i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1]));g.closePath();if(f){g.fillStyle=f;g.fill()}if(s){g.strokeStyle=s;g.lineWidth=w||.5;g.stroke()}}
+function beam(g,pts,w,c,cl){const O=OL();g.lineCap='round';g.lineJoin='round';const path=()=>{g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]))};path();g.strokeStyle=O;g.lineWidth=w+1;g.stroke();path();g.strokeStyle=c;g.lineWidth=w;g.stroke();
+ g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]-w*.28):g.moveTo(p[0],p[1]-w*.28));g.strokeStyle=cl;g.lineWidth=w*.3;g.stroke()}
+function attach(x,y,dir,tilt){const a=ang(dir),{L,W}=DIM;return[-1,1].map(s=>{const p=pj(x,y,a,L/2+1.5,s*W*.36,4.6);if(tilt)p[1]+=tilt[1];return p})}
+/* the sledge */
+function drawSledge(g,x,y,dir,load,t,o){o=o||{};const P=o.P||(typeof Q2!=='undefined'?Q2.PAL.B:null),a=ang(dir),{L,W,deck}=DIM,O=OL(),sd=o.seed||5;
+ /* o.tilt=[zr,zf]: screen-y offsets of the rear and front contact points (ramp surface heights in the 3/4 projection); the rigid sledge
+    is the straight line through them, so it blends naturally across the ramp foot/top kinks */const TZ=o.tilt||[0,0],tz=u=>TZ[0]+(TZ[1]-TZ[0])*(u+L/2)/(L+1.5);const P_=(u,v,z)=>{const p=pj(x,y,a,u,v,z);p[1]+=tz(u);return p};
+ /* shadow */poly(g,[P_(-L/2,-W/2,0),P_(L/2+2,-W/2,0),P_(L/2+2,W/2,0),P_(-L/2,W/2,0)].map(p=>[p[0]+1.4,p[1]+1.6]),'rgba(0,0,0,.24)');
+ /* runners: sampled along u; the front 7 px curve up (z 0 -> 5) */const run=s=>{const pts=[];for(let u=-L/2;u<=L/2+2.01;u+=1.5){const f=Math.max(0,(u-(L/2-6))/8),z=1.3+f*f*5.2;pts.push(P_(u,s*W*.36,z))}return pts};
+ const sides=[-1,1].sort((p,q)=>P_(0,p*W*.36,0)[1]-P_(0,q*W*.36,0)[1]);
+ const wood='#8a5e34',woodL='#c08a52',woodD='#6a4424';
+ /* far runner first */beam(g,run(sides[0]),2.4,woodD,woodL);
+ /* crossbeams (4) resting on the runners, lashed */const XB=[-L/2+3,-L/2+13,L/2-17,L/2-6.5];const xb=XB.map(u=>[P_(u,-W/2,deck),P_(u,W/2,deck)]);
+ /* deck slats between crossbeams (rough split planks) */for(let k=-2;k<=2;k++){const v=k*W*.19;beam(g,[P_(-L/2+2,v,deck+.6),P_(L/2-5,v,deck+.6)],1.5,k%2?'#9a6a3c':'#a87444','rgba(255,220,170,.35)')}
+ xb.forEach(([p,q],i)=>beam(g,[p,q],2.1,i%2?wood:'#946538',woodL));
+ /* near runner */beam(g,run(sides[1]),2.4,wood,woodL);
+ /* lashings: rawhide wraps at every crossbeam/runner joint + at the curved tips */g.strokeStyle='#d8c08a';g.lineWidth=.55;for(const u of XB)for(const s of[-1,1]){const p=P_(u,s*W*.36,deck);g.beginPath();g.moveTo(p[0]-1.1,p[1]-1);g.lineTo(p[0]+1.1,p[1]+.6);g.moveTo(p[0]+1.1,p[1]-1);g.lineTo(p[0]-1.1,p[1]+.6);g.stroke()}
+ for(const s of[-1,1]){const p=P_(L/2+1.5,s*W*.36,4.6);g.fillStyle='#d8c08a';g.beginPath();g.arc(p[0],p[1],.9,0,TAU);g.fill();g.strokeStyle=O;g.lineWidth=.35;g.stroke()}
+ /* front tow bar between the tips */beam(g,[P_(L/2-1,-W*.36,4),P_(L/2-1,W*.36,4)],1.4,'#946538',woodL);
+ /* load: 1-3 rough granite blocks (Q2.block), back to front */if(load>0&&typeof Q2!=='undefined'){const B0=load===1?[[0,0,1]]:load===2?[[-8.5,0,.92],[8.5,0,.92]]:[[-10.5,-1,.82],[1,1.5,.82],[11.5,-1,.78]];const B=B0.map((b,i)=>[b[0],b[1],b[2],i]).filter(b=>!o.blocks||o.blocks[b[3]]);
+  const k=(TZ[1]-TZ[0])/(L+1.5)/Math.max(.2,Math.abs(Math.cos(a)))*Math.sign(Math.cos(a)||1);B.map(([u,v,s,i])=>({p:P_(u,v,deck+1),s,i})).sort((p,q)=>p.p[1]-q.p[1]).forEach(b=>{g.save();g.translate(b.p[0],b.p[1]);g.transform(1,k,0,1,0,0);Q2.block(g,0,0,P,o.blockSeeds?o.blockSeeds[b.i]:sd*7+b.i,b.s);g.restore()})}}
+/* wet-ground streak / drag ruts behind (o: list of past runner centres, newest first) */
+function trail(g,hist,dir,t){if(!hist||hist.length<2)return;const a=ang(dir),W=DIM.W;for(const s of[-1,1]){g.lineCap='round';for(let i=1;i<hist.length;i++){const A=hist[i-1],B=hist[i],al=.32*(1-i/hist.length);const off=(h)=>pj(h.x,h.y,h.a,-DIM.L/2+2,s*W*.36,0);const p=off(A),q=off(B);g.strokeStyle=`rgba(60,46,30,${al})`;g.lineWidth=2.4;g.beginPath();g.moveTo(p[0],p[1]);g.lineTo(q[0],q[1]);g.stroke();g.strokeStyle=`rgba(200,214,220,${al*.5})`;g.lineWidth=.6;g.stroke()}}}
+/* crew slots */
+function slots(x,y,dir,cfg){const C=CFG[cfg],a=ang(dir),{L}=DIM,d=pawnDir(dir),S=[];
+ if(C.push)S.push({role:'push',k:0,u:-L/2-4.5,v:0});
+ if(C.pull===1)S.push({role:'pull',k:0,u:L/2+15,v:0});else if(C.pull===2){S.push({role:'pull',k:0,u:L/2+14,v:-6.5});S.push({role:'pull',k:1,u:L/2+17,v:6.5})}
+ return S.map(s=>{const p=pj(x,y,a,s.u,s.v,0);return Object.assign(s,{x:p[0],y:p[1],d,a})})}
+/* step-synced motion. n crew -> speed v (px/s). One step = Ls px over T s. Phase p: 0-.55 crew STEP (bodies advance Ls, sledge still -> ropes tighten),
+   .55-1 HEAVE (crew planted, lean max, sledge jerks forward Ls). Pusher moves with the sledge (his step happens during the heave). */
+const sm=u=>{u=Math.max(0,Math.min(1,u));return u*u*(3-2*u)};
+function motion(cfg,t){const C=CFG[cfg],n=C.pull+C.push,v=SLEDGE_SPEED.pxs(n),Ls=2.6+v*.35,T=Ls/v,k=t/1000/T,i=Math.floor(k),p=k-i;
+ const crew=i*Ls+Ls*sm(p/.55),sled=i*Ls+Ls*sm((p-.55)/.45),heave=p>.55?Math.sin((p-.55)/.45*PI):0;
+ return{v,Ls,T,p,s:sled,crew,heave,lean:p<.55?.7+.3*sm(p/.55):1,bob:p<.55?Math.sin(p/.55*PI)*.7:0,sq:p<.55?1:.94+.06*(1-heave),slack:p<.55?(1-sm(p/.3))*.6:0,stepPusher:sm((p-.55)/.45)}}
+/* one crew member. c: slot; M: motion; o.look, o.res */
+const PC=new Map();const pSpr=(o,d,r)=>{const k=JSON.stringify(o)+d+'|'+r;let s=PC.get(k);if(!s){s=pawnSprB(o,d,r);PC.set(k,s)}return s};
+const LOOKS=[{sex:'m',sk:'#d09468',hair:'#3a2414',hs:'short',beard:'full',cls:'laborer',g:'tunic',t:'#9a6a3a',t2:'#6a4226',hat:'band',hc:'#c84a2c'},{sex:'m',sk:'#b87a50',hair:'#1a100a',hs:'short',beard:'short',cls:'laborer',g:'kilt',t:'#e0d4b0',t2:'#a89a70'},{sex:'m',sk:'#c89060',hair:'#2a1a0e',hs:'bald',beard:'full',cls:'laborer',g:'tunic',t:'#7a8a5a',t2:'#4a5a36'}];
+function body(g,X,Y,d,look,res,lean,bob,sq,fwd){const k=typeof PSC!=='undefined'?PSC:.72,fl=d===2?-1:1,side=d===0||d===2;g.save();g.translate(X,Y);g.scale(k,k);g.drawImage(shadowSpr(),-7,-2,14,6);
+ if(side)g.rotate(fl*lean);else{g.transform(1,0,0,1,0,0)}g.scale(1,sq);g.drawImage(pSpr(look,d,res),-12,-29-bob+(side?0:(d===1?1:-1)*fwd*0),24,32);g.restore()}
+function hand(X,Y,d,lean,bob){const fl=d===2?-1:1,side=d===0||d===2;let hx=X+(d===1?5:d===3?-5:fl*4),hy=Y-10-(bob||0)*.72;if(side){const c=Math.cos(fl*lean),s=Math.sin(fl*lean),dx=hx-X,dy=hy-Y;hx=X+dx*c-dy*s;hy=Y+dx*s+dy*c}return[hx,hy]}
+function crew(g,c,M,o){o=o||{};const d=c.d,side=d===0||d===2,look=o.look||LOOKS[(c.k+(c.role==='push'?2:0))%3],res=o.res||6;
+ if(c.role==='pull'){/* hard forward lean into the rope; S/N views: shoulders dropped (squash) and the body pitched toward the travel */const lean=side?.32+.16*M.lean:0,sq=side?M.sq:(.9+.04*(1-M.lean))*M.sq;body(g,c.x,c.y,d,look,res,lean,M.bob,sq,0);return hand(c.x,c.y,d,lean,M.bob)}
+ else{/* pusher: shoulder against the rear crossbeam, braced, deep lean */const lean=side?.42+.1*M.heave:0,sq=side?.96:.9-.04*M.heave;body(g,c.x,c.y,d,look,res,lean,M.bob*.5,sq,0);return null}}
+function rope(g,a,b,slack){const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2+slack*3.2;g.strokeStyle='#5a4426';g.lineWidth=.95;g.beginPath();g.moveTo(a[0],a[1]);g.quadraticCurveTo(mx,my,b[0],b[1]);g.stroke();g.strokeStyle='#d0b47a';g.lineWidth=.5;g.stroke()}
+/* whole group at sledge centre (x,y) */
+function drawGroup(g,x,y,dir,load,cfg,t,o){o=o||{};const M=o.M||motion(cfg,t),S=slots(x,y,dir,cfg),a=ang(dir);
+ /* crew feet lead/lag the sledge according to the step phase (pullers step before the heave; the pusher stays in contact) */const off=(M.crew-M.s);
+ for(const c of S){if(c.role==='pull'){c.x+=Math.cos(a)*off;c.y+=Math.sin(a)*off*KY}if(o.ground)c.y+=o.ground(c.x,c.y)}const ySort=y+(o.tilt?(o.tilt[0]+o.tilt[1])/2:0);
+ const items=[{y:ySort,f:()=>{drawSledge(g,x,y,dir,load,t,o);}}];const att=attach(x,y,dir,o.tilt);
+ const pulls=S.filter(c=>c.role==='pull');
+ for(const c of S)items.push({y:c.y,f:()=>{const h=crew(g,c,M,o);if(h){c.h=h}}});
+ /* ropes: drawn right after the sledge but their hand ends after each puller (clutched); a rope to a puller behind the sledge in depth goes first */
+ items.push({y:ySort+.01,f:()=>{pulls.forEach((c,i)=>{const h=hand(c.x,c.y,c.d,(c.d===0||c.d===2)?.32+.16*M.lean:0,M.bob);const e=att[pulls.length===1?0:i],e2=att[pulls.length===1?1:i];rope(g,e,h,M.slack);if(pulls.length===1)rope(g,e2,h,M.slack)})}});
+ items.sort((p,q)=>p.y-q.y).forEach(it=>it.f());
+ /* clutched rope ends on top of the hands */pulls.forEach(c=>{const h=hand(c.x,c.y,c.d,(c.d===0||c.d===2)?.32+.16*M.lean:0,M.bob);g.fillStyle='#5a4426';g.beginPath();g.arc(h[0],h[1],.9,0,TAU);g.fill()});
+ return S}
+
+/* ---------- smooth paths (curved turns, continuous heading) ---------- */
+function makePath(pts,iters){let P=pts.map(p=>[p[0],p[1]]);for(let it=0;it<(iters==null?4:iters);it++){const Q=[P[0]];for(let i=0;i<P.length-1;i++){const A=P[i],B=P[i+1];if(Math.hypot(B[0]-A[0],B[1]-A[1])<.01)continue;Q.push([A[0]*.75+B[0]*.25,A[1]*.75+B[1]*.25],[A[0]*.25+B[0]*.75,A[1]*.25+B[1]*.75])}Q.push(P[P.length-1]);P=Q}
+ /* resample evenly every 1 px */const cum=[0];for(let i=1;i<P.length;i++)cum.push(cum[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));const L=cum[cum.length-1];
+ const at=s=>{s=Math.max(0,Math.min(L,s));let lo=0,hi=cum.length-1;while(hi-lo>1){const m=(lo+hi)>>1;cum[m]<=s?lo=m:hi=m}const u=(s-cum[lo])/Math.max(1e-6,cum[hi]-cum[lo]),A=P[lo],B=P[hi];
+  /* heading from a 6 px chord so it changes gradually */const s0=Math.max(0,s-3),s1=Math.min(L,s+3);const pa=pos(s0),pb=pos(s1);return{x:A[0]+(B[0]-A[0])*u,y:A[1]+(B[1]-A[1])*u,a:Math.atan2((pb[1]-pa[1])/KY,pb[0]-pa[0])}};
+ const pos=s=>{let lo=0,hi=cum.length-1;while(hi-lo>1){const m=(lo+hi)>>1;cum[m]<=s?lo=m:hi=m}const u=(s-cum[lo])/Math.max(1e-6,cum[hi]-cum[lo]),A=P[lo],B=P[hi];return[A[0]+(B[0]-A[0])*u,A[1]+(B[1]-A[1])*u]};
+ return{P,L,at,pos}}
+const dirFromA=a=>a/(PI/4);
+const pawnDirA=a=>{const c=Math.cos(a),s=Math.sin(a);return c>.38?0:c<-.38?2:s>0?1:3};
+/* drag streak: sampled along the path behind the rear, offset to each runner by the local tangent: follows curves, no zig-zags */
+function trailPath(g,path,s1,len,Z){const W=DIM.W,s0=Math.max(0,s1-len);g.lineCap='round';for(const sd of[-1,1]){let prev=null;for(let s=s0;s<=s1;s+=1.5){const q=path.at(s),v=sd*W*.36,x=q.x-Math.sin(q.a)*v,y=q.y+Math.cos(q.a)*v*KY+(Z?Z(q.x,q.y):0),al=.32*((s-s0)/Math.max(1,s1-s0));
+  if(prev){g.strokeStyle=`rgba(60,46,30,${al})`;g.lineWidth=2.4;g.beginPath();g.moveTo(prev[0],prev[1]);g.lineTo(x,y);g.stroke();g.strokeStyle=`rgba(200,214,220,${al*.5})`;g.lineWidth=.6;g.stroke()}prev=[x,y]}}}
+/* whole group on a path at arc length s (sledge centre). Pullers walk the path ahead (they swing round curves first), the pusher follows it behind.
+   Each puller faces along his rope (from the rope eye to his feet); the pusher faces the sledge heading. o.Z(x,y) = ramp height offset; o.noCrew; o.blocks */
+function drawPath(g,path,s,load,cfg,t,o){o=o||{};const M=o.M||motion(cfg,t),C=CFG[cfg],{L}=DIM,Z=o.Z||(()=>0);
+ const R=path.at(s-L/2),F=path.at(s+L/2+1.5),c=path.at(s);const a=Math.atan2((F.y-R.y)/KY,F.x-R.x),cx=(R.x+F.x)/2,cy=(R.y+F.y)/2;
+ const tilt=[Z(R.x,R.y),Z(F.x,F.y)],dir=dirFromA(a),att=attach(cx,cy,dir,tilt),items=[],crewL=[];
+ const ahead=M.crew-M.s;
+ if(!o.noCrew){if(C.pull){for(let k=0;k<C.pull;k++){const q=path.at(s+L/2+14+k*3+ahead),v=C.pull===1?0:(k?6.5:-6.5),x=q.x-Math.sin(q.a)*v,y=q.y+Math.cos(q.a)*v*KY;const e=att[C.pull===1?0:k],fa=Math.atan2((y+Z(x,y)-e[1])/KY,x-e[0]);crewL.push({role:'pull',k,x,y:y+Z(x,y),d:pawnDirA(fa),eye:C.pull===1?null:e})}}
+  if(C.push){const q=path.at(s-L/2-4.5);crewL.push({role:'push',k:0,x:q.x,y:q.y+Z(q.x,q.y),d:pawnDirA(a)})}}
+ const ySort=cy+(tilt[0]+tilt[1])/2;items.push({y:ySort,f:()=>drawSledge(g,cx,cy,dir,load,t,Object.assign({},o,{tilt}))});
+ const pulls=crewL.filter(c=>c.role==='pull');const leanOf=c=>(c.d===0||c.d===2)?.32+.16*M.lean:0;
+ items.push({y:ySort+.01,f:()=>{pulls.forEach((c,i)=>{const h=hand(c.x,c.y,c.d,leanOf(c),M.bob);if(pulls.length===1){rope(g,att[0],h,M.slack);rope(g,att[1],h,M.slack)}else rope(g,att[i],h,M.slack)})}});
+ for(const cw of crewL)items.push({y:cw.y,f:()=>crew(g,cw,M,o)});
+ items.sort((p,q)=>p.y-q.y).forEach(it=>it.f());pulls.forEach(c=>{const h=hand(c.x,c.y,c.d,leanOf(c),M.bob);g.fillStyle='#5a4426';g.beginPath();g.arc(h[0],h[1],.9,0,TAU);g.fill()});
+ return{cx,cy,a,dir,tilt,att,crew:crewL}}
+/* block layout on the deck (local u,v) for load 3, to find a block's world position (for unloading) */
+function blockPos(cx,cy,dir,tilt,i,load){const B=(load||3)===3?[[-10.5,-1],[1,1.5],[11.5,-1]]:(load===2?[[-8.5,0],[8.5,0]]:[[0,0]]),{L,deck}=DIM,a=ang(dir),[u,v]=B[i],p=pj(cx,cy,a,u,v,deck+1);if(tilt)p[1]+=tilt[0]+(tilt[1]-tilt[0])*(u+L/2)/(L+1.5);return{x:p[0],y:p[1],ground:pj(cx,cy,a,u,v,0)}}
+G.SLEDGE={DIM,CFG,attach,slots,motion,crew,draw:drawGroup,trail,pawnDir,LOOKS,hand,makePath,drawPath,trailPath,pawnDirA,blockPos,body,pSpr,rope};G.drawSledge=drawSledge;G.SLEDGE_SPEED=SLEDGE_SPEED})(window);
+</script>
 <script>/* TREES art (art-studio/trees-crops/trees.js, embedded) */
 /* Bronze and Blood: TREES v1 in the berry-bush v3 style (dense layered small leaves, dark interior with branches, top-left light,
  * fruit embedded at depths, nothing floating), by Ningal. Art only, self-contained.
@@ -898,7 +1012,7 @@ function floorBlock(g,P,x,y,w,d,prog,sd){/* a block outlined in a floor (seen fr
  for(let i=0;i<Math.floor(w/3.2);i++)rr(g,x+1+i*3.2,y+d-1,1.3,1.8,.3,'#a0703c',OL(),.3);ln(g,x,y+d,x+w,y+d,'rgba(30,26,20,.4)',.5)}
 function jar(g,x,y,s){s=s||1;const O=OL();ell(g,x+1,y,3*s,1.2*s,'rgba(0,0,0,.25)');poly(g,[[x-2.8*s,y-.3*s],[x-3*s,y-4*s],[x-1.4*s,y-6.2*s],[x+1.4*s,y-6.2*s],[x+3*s,y-4*s],[x+2.8*s,y-.3*s]],'#b0683a',O,.5);ell(g,x,y-6.2*s,1.5*s,.6*s,'#4a2a14');g.fillStyle='rgba(255,220,180,.25)';g.fillRect(x-2*s,y-5*s,1*s,3.5*s)}
 function ladder(g,x,y,h){const O=OL();for(const dx of[-2.5,2.5])rr(g,x+dx-.6,y-h,1.3,h+1,.5,'#8a6038',O,.35);for(let q=y-h+2;q<y;q+=3.2)ln(g,x-2.4,q,x+2.4,q,'#6e4824',.8)}
-function sledge(g,x,y,P,withBlock,sd){const O=OL();ell(g,x+1,y+1.5,11,2.6,'rgba(0,0,0,.22)');for(const dy of[-2.5,2.5])rr(g,x-11,y+dy-.8,22,1.8,.9,'#7a5232',O,.4);for(let k=-8;k<=8;k+=4)rr(g,x+k-.8,y-3.4,1.6,6.8,.6,'#8a6038',O,.35);
+function sledge(g,x,y,P,withBlock,sd){/* Weston-approved: Ningal's full-size stone sledge replaces the small hand-sledge */if(typeof drawSledge==='function')return drawSledge(g,x,y,0,withBlock?1:0,0,{P,seed:sd});const O=OL();ell(g,x+1,y+1.5,11,2.6,'rgba(0,0,0,.22)');for(const dy of[-2.5,2.5])rr(g,x-11,y+dy-.8,22,1.8,.9,'#7a5232',O,.4);for(let k=-8;k<=8;k+=4)rr(g,x+k-.8,y-3.4,1.6,6.8,.6,'#8a6038',O,.35);
  ln(g,x-11,y-2.5,x-16,y-5,'#c8a868',.6);ln(g,x-11,y+2.5,x-16,y+1,'#c8a868',.6);if(withBlock)block(g,x,y+1,P,sd||3,1)}
 function dust(g,P,x,y,t,sd){for(let k=0;k<3;k++){const u=((t/2400)+k/3+hs(sd,k))%1;g.fillStyle='rgba('+P.dust+','+(.5*(1-u))+')';g.beginPath();g.arc(x+u*5+(k-1)*3,y-u*9,1.2+u*4,0,TAU);g.fill()}}
 
@@ -1194,7 +1308,7 @@ function worker(g,X,Y,P,w,now,i){const o={now,idx:i||0,look:w.look};switch(w.tas
  case'carry_log':case'post':case'lintel':return carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:w.task==='carry_log',item:'log'}));
  case'haul':return carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:true,seed:w.seed},w.item?{item:w.item}:{}));
  case'water':return carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:true,item:'jar'}));
- case'sledge':{sledge(g,X,Y,P,true,7);carrier(g,X+18,Y-1,P,0,Object.assign(o,{moving:true,item:'none'}));carrier(g,X+26,Y+2,P,0,Object.assign(o,{moving:true,item:'none',idx:(i||0)+1}));ln(g,X-11,Y-2.5,X+16,Y-4,'#c8a868',.6);return}
+ case'sledge':{if(typeof SLEDGE!=='undefined'){SLEDGE.draw(g,X,Y,0,2,'2pull',performance.now(),{P});return}sledge(g,X,Y,P,true,7);carrier(g,X+18,Y-1,P,0,Object.assign(o,{moving:true,item:'none'}));carrier(g,X+26,Y+2,P,0,Object.assign(o,{moving:true,item:'none',idx:(i||0)+1}));ln(g,X-11,Y-2.5,X+16,Y-4,'#c8a868',.6);return}
  case'lash':{const cyc=(now/900)%1;carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:false,item:'none'}));const hx=X+(w.dir===2?-4:4),hy=Y-10+Math.sin(cyc*TAU)*1.2;ell(g,hx+Math.cos(cyc*TAU)*1.4,hy,1.5,1.1,'#d8c08a',OL(),.35);return}
  case'lamp':{carrier(g,X,Y,P,w.dir,Object.assign(o,{moving:false,item:'none'}));const hx=X+(w.dir===3?-5:5),hy=Y-10;ell(g,hx,hy,1.8,.8,'#b0683a',OL(),.3);ell(g,hx,hy-1,.7,1.1,'#ffcf5a');return}
  default:return cutter(g,X,Y,P,w.dir,o)}}
@@ -4258,7 +4372,42 @@ function crThink(a,h,n){const E=S.eco,cid=crId(a),c=E&&E.cr.find(c=>c.id===cid),
  const hb=holdB(),inF=c.fx&&S.t-c.fx<DAYLEN*.6;
  if(hb&&c.c!=='baker'&&schedBlock()==='work'&&(c.gr||0)<crLo(c)&&!inF&&(E.hold.grain||0)>=1){c.fx=S.t;a.carry=null;go(a,doorOf(hb),'cfetch');return}
  if(c.c==='baker'){idleLeis(a,hm);return}/* removed: bakers standing in the workshop with nothing to do */const ws=inSpot(o,a.idx*3+11,0);go(a,ws,'towork');a.t=4+Math.random()*3}
-function think(a){const h=hubT(),n=rtBlock(a)==='rest';if(a.carry==='sack'&&a.state==='home'&&!a.load)a.carry=null;if(n&&a.state==='home'&&a.role!=='soldier'&&a.role!=='kid'){a.t=3;return}
+/* ---- STONE SLEDGE (Weston-approved, Ningal's art). Anyone moving stone drags it on a sledge. The hauler is the first puller; free co-workers
+   (same family / same role, 12+, idle, nearby) join as the second puller, then the pusher. More crew = faster; it is slow on purpose.
+   On arrival the crew unloads, then the empty sledge goes back to its home site (quarry yard or palace stores). ALL SPEEDS HERE: ---- */
+const SLEDGE_TUNE={base:.275/*tiles/s*/,crew:{1:.35,2:.6,3:.85}/*x base: .096/.165/.234 t/s*/,empty:1/*x base for the empty return*/,joinR:14,unload:1.5/*s*/};
+const SL_CARRY={stone:1,block:1};
+const slTps=(n,empty)=>SLEDGE_TUNE.base*(empty?SLEDGE_TUNE.empty:(SLEDGE_TUNE.crew[n]||SLEDGE_TUNE.crew[3]));
+const slByKey=k=>agents.find(x=>x.key===k);
+function slIsStone(a){return !!(SL_CARRY[a.carry]||(a.load&&a.load.r==='stone'&&a.carry))}
+function slHome(a){let best=null,bd=14;for(const b of S.bl){if(b.t!=='quarry')continue;const y=typeof qYardT==='function'?null:null;const d=Math.hypot(b.x+6-a.x,b.y+6-a.y);if(d<bd){bd=d;best={x:b.x+(typeof QYX!=='undefined'?(QYX+8)/TS:6),y:b.y+(typeof QYY!=='undefined'?(QYY+8)/TS:9)}}}
+ if(best)return best;const hb=typeof holdB==='function'?holdB():null;if(hb){const d=doorOf(hb);return{x:d.x+.5,y:d.y+.5}}return{x:a.x,y:a.y}}
+function slFree(h,a){return h!==a&&!h.dead&&!h.sl&&(h.age||20)>=12&&h.role!=='kid'&&h.role!=='soldier'&&h.state!=='home'&&!(h.route&&h.route.length)&&!h.load&&!h.carry&&!h.fj&&!h.bsite&&!h.rj&&!h.hj&&(a.st!=null?h.st===a.st:h.role===a.role)&&Math.hypot(h.x-a.x,h.y-a.y)<SLEDGE_TUNE.joinR}
+function slCfg(n){return n>=3?'2pull1push':n===2?'2pull':'1pull'}
+function slStart(a){a.sl={L:1,crew:[],home:slHome(a),d:2,ld:Math.max(1,Math.min(3,Math.ceil(((a.load&&a.load.n)||1)/3))),rt:0}}
+function slOn(a){return a.sl.crew.map(slByKey).filter(h=>h&&h.sl&&h.sl.H===a.key&&h.sl.ph==='on').length}
+/* sledge anchor + crew feet from the hauler's position (hauler = pull slot 0) */
+function slGeom(a,n){const cfg=slCfg(n),dir=a.sl.d,S0=SLEDGE.slots(0,0,dir,cfg),p0=S0.find(c=>c.role==='pull')||S0[0],ax=a.x*TS-p0.x,ay=a.y*TS-p0.y;return{cfg,dir,ax,ay,slots:SLEDGE.slots(ax,ay,dir,cfg)}}
+function slTick(dt){if(typeof SLEDGE==='undefined'||!S||!S.bl)return;const now=S.t;
+ for(const a of agents){if(a.dead){a.sl=null;continue}
+  if(!a.sl&&slIsStone(a)&&a.route&&a.route.length)slStart(a);if(!a.sl)continue;const L=a.sl;
+  if(L.L||L.R){/* heading from the route */if(a.route&&a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y;if(Math.hypot(dx,dy)>.05){L.d=((Math.round(Math.atan2(dy,dx)/(Math.PI/4))%8)+8)%8}}}
+  if(L.L){if(slIsStone(a)){/* recruit up to 2 helpers, once a second */L.rt-=dt;if(L.rt<=0&&L.crew.length<2){L.rt=1;const h=agents.find(h=>slFree(h,a));if(h){h.sl={H:a.key,ph:'join',k:L.crew.length,t:0};L.crew.push(h.key);h.route=[];go(h,{x:a.x,y:a.y},'crew');h.t=1}}
+    const n=1+slOn(a),G=slGeom(a,n);L.n=n;let si=1;for(const k of L.crew){const h=slByKey(k);if(!h||!h.sl||h.sl.H!==a.key)continue;
+     if(h.sl.ph==='join'){h.sl.t-=dt;if(Math.hypot(h.x-a.x,h.y-a.y)<1.6){h.sl.ph='on'}else if(h.sl.t<=0){h.sl.t=1.2;go(h,{x:a.x,y:a.y},'crew')}continue}
+     const c=G.slots[si++];if(c){const tx=c.x/TS,ty=c.y/TS;if(Math.hypot(h.x-tx,h.y-ty)>2.5){h.x=tx;h.y=ty;h.route=[]}else h.route=Math.hypot(h.x-tx,h.y-ty)>.08?[{x:tx,y:ty}]:[];h.state='crew';h.dir=c.d}}
+    L.crew=L.crew.filter(k=>{const h=slByKey(k);return h&&h.sl&&h.sl.H===a.key})}
+   else{/* delivered: crew unloads, then the empty sledge goes home */if(!L.u){L.u=SLEDGE_TUNE.unload;for(const k of L.crew){const h=slByKey(k);if(h&&h.sl){h.route=[];h.state='work';h.sl.ph='unl'}}}
+    L.u-=dt;if(L.u<=0){const on=L.crew.map(slByKey).filter(h=>h&&h.sl&&h.sl.H===a.key);const home=L.home,far=Math.hypot(a.x-home.x,a.y-home.y)>2;
+     for(const h of on){h.sl=null;h.state='idle';h.t=.5}
+     if(!far)a.sl=null;else if(on[0]){const r=on[0];r.sl={R:1,home,d:L.d,ld:0};go(r,home,'carry');r.t=1;a.sl=null}else{a.sl={R:1,home,d:L.d,ld:0};go(a,home,'carry');a.t=1}}}}
+  else if(L.R){if(!(a.route&&a.route.length)){if(Math.hypot(a.x-L.home.x,a.y-L.home.y)<2.2){a.sl=null;a.state='idle';a.t=.3}else go(a,L.home,'carry')}}
+  else if(L.H){const ld=slByKey(L.H);if(!ld||!ld.sl||!ld.sl.L){a.sl=null;a.state='idle';a.t=.3}}}}
+function slSpeed(a){const L=a.sl;if(!L)return 0;if(L.L&&slIsStone(a))return slTps(L.n||1,false);if(L.R)return slTps(1,true);return 0}
+function slDraw(a,p,now){const L=a.sl;if(!L||!(L.L||L.R)||typeof drawSledge!=='function')return;const n=L.L?(L.n||1):1,cfg=slCfg(n),S0=SLEDGE.slots(0,0,L.d,cfg),p0=S0.find(c=>c.role==='pull')||S0[0],ax=p.x-p0.x,ay=p.y-p0.y;
+ drawSledge(vx,ax,ay,L.d,L.L&&slIsStone(a)?L.ld:0,now,{});const att=SLEDGE.attach(ax,ay,L.d),sl=SLEDGE.slots(ax,ay,L.d,cfg).filter(c=>c.role==='pull');const hands=sl.map(c=>SLEDGE.hand(c.x,c.y,c.d,0,0));
+ if(hands.length===1){SLEDGE.rope(vx,att[0],hands[0],.4);SLEDGE.rope(vx,att[1],hands[0],.4)}else hands.forEach((h,i)=>SLEDGE.rope(vx,att[i],h,.4))}
+function think(a){if(a.sl&&(a.sl.H||a.sl.R)){a.t=.5;return}/* sledge crew / empty-sledge return: driven by slTick */const h=hubT(),n=rtBlock(a)==='rest';if(a.carry==='sack'&&a.state==='home'&&!a.load)a.carry=null;if(n&&a.state==='home'&&a.role!=='soldier'&&a.role!=='kid'){a.t=3;return}
  try{if(mktThink(a))return}catch(e){}
  if(schedThink(a,h,n))return;
  if(a.st!=null){steadThink(a,h,n);return}if(a.role==='crafter'){crThink(a,h,n);return}if(a.role==='royal'){if(n||rtBlock(a)==='rest'){if(!(a.state==='home'&&a.inB===a.home.b&&!a.route.length))go(a,a.home,'home');a.t=3;return}idleLeis(a,h);return}/* Weston: the royal family has no role yet (placeholder): leisure by the palace door */
@@ -4914,7 +5063,7 @@ function drawAgent(a,p,moving,now){if(a.state==='home'&&a.inB&&!moving&&!(a.rout
   vx.save();vx.translate(p.x,p.y-6);vx.rotate(-Math.PI/2);rr(vx,-22,-11,40,22,3,'#e8dcc0','rgba(60,40,20,.6)',.8);rr(vx,-22,-11,9,22,3,'#f4eee0');const br=Math.sin(now/1300+(a.idx||0))*.4;vx.drawImage(pawnSpr(a.o,1,2),-16,-14,21,28);rr(vx,-16,-.5+br,20,13-br,3,TUN[(a.idx||0)%TUN.length],'rgba(40,20,10,.6)',.7);ln(vx,-15,3+br,3,3+br,'rgba(255,240,200,.35)',.8);vx.restore();
   if(Math.floor(now/900+a.idx)%3===0){vx.fillStyle='rgba(240,240,255,.85)';vx.font='bold 9px sans-serif';vx.fillText('z',p.x+8,p.y-18-(now/90%10))}return}
  if(GH_ART&&!moving&&a.hvTool==='basket'&&a.hvk&&a.state==='work'&&a.gj&&a.gj.ph==='pick'){ghPickDraw(a,p,now);return}
- if(PSC!==1){vx.save();vx.translate(p.x,p.y);vx.scale(PSC,PSC);vx.translate(-p.x,-p.y);try{_drawAgent0(a,p,moving,now)}finally{vx.restore()}}else _drawAgent0(a,p,moving,now);wfFront(a,p,now)/* after the PSC scale is undone: the strip is in plain world px */}
+ if(a.sl)slDraw(a,p,now);if(PSC!==1){vx.save();vx.translate(p.x,p.y);vx.scale(PSC,PSC);vx.translate(-p.x,-p.y);try{_drawAgent0(a,p,moving,now)}finally{vx.restore()}}else _drawAgent0(a,p,moving,now);wfFront(a,p,now)/* after the PSC scale is undone: the strip is in plain world px */}
 /* ---- F1 shared pose system: every pawn animation, in the game and in the dev animation preview, reads its tool, swing curve and timing from this one table ---- */
 const POSE={idle:{n:'Idle / standing'},walk:{n:'Walking'},
  swing:{n:'Tool swing (felling axe, hoe, pick, hammer, sickle, club)',period:900,curve:[[0,.2],[.45,-1.5,'io'],[.58,.35,'in'],[.7,.2],[1,.2]],chip:[.56,.6]},
@@ -5006,7 +5155,8 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
   const dx=c.tx-c.x,dy=c.ty-c.y,d=Math.hypot(dx,dy);if(d>.03){c.x+=dx/d*.4*dt;c.y+=dy/d*.4*dt;c.dir=dx>0?1:-1}if(z<.5||!inV(c.x*TS,c.y*TS))return;D.push({k:c.y*TS,f:()=>critDraw(c,now)})});
  if(!S.rn||!S.herds)rnInit();rnBuild();rnHerdStep(dt);if(z>=.5)rnHerdDraw(D,dt,now,inV);try{if(z>=.5)huntVis(D,now,inV)}catch(e){}try{if(z>=.5)qVis(D,now,inV)}catch(e){}
  const sickP=evOn('plague');
- for(const a of agents){if(a.dnc&&!a.route.length)try{danceStep(a,dt)}catch(e){a.dnc=null}if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?(SCLA?RSPD_A[rl]:RSPD[rl])*Math.max(.35,congF(ri)):1,sp=(SCLA?WALK_A*(a.role==='kid'||(a.o&&a.o.age==='old')?.8:1)/* Weston: carrying never slows anyone down */:(a.role==='kid'?1.4:1))*(a.sick?.6:1)*(a.limp?.55:1)/* gored hunter limps */*rd*dt;
+ try{slTick(dt)}catch(e){console.warn('sledge',e)}
+ for(const a of agents){if(a.dnc&&!a.route.length)try{danceStep(a,dt)}catch(e){a.dnc=null}if(a.route.length){const p=a.route[0],dx=p.x-a.x,dy=p.y-a.y,d=Math.hypot(dx,dy),ri=(a.y|0)*MW+(a.x|0),rl=roadSet[ri]||0,rd=rl?(SCLA?RSPD_A[rl]:RSPD[rl])*Math.max(.35,congF(ri)):1,slv=a.sl?slSpeed(a):0,sp=slv?slv*rd*dt:(SCLA?WALK_A*(a.role==='kid'||(a.o&&a.o.age==='old')?.8:1)/* Weston: carrying never slows anyone down */:(a.role==='kid'?1.4:1))*(a.sick?.6:1)*(a.limp?.55:1)/* gored hunter limps */*rd*dt;
    if(rl)TR[ri]+=dt*(a.carry&&S.tier>=2?2:1);if(!rl||(rl===1&&WORN&&WORN[ri]))wearStep(ri,dt);if(d>.01)a.dir=dirOf(dx,dy);a.ft+=dt*(a.role==='kid'?10:7);if(d<=sp){a.x=p.x;a.y=p.y;a.route.shift();if(!a.route.length){if(a.state==='towork'){a.state='work';a.t=3+Math.random()*4}else if(a.state==='home')a.t=3}}else{a.x+=dx/d*sp;a.y+=dy/d*sp}}
   else{a.t-=dt;if(a.t<=0){// job/path decisions are spread over frames: at most ~2 ms of thinking per frame (min 3 pawns), the rest wait a frame
  const TB=think.fb!==vframe.t0?(think.fb=vframe.t0,think.n=0,think.dl=performance.now()+2):0;if(think.n<3||performance.now()<think.dl){think.n++;think(a)}}}a.sick=!!sickP&&a.idx%3===0&&a.role!=='soldier';if(a.state==='home'&&!a.route.length&&!a.inB)continue;if(z<.5)continue;let p=isoP(a.x,a.y);if(!inV(p.x,p.y))continue;const mv=a.route.length>0||!!a.dnc;if(a.inB&&a.inB.t==='qhouse'&&!mv&&!(z>=2.2||(sel&&S.bl[sel.i]===a.inB)))continue;/* QV2: inside a roofed quarry house */const ip=a.inB&&!mv&&a.inB.t!=='tent'?intPos(a,dt):null;if(ip)p=ip.p;D.push({k:a.inB&&!mv?(a.inB.y+bsz(a.inB.t))*TS:p.y,f:()=>ip?intDraw(a,p,ip,now):drawAgent(a,p,mv,now)})}
