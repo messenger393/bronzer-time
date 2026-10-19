@@ -2656,12 +2656,12 @@ function renderZones(V){const sec=(t)=>{const h=document.createElement('h4');h.t
  sec('Harvest');let b=bar();b.appendChild(btn('⛏ Harvest area',()=>{toolOpen('harv')},0,TOOL&&TOOL.k==='harv'?'sel':''));V.insertAdjacentHTML('beforeend','<p class="muted small">Drag over trees, bushes, rocks and herds to mark them for gathering.</p>');
  
  if(S.tier<1){return}/* D9: no Move Camp */
- sec('Roads');b=bar();[[2,'Packed road','1 stone'],[3,'Paved road','3 stone']].forEach(([l,n,c])=>{if(l<=roadMax())b.appendChild(btn(n+' · '+c,()=>{placing='__road';roadPick=l;ghost=null},0,placing==='__road'&&roadPick===l?'sel':''))});
+ sec('Roads');b=bar();[[1,'Dirt road','free'],[2,'Stone road','2 rough stone'],[3,'Fancy road','4 rough stone']].forEach(([l,n,c])=>{if(l<=roadMax())b.appendChild(btn(n+' · '+c,()=>{placing='__road';roadPick=l;ghost=null},0,placing==='__road'&&roadPick===l?'sel':''))});
  sec('Remove');b=bar();b.appendChild(btn('✖ Remove road / zone',()=>{placing='__erase';ghost=null},0,placing==='__erase'?'sel':''));
  sec('Brush size');b=bar();for(let s=1;s<=5;s++)b.appendChild(btn(s+'',()=>{roadBrush=s},0,roadBrush===s?'sel':''));
  sec('Shape');b=bar();[['free','Freehand'],['line','Line'],['rect','Rectangle']].forEach(([k,n])=>b.appendChild(btn(n,()=>{roadShape=k},0,roadShape===k?'sel':'')));
  if(roadMode())V.appendChild(btn('✔ Done painting',()=>{placing=null;ghost=null},0,'pri'));
- b=bar();const un=upgradeRoads(),rm=roadMax(),uc={stone:un*(rm===3?3:1)};if(un&&rm>1)b.appendChild(btn('Upgrade '+un+' tiles ('+uc.stone+' stone)',()=>{if(pay(uc)){for(let i=0;i<MW*MH;i++)if(roadSet[i])roadSet[i]=rm;chunkSig++;worldChanged();log('Roads upgraded!')}},!can(uc)));
+ b=bar();const un=upgradeRoads(),rm=roadMax(),uc={stone:un*RCOST[rm].stone};if(un&&rm>1)b.appendChild(btn('Order '+un+' tiles to '+RDNAME[rm]+' (~'+uc.stone+' rough stone)',()=>{roadUpgradeAll(rm)}));
  V.insertAdjacentHTML('beforeend','<p class="muted">Roads are optional: they only speed up walking. Paths also wear in by themselves where people walk often.</p>')}
 
 // ---- Land Grant tool (player paints farmland for a waiting family) ----
@@ -3594,9 +3594,9 @@ function renderView(){const V=$('view');V.innerHTML='';if(cur==='build'){renderA
  if(cur==='build'){V.innerHTML='<h3>Build</h3><div class="small">Tap Place, then tap a spot (tap again to confirm). Build anywhere — distant buildings lose output to walking time. Tap a building to upgrade.</div>';
   V.appendChild(btn('📍 Jump to settlement',()=>centerOn(S.center.x,S.center.y)));
   if(S.tier>=1){const rm=roadMax(),rv=document.createElement('div');rv.className='small';rv.innerHTML='<b>Roads</b> — roads only speed up walking; dirt paths wear in by themselves where people walk. Drag on the map to draw; tap Done to pan again.';V.appendChild(rv);
-   [[2,'🟧 Packed road (1 stone)'],[3,'⬜ Paved road (3 stone)']].forEach(([l,n])=>{if(l<=rm)V.appendChild(btn(n,()=>{placing='__road';roadPick=l;ghost=null},0,placing==='__road'&&roadPick===l?'sel':''))});
+   [[1,'🟫 Dirt road (free)'],[2,'🟧 Stone road (2 rough stone)'],[3,'⬜ Fancy road (4 rough stone)']].forEach(([l,n])=>{if(l<=rm)V.appendChild(btn(n,()=>{placing='__road';roadPick=l;ghost=null},0,placing==='__road'&&roadPick===l?'sel':''))});
    V.appendChild(btn('✖ Remove road',()=>{placing='__erase';ghost=null},0,placing==='__erase'?'sel':''));if(roadMode())V.appendChild(btn('✔ Done',()=>{placing=null;ghost=null}));
-   V.appendChild(btn((S.autoRoad!==false?'☑':'☐')+' Auto-paths for new buildings',()=>{S.autoRoad=S.autoRoad===false}));const un=upgradeRoads();if(un&&rm>1)V.appendChild(btn('Upgrade '+un+' road tiles ('+(un*(rm===3?3:1))+' stone)',()=>{if(pay({stone:un*(rm===3?3:1)})){for(let i=0;i<MW*MH;i++)if(roadSet[i])roadSet[i]=rm;chunkSig++;worldChanged();log('Roads upgraded!')}},!can({stone:un*(rm===3?3:1)})))}
+   V.appendChild(btn((S.autoRoad!==false?'☑':'☐')+' Auto-paths for new buildings',()=>{S.autoRoad=S.autoRoad===false}));const un=upgradeRoads();if(un&&rm>1)V.appendChild(btn('Order '+un+' road tiles to '+RDNAME[rm]+' (~'+(un*RCOST[rm].stone)+' rough stone)',()=>{roadUpgradeAll(rm)}))}
   for(const k in BLD){if(BLD[k].hide)continue;const a=bldAvail(k);row(V,BLD[k].n+(bsz(k)>1?' ('+bsz(k)+'x'+bsz(k)+')':'')+' ×'+cnt2(k),a||(BLD[k].d+' · '+cstr(bcost(k,0))),btn('Place',()=>{placing=k;log('Tap an empty tile to place '+BLD[k].n)},a||!can(bcost(k,0)),placing===k?'sel':''))}
   const nt=VILLAGE_LEVELS?TIERS[S.tier+1]:null;if(nt){const n=nt.need;const ok=S.pop>=n.pop&&S.won.length>=n.lands&&(!n.tech||S.tech[n.tech])&&(!n.bld||(n.bld==='holding'?!!holdB():cnt(n.bld)));
    row(V,'⬆ Become '+nt.n,'Needs pop '+n.pop+', '+n.lands+' land(s)'+(n.tech?', '+TECH[n.tech].n:'')+(n.bld?', a '+BLD[n.bld].n:'')+' · '+cstr(nt.cost),btn('Grow',()=>{if(pay(nt.cost)){S.tier++;log('Your people are now a '+nt.n+'!');save();renderTop();renderView();celebrate()}},!ok||!can(nt.cost)))}}
@@ -3841,7 +3841,7 @@ function steadThink(a,h,n){const E=S.eco,s=E&&E.steads.find(q=>q.id===a.st);if(!
 /* Weston (game-wide): no filler tasks. A pawn with no real work takes leisure a step or two from home and re-checks for work every ~2 s, so a new task pulls it straight back */
 function idleLeis(a,h){const hm=a.home||h,d=hm.door||hm;a.carry=null;a.hvk=null;a.bsite=null;if(a.state==='leis'){a.t=2;return true}const r1=hsh(a.idx||0,7,61),r2=hsh(a.idx||0,7,62);go(a,{x:d.x-1.2+r1*2.4,y:d.y+.7+r2*1.2},'leis');a.t=2;return true}
 function isYardLab(a){const E=S.eco,r=FAMK[a.key];return !!(E&&E.yard&&r&&E.yard.f.includes(r[0]))}
-function laborThink(a,h){if(buildThink(a))return true;if(harvestThink(a,4))return true;if(!isYardLab(a)&&haulThink(a))return true;/* Weston: Stockyard laborers only haul for construction (buildThink) */
+function laborThink(a,h){if(buildThink(a))return true;if(roadJobThink(a))return true;if(harvestThink(a,4))return true;if(!isYardLab(a)&&haulThink(a))return true;/* Weston: Stockyard laborers only haul for construction (buildThink) */
  if(a.state==='carry'){a.carry=null}return idleLeis(a,h)/* removed: fake log/stone carrying and walks to the woods */}
 const landlessN=()=>Math.max(0,S.pop-employed());
 function workSpot(a){if(a.role==='fisher'){const w=spotCache.water;return w.length?w[a.idx%w.length]:hubT()}if(a.role==='gatherer'||(a.role==='hunter'&&!a.work)){const f=spotCache.forest;return f.length?f[(a.idx*3)%f.length]:hubT()}
@@ -4409,7 +4409,7 @@ function applyLook(o,L,role){const keepHat=OUTFIT[role]&&OUTFIT[role].hat&&OUTFI
 function pspr(o,view,f,flip){return pawnSpr(o,flip?2:(view==='b'?3:0),1)}
 // ---------- roads / connectivity / desirability ----------
 const NOROAD={stead:1,shrine:1,senet:1,plaza:1,bridge:1,sbridge:1,dock:1,campfire:1,tent:1,wall:1,gate:1,garden:1,tree:1,statue:1,well:1,stockpile:1},DECOR={garden:1,tree:1,statue:1,well:1};
-const roadMax=()=>S.tier>=3?3:S.tier>=2?2:1,RCOST={1:{},2:{stone:1},3:{stone:3}},roadMode=()=>placing==='__road'||placing==='__erase'||placing==='__grant'||placing==='__wz'||!!ZN[placing];
+const roadMax=()=>S.tier>=3?3:S.tier>=2?2:1,RCOST={1:{},2:{stone:2},3:{stone:4}}/* rough stone per tile; TODO: fancy road (3) switches to fine stone once masons exist */,RDNAME={1:'Dirt road',2:'Stone road',3:'Fancy road'},roadMode=()=>placing==='__road'||placing==='__erase'||placing==='__grant'||placing==='__wz'||!!ZN[placing];
 const on=i=>{const b=S.bl[i];return !!b&&!b.cp};// roads are no longer required; they only speed up walking
 function perim(x,y,s,f){for(let k=0;k<s;k++){f(x+k,y-1);f(x+k,y+s);f(x-1,y+k);f(x+s,y+k)}}
 function touchXY(x,y,s){let ok=false;perim(x,y,s,(a,b)=>{if(a<0||b<0||a>=MW||b>=MH)return;const i=b*MW+a;if(roadSet[i]&&!occ[i])ok=true;else if(occ[i]){const o=S.bl[occ[i]-1];if(o&&o.t==='gate')ok=true}});return ok}
@@ -4611,7 +4611,7 @@ function vframe(now){vframe.t0=performance.now();const rdt=Math.min(.1,(now-(las
   for(let cy=r0;cy<=r1;cy++)for(let cx=c0;cx<=c1;cx++){const k=cx+','+cy;let ch=CH[k];if((!ch||ch.sig!==chunkSig)&&z>=.3&&performance.now()<CDL){const nc=chunkJob(cx,cy,CDL);if(nc)ch=nc}if(!ch||z<.3)continue;ch.used=now;const a=Math.round(X0+cx*W*zp),b=Math.round(Y0+cy*W*zp),w=Math.round(X0+(cx+1)*W*zp)-a,h=Math.round(Y0+(cy+1)*W*zp)-b;vx.imageSmoothingEnabled=z<1.5;const pc=BKM&&z>=.6?chComp(ch,cx,cy,CDL):null;if(pc)PBCOV.add(k);vx.drawImage(pc||chMip(ch,w),a,b,w,h);if(ch.f&&z>=.5){vx.globalAlpha=.45+.35*Math.sin(now/650+cx*1.7+cy);vx.drawImage(ch.f,a+Math.sin(now/1300)*zp*.8,b+((now/900|0)%2)*.6*zp,w,h);vx.globalAlpha=1}}
   vx.imageSmoothingEnabled=true;const ks=Object.keys(CH),nv=(c1-c0+1)*(r1-r0+1),lim=Math.max(220,nv*2+20);if(ks.length>lim){ks.sort((p,q)=>(CH[p].used||0)-(CH[q].used||0));ks.slice(0,ks.length-lim+30).forEach(k=>{if(CH[k].used!==now)delete CH[k]})}lowPrefill(c0,c1,r0,r1,z,now);TF()}
  const wt=now/1000;if(z>=.5){const gx0=Math.max(0,vl/TS|0),gx1=Math.min(MW-1,vr/TS|0),gy0=Math.max(0,vt/TS|0),gy1=Math.min(MH-1,vb/TS|0);for(let gy=gy0;gy<=gy1;gy++)for(let gx=gx0;gx<=gx1;gx++){if(hsh(gx,gy,9)>.18||!isWat(RT[gy*MW+gx]))continue;const X=(gx+hsh(gx,gy,4))*TS,Y=(gy+hsh(gx,gy,5))*TS,ph=(wt*.9+hsh(gx,gy,3)*6)%3;if(ph<1.6){vx.globalAlpha=Math.sin(ph/1.6*Math.PI)*.5;ln(vx,X+ph*5,Y,X+ph*5+7,Y,'#d8eef6',1);vx.globalAlpha=1}}}
- const D=[],blist=blds(),flats=[];FPB.on=1;FPB.n=1;
+ rqDraw(vl,vr,vt,vb,z);const D=[],blist=blds(),flats=[];FPB.on=1;FPB.n=1;
  blist.forEach(o=>{const b=o.b;let v=b.o||'';if(b.t==='farm'&&evOn('drought'))v='dry';const fe=S.ev.act.find(e=>e.id==='fire'&&e.bi===o.i);if(fe)v='burn';const s=o.s,X=o.gx*TS,Y=o.gy*TS;if(X>vr||X+s*TS<vl||Y>vb||Y+s*TS<vt)return;const sp=b.t==='wall'?wallSpr(b.x,b.y):bfp(b)?fpSpr(b,v):b.t==='quarry'&&s===12&&!b.cp?QV_FLAT:b.t==='qhouse'&&b.qH?QV_SOL:bspr(b.t,b.l,v);
   const e={o,sp,p:{x:X,y:Y},fire:!!fe,f:b.cp?()=>siteDraw(b,sp,X,Y,s,now):b.t==='farm'&&v!=='burn'?()=>farmDraw(b,X,Y,s,v,now,z):()=>{if(b.t==='quarry'&&s===12&&!b.cp){qSiteDraw(b,X,Y,now);return}if(b.t==='qhouse'&&b.qH){qHouseDraw(b,z>=2.2||(sel&&S.bl[sel.i]===b));return}if(b.t==='pcomplex'&&s===28){palBlit(b,X,Y,v==='burn',o.i,z,now,dt);return}if(b.t==='holding'&&s===8){holdBlit(b,X,Y,v==='burn',o.i,z);return}if(b.t==='gatherhut'&&s===5){gh5Blit(b,X,Y,v==='burn',now,0);return}if(b.t==='gatherhut'&&s===3){tentBlit(b,X,Y,v==='burn',now);ghYard(b,X,Y);return}/* H6: the family lives in the hut (tent art for now) */{const cb=z<=.8&&sp.m.walled?roofCombo(b,o.i,sp,z,dt):null;if(cb){vx.drawImage(cMip(cb,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);return}}if(b.t==='tent'&&s===3){tentBlit(b,X,Y,v==='burn',now);return}if(b.t==='lumber'&&s===6){lumBlit(X,Y,v==='burn',now);return}vx.drawImage(cMip(sp.c,(s*TS+16)*z*PXR),X-8,Y-8,s*TS+16,s*TS+16);if(sp.m.walled||STORES[b.t])bldOver(b,o.i,X,Y,s,z,dt)},k:(o.gy+s)*TS-2};if(sp.m.flat){flats.push(e)}else D.push(e)});
  ecoDrawFields(vl,vr,vt,vb,z);FPB.on=0;flats.forEach(e=>e.f());if(z>=.45&&S.stk)blist.forEach(o=>{const b=o.b;if(S.stk[bid(b)])stkDraw(b,o.gx*TS,o.gy*TS,o.s)});
@@ -4686,15 +4686,39 @@ function brushTiles(gx,gy,f){const b=roadBrush,o=(b-1)>>1;for(let y=gy-o;y<gy-o+
 function lineTiles(a,b,f){let x0=a.gx,y0=a.gy;const x1=b.gx,y1=b.gy,dx=Math.abs(x1-x0),dy=-Math.abs(y1-y0),sx=x0<x1?1:-1,sy=y0<y1?1:-1;let e=dx+dy;for(let n=0;n<600;n++){f(x0,y0);if(x0===x1&&y0===y1)break;const e2=2*e;if(e2>=dy){e+=dy;x0+=sx}if(e2<=dx){e+=dx;y0+=sy}}}
 function shapeTiles(a,b,f){if(roadShape==='rect'){for(let y=Math.min(a.gy,b.gy);y<=Math.max(a.gy,b.gy);y++)for(let x=Math.min(a.gx,b.gx);x<=Math.max(a.gx,b.gx);x++)f(x,y)}else lineTiles(a,b,(x,y)=>brushTiles(x,y,f))}
 function paintTile(gx,gy){if(gx<0||gy<0||gx>=MW||gy>=MH)return;const i=gy*MW+gx;
- if(placing==='__erase'){if(!roadSet[i])return;roadSet[i]=0}else{if(TER[i]===T_WATER||occ[i])return;if(roadSet[i]>=roadPick)return;if(!pay(RCOST[roadPick])){paintAt.err='Not enough stone';return}roadSet[i]=roadPick}
+ if(placing==='__erase'){const hadQ=S.rq&&S.rq[i];if(hadQ){delete S.rq[i];paintAt.n=(paintAt.n||0)+1}if(!roadSet[i])return;roadSet[i]=0}else{if(TER[i]===T_WATER||occ[i])return;if(roadSet[i]>=roadPick)return;if(roadPick<=1)roadSet[i]=roadPick;else{roadQueue(i,roadPick);paintAt.q=(paintAt.q||0)+1;return}}
  paintAt.n=(paintAt.n||0)+1;dirtyTile(gx,gy)}
 function paintAt(){}
+/* ===== ROAD WORKS (Weston): stone and fancy roads are an imperial duty. Painting one orders it (S.rq[tile]={l}); a palace (Stockyard) laborer
+   fetches the tile's rough stone from the palace stores (taken from S.res when picked up), carries it to the tile and lays it. Dirt roads are free
+   and appear at once. Speeds are the old Packed (2) / Paved (3) speeds. No upkeep or decay yet (deferred). Old saves: Packed = stone, Paved = fancy. */
+const RWT={2:4,3:6};/* seconds of laying work per tile */
+function roadQueue(i,l){S.rq=S.rq||{};const q=S.rq[i];if(q&&q.l>=l)return;S.rq[i]={l}}
+function upgradeRoadsQ(rm){let n=0;for(let i=0;i<MW*MH;i++)if(roadSet[i]&&roadSet[i]<rm&&!occ[i]&&!(S.rq&&S.rq[i]&&S.rq[i].l>=rm))n++;return n}
+function roadUpgradeAll(rm){let n=0;for(let i=0;i<MW*MH;i++)if(roadSet[i]&&roadSet[i]<rm&&!occ[i]){roadQueue(i,rm);n++}if(n)log(n+' road tiles ordered to '+RDNAME[rm]+': palace laborers will haul the stone and relay them.');renderView&&renderView()}
+function roadJobThink(a){const Q=S.rq;if(!Q){if(a.rjs){S.res.stone=(S.res.stone||0)+a.rjs;a.rjs=0}return false}
+ if(a.rj!=null&&!Q[a.rj]){/* order cancelled: the stone goes back to the palace stores */if(a.rjs){S.res.stone=(S.res.stone||0)+a.rjs;a.rjs=0}a.rj=null;a.carry=null;a.rjw=0;if(a.state==='rfetch'||a.state==='rdeliver')a.state='idle'}
+ if(a.rj!=null){const i=a.rj,q=Q[i],x=i%MW,y=(i/MW)|0;q.c=a.key;q.ct=S.t;
+  if(a.state==='rfetch'){const c=RCOST[q.l].stone;if((S.res.stone||0)<c){q.c=null;a.rj=null;roadShort();return false}S.res.stone-=c;a.rjs=c;a.carry='block';go(a,{x:x+.5,y:y+.5},'rdeliver');return true}
+  if(a.state==='rdeliver'){a.carry=null;a.state='work';a.rjw=1;a.t=RWT[q.l]||4;return true}
+  if(a.rjw){a.rjw=0;a.rjs=0;a.rj=null;delete Q[i];if(!occ[i]&&TER[i]!==T_WATER&&roadSet[i]<q.l){roadSet[i]=q.l;dirtyTile(x,y);roadsChanged(true)}return false}
+  /* lost track (e.g. interrupted): restart the trip */const st=roadStore();if(a.rjs){go(a,{x:x+.5,y:y+.5},'rdeliver');a.carry='block';return true}if(st){go(a,doorOf(st),'rfetch');return true}return false}
+ let best=-1,bd=1e9,any=0;for(const k in Q){const q=Q[k];if(q.c&&q.c!==a.key&&S.t-(q.ct||0)<DAYLEN)continue;any=1;const i=+k,x=i%MW,y=(i/MW)|0,d=Math.abs(x-a.x)+Math.abs(y-a.y);if(d<bd){bd=d;best=i}}
+ if(best<0)return false;const q=Q[best];if((S.res.stone||0)<RCOST[q.l].stone){roadShort();return false}
+ const st=roadStore();if(!st)return false;a.rj=best;q.c=a.key;q.ct=S.t;go(a,doorOf(st),'rfetch');return true}
+function roadStore(){/* palace stores: the Palace Complex (or the old Holding), else any store */return holdB()||S.bl.filter(b=>STORES[b.t]&&!b.cp)[0]}
+function roadShort(){const d=Math.floor(S.t/DAYLEN);if(roadShort.d===d)return;roadShort.d=d;log('Road works are waiting: the palace stores have no rough stone for them.')}
+/* ordered tiles: a dashed outline in the road's colour until laid */
+function rqDraw(vl,vr,vt,vb,z){const Q=S.rq;if(!Q||z<.3)return;let any=0;for(const k in Q){any=1;break}if(!any)return;vx.save();vx.setLineDash([4,3]);vx.lineWidth=1.5;
+ for(const k in Q){const i=+k,x=i%MW,y=(i/MW)|0,X=x*TS,Y=y*TS;if(X>vr||X+TS<vl||Y>vb||Y+TS<vt)continue;const l=Q[k].l;vx.fillStyle=l===3?'rgba(214,200,170,.28)':'rgba(150,140,120,.28)';vx.fillRect(X+2,Y+2,TS-4,TS-4);vx.strokeStyle=l===3?'rgba(240,230,200,.85)':'rgba(190,180,160,.85)';vx.strokeRect(X+2.5,Y+2.5,TS-5,TS-5)}
+ vx.restore()}
+
 function paintStart(p){const t=toTile(toWorld(p));drag.st=t;drag.cur=t;drag.last=t;if(placing==='__grant'||placing==='__wz'||ZN[placing])return;if(roadShape==='free'){brushTiles(t.gx,t.gy,paintTile);roadsChanged(true)}}
 function paintMove(p){const t=toTile(toWorld(p));if(t.gx===drag.cur.gx&&t.gy===drag.cur.gy)return;drag.cur=t;if(placing==='__grant'||placing==='__wz'||ZN[placing])return;if(roadShape==='free'){lineTiles(drag.last,t,(x,y)=>brushTiles(x,y,paintTile));drag.last=t;roadsChanged(true)}}
-function paintEnd(p){if(placing==='__grant'){grantEnd();return}if(placing==='__wz'){wzEnd();return}if(ZN[placing]){cqEnd();return}if(roadShape!=='free'&&drag.st)shapeTiles(drag.st,drag.cur,paintTile);roadsChanged(false);if(paintAt.err){log(paintAt.err);paintAt.err=null}if(paintAt.n)paintAt.n=0;save();renderTop()}
+function paintEnd(p){if(placing==='__grant'){grantEnd();return}if(placing==='__wz'){wzEnd();return}if(ZN[placing]){cqEnd();return}if(roadShape!=='free'&&drag.st)shapeTiles(drag.st,drag.cur,paintTile);roadsChanged(false);if(paintAt.err){log(paintAt.err);paintAt.err=null}if(paintAt.q){log(paintAt.q+' road tile'+(paintAt.q>1?'s':'')+' ordered: palace laborers will haul the stone from the palace stores and lay them.');paintAt.q=0}if(paintAt.n)paintAt.n=0;save();renderTop()}
 function paintCancel(){if(drag)drag.st=null}
 function roadsChanged(light){recomputeConn();calcRoadCap();PC.clear();ffAge(1);ov64=null;mmBase=null;if(!light)buildProps()}
-function upgradeRoads(){const L=roadMax();let n=0;for(let i=0;i<MW*MH;i++)if(roadSet[i]&&roadSet[i]<L)n++;return n}
+function upgradeRoads(){return upgradeRoadsQ(roadMax())}
 // ---------- traffic ----------
 let TR=new Float32Array(MW*MH),LOAD=new Float32Array(MW*MH),RCAP=new Float32Array(MW*MH),congest=null;
 const RBASE=[0,2,4,7],RSPD=[1,1.12,1.3,1.5],RSPD_A=[1,1.06,1.12,1.18],WALK_A=.55/* scale A: 0.55 tiles/s at 2.5 m/tile ≈ 5 km/h; loaded ×0.6 ≈ 3 km/h; children and elders ×0.8 */;
@@ -4809,12 +4833,12 @@ function renderBuildings(V){if(!CATS.some(c=>c[0]===acat))acat=CATS[0][0];
 function _oldRoads(V){
  const sec=(t)=>{const h=document.createElement('h4');h.textContent=t;V.appendChild(h)};const bar=()=>{const d=document.createElement('div');d.className='seg';V.appendChild(d);return d};
  if(S.tier<1){V.insertAdjacentHTML('beforeend','<p class="muted">Tribes wander without roads. Settle down to build paths.</p>');return}
- sec('Surface');let b=bar();[[2,'Packed road','1 stone'],[3,'Paved road','3 stone']].forEach(([l,n,c])=>{if(l<=roadMax())b.appendChild(btn(n+' · '+c,()=>{placing='__road';roadPick=l;ghost=null},0,placing==='__road'&&roadPick===l?'sel':''))});b.appendChild(btn('Remove',()=>{placing='__erase';ghost=null},0,placing==='__erase'?'sel':''));
+ sec('Surface');let b=bar();[[1,'Dirt road','free'],[2,'Stone road','2 rough stone'],[3,'Fancy road','4 rough stone']].forEach(([l,n,c])=>{if(l<=roadMax())b.appendChild(btn(n+' · '+c,()=>{placing='__road';roadPick=l;ghost=null},0,placing==='__road'&&roadPick===l?'sel':''))});b.appendChild(btn('Remove',()=>{placing='__erase';ghost=null},0,placing==='__erase'?'sel':''));
  sec('Brush size');b=bar();for(let s=1;s<=5;s++)b.appendChild(btn(s+'',()=>{roadBrush=s},0,roadBrush===s?'sel':''));
  sec('Shape');b=bar();[['free','Freehand'],['line','Line'],['rect','Rectangle']].forEach(([k,n])=>b.appendChild(btn(n,()=>{roadShape=k},0,roadShape===k?'sel':'')));
  if(roadMode())V.appendChild(btn('✔ Done drawing',()=>{placing=null;ghost=null},0,'pri'));
  sec('Network');b=bar();b.appendChild(btn((S.heat?'Hide':'Show')+' congestion',()=>{S.heat=!S.heat},0,S.heat?'sel':''));b.appendChild(btn((S.autoRoad!==false?'✓ ':'')+'Auto-paths',()=>{S.autoRoad=S.autoRoad===false},0,S.autoRoad!==false?'sel':''));
- const un=upgradeRoads(),rm=roadMax(),uc={stone:un*(rm===3?3:1)};if(un&&rm>1)b.appendChild(btn('Upgrade '+un+' tiles ('+uc.stone+' stone)',()=>{if(pay(uc)){for(let i=0;i<MW*MH;i++)if(roadSet[i])roadSet[i]=rm;chunkSig++;worldChanged();log('Roads upgraded!')}},!can(uc)));
+ const un=upgradeRoads(),rm=roadMax(),uc={stone:un*RCOST[rm].stone};if(un&&rm>1)b.appendChild(btn('Order '+un+' tiles to '+RDNAME[rm]+' (~'+uc.stone+' rough stone)',()=>{roadUpgradeAll(rm)}));
  V.insertAdjacentHTML('beforeend','<p class="muted">Paint roads any width. Wider and better-surfaced roads carry more traffic: capacity = surface (dirt 2 · packed 4 · paved 7) × width. Overloaded tiles slow walkers, who reroute around jams.</p>')}
 // work table
 function autoAssign(){S.prio=S.prio||{};if(S.stk&&(S.jobs.hauler||0)<jobCap('hauler')){let full=0;for(const k in S.stk)if(stkTot(k)>STKCAP*.6)full++;if(full>=1&&S.pop-employed()<=0){const d=Object.keys(S.jobs).filter(j=>j!=='hauler'&&S.jobs[j]>1&&(S.prio[j]||3)>=3).sort((x,y)=>S.jobs[y]-S.jobs[x])[0];if(d){S.jobs[d]--;S.jobs.hauler=(S.jobs.hauler||0)+1}}else if(full>=1&&S.pop-employed()>0)S.jobs.hauler=(S.jobs.hauler||0)+1}let idle=S.pop-employed(),guard=200;while(idle>0&&guard--){let best=null,bs=1e9;for(const j in JOBS){const c=jobCap(j),n=S.jobs[j]||0;if(n>=c)continue;const p=S.prio[j]||3;if(p>=5)continue;const hungry=(S.rate&&S.rate.food<0.3)||S.res.food<S.pop*3;const sc=p*100+n/Math.max(1,c)-(hungry&&JOBS[j][1]==='food'?250:0);if(sc<bs){bs=sc;best=j}}if(!best)break;S.jobs[best]=(S.jobs[best]||0)+1;idle--}}
