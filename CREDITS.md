@@ -32,3 +32,9 @@ Files were re-encoded to Ogg Vorbis (music 64 kbps, ambience 32 to 48 kbps mono;
 
 - Ram's horn ("Small Shofar") by Sauron974, CC0: https://freesound.org/people/Sauron974/sounds/223368/ (trimmed to one blast as audio/sfx-ramhorn.ogg)
 - Title theme by Weston Gordon (Suno), audio/title-theme.ogg (original for this game)
+
+## Ambience (Enki, approved 2026-10-18)
+- Day bed: *Breeze birds and geese*, ezwa, public domain — https://commons.wikimedia.org/wiki/File:Breeze_birds_and_geese.ogg
+- Water: *Water over rocks as tide recedes*, earthcalling, public domain — https://commons.wikimedia.org/wiki/File:Water_over_rocks_as_tide_recedes.ogg
+- Night crickets: *Crickets ambient noise loopable*, 2DPIXX / kimdagamer, CC0 — https://opengameart.org/content/crickets-ambient-noise-loopable
+- Night peepers: *Spring Peeper Frogs*, JohnDziak, CC0 — https://commons.wikimedia.org/wiki/File:Spring_Peeper_Frogs_(Pseudacris_crucifer)_singing_on_night_of_April_21_of_2019_in_North_Pittston_PA.ogg
