@@ -3740,7 +3740,7 @@ const RAMB=[
 const RSFX=[{n:'UI clicks (wooden game pieces)',a:'aidanwalker',u:'https://opengameart.org/content/boardgame-piece-wobbles'},
  {n:'Axe chops',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/merlin-sur-buche-s0705.html'},{n:'Stone cutting',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/chute-de-pierre-s1022.html'},{n:'Sickle in grain',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/pas-dans-l-herbe-haute-s1024.html'},{n:'Distant cow',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/a-100-metres-d-une-etable-s0934.html'},{n:'Hooves on a path',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/pas-cheval-chemin-s1854.html'}];
 /* work one-shots: tool -> files, base gain, per-pawn cooldown range (s). Hammer, footsteps and sledge are not approved: not hooked up */
-const WSND={axe:{f:[1,2,3,4,5].map(i=>AUDB+'work/axe-chop-'+i+'.ogg'),g:.45,cd:[1.6,2.4]},pick:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/stone-cut-'+i+'.ogg'),g:.35,cd:[1.2,2]},sickle:{f:[1,2,3,4].map(i=>AUDB+'work/sickle-grain-'+i+'.ogg'),g:.3,cd:[1,1.8]}},WS_MAX=5;
+const WSND={axe:{f:[1,2,3,4,5].map(i=>AUDB+'work/axe-chop-'+i+'.ogg'),g:.45,cd:[1.6,2.4]},pick:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/stone-cut-'+i+'.ogg'),g:.6,cd:[1.2,2]},sickle:{f:[1,2,3,4].map(i=>AUDB+'work/sickle-grain-'+i+'.ogg'),g:.6,cd:[1,1.8]}},WS_MAX=5;
 const BSND={cow:{f:[AUDB+'bustle/cow-distant-1.ogg'],g:.3},hooves:{f:[AUDB+'bustle/hooves-path-1.ogg',AUDB+'bustle/hooves-path-2.ogg'],g:.3}};
 const MTRACKS_SYNTH=[
  {n:'Hymn of the Ziggurat',root:293.66,scale:[-5,-4,0,1,4,5,7,8,10,12],drone:[[0,.05],[7,.03]],lead:'lyre',second:null,bpm:66,drum:'D.......t...k...D.......t.t.k...',rest:.3,seed:1907,dur:170},
@@ -6054,7 +6054,7 @@ const AU={ctx:null,vol:{master:.8,music:.5,sfx:.8,amb:.5},muted:false,
    /* town bustle by population: small crowd 0 below 15 -> full at 60; equal-power crossfade to the big crowd 100 -> 160 */
    const P=S.pop||0,sm=x=>x*x*(3-2*x),ra=sm(Math.max(0,Math.min(1,(P-15)/45))),xf=Math.max(0,Math.min(1,(P-100)/60)),dg=nt?0:zs;T.crowdS=.35*ra*Math.cos(xf*Math.PI/2)*dg;T.crowdL=.35*ra*Math.sin(xf*Math.PI/2)*dg;
    /* oven fire: nearest baking oven (bakery buildings, baker households with an oven fired) within 8 tiles, same zoom falloff as work sounds */
-   let ov=1e9;try{for(const b of S.bl)if(b.t==='bakery'&&!b.cp)ov=Math.min(ov,Math.hypot(b.x+1-cx,b.y+1-cy));if(S.eco)for(const c of S.eco.cr)if(c.c==='baker'&&(c.O||[]).some(o=>o&&o.ov))ov=Math.min(ov,Math.hypot(c.x+1-cx,c.y+1-cy))}catch(e){}T.fire=ov<8?.5*close*Math.max(0,1-ov/8):0;
+   let ov=1e9;try{for(const b of S.bl)if(b.t==='bakery'&&!b.cp)ov=Math.min(ov,Math.hypot(b.x+1-cx,b.y+1-cy));if(S.eco)for(const c of S.eco.cr)if(c.c==='baker'&&(c.O||[]).some(o=>o&&o.ov))ov=Math.min(ov,Math.hypot(c.x+1-cx,c.y+1-cy))}catch(e){}T.fire=ov<8?.65*close*Math.max(0,1-ov/8):0;
    /* sparse bustle one-shots: one event every 20-40 s (hooves more often in bigger towns), never two at once; no cow without farms */
    const now=performance.now();if(!this._bsT)this._bsT=now+2e4+Math.random()*2e4;if(now>=this._bsT&&!nt&&!(this._bsEnd>now)){const farms=S.eco&&S.eco.steads.some(q=>!q.camp),ph=Math.min(.75,.4+P/400),k=!farms||Math.random()<ph?'hooves':'cow';const el=this.oneShot(BSND[k].f,BSND[k].g*zs,'amb',.95,1.05);this._bsEnd=now+(el?4500:0);this._bsT=now+2e4+Math.random()*2e4}}
   for(const k in this.amb)this.amb[k].t=T[k]||0},
