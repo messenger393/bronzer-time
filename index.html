@@ -2439,7 +2439,7 @@ const plFsn=s=>((famOf(s)||{}).sn||'A');
 function plCanBuy(s,fd){const E=S.eco;let av=0;for(const src of [E.mkt||{},E.hold])for(const g of ['bread','grain','fish','dairy','meat','smeat'])av+=Math.max(0,src[g]||0)*foodV(g);return av>=fd&&(s.sv||0)>=fd*EIT.grain.v*.8}
 function plHard(s){const E=S.eco,fd=s.n*FOOD_DAY(),food=plFoodAll(s);
  if(!s.hard){if(food<2*fd&&!plCanBuy(s,fd)){s.hard=1;s.hardT=S.t;s.hardN=(s.hardN||0)+1;E.led.hardN=(E.led.hardN||0)+1;farmNote(s,'The '+plFsn(s)+' family has fallen on hard times.')}}
- else{const owe=E.tithe/100*(1-steadDisc(s))*(s.prod||0)+(s.ow||0);if(food>=5*fd&&(food-5*fd)*EIT.grain.v>=owe-1e-9){s.hard=0;s.relA=null;E.led.recN=(E.led.recN||0)+1;farmNote(s,'The '+plFsn(s)+' family is back on their feet.')}}}
+ else{const owe=E.tithe/100*(1-steadDisc(s))*(s.prod||0)+(s.ow||0);if(food>=2*fd&&(food-2*fd)*EIT.grain.v>=owe-1e-9){s.hard=0;s.relA=null;E.led.recN=(E.led.recN||0)+1;farmNote(s,'The '+plFsn(s)+' family is back on their feet.')}}}
 const plDay=()=>Math.floor((S.t+DAYLEN*.06)/DAYLEN);
 function plRelief(a,s){const E=S.eco,j=a.rj;
  if(j){if(a.route.length){a.t=1;if(j.g)a.carry='sack';return true}
@@ -2542,8 +2542,8 @@ function bkThink(a,c,b,hm){const E=S.eco,j=a.bj,d=doorOf(b);
  {let bi=-1,bg=-1;for(let i=0;i<BK_OV;i++){const O=bkO(c,i),h=O.g+(O.inc||0);if(h<BK_G&&(bi<0||h>bg)){bg=h;bi=i}}/* fill one oven to a full batch before starting the other */
   if(bi>=0&&(c.gr||0)>=1){const O=bkO(c,bi),n=Math.min(BK_SACK,BK_G-O.g-(O.inc||0),c.gr);if(n>=1){c.gr-=n;O.inc=(O.inc||0)+n;a.bj={k:'hg',ph:'get',i:bi,n};go(a,d,'fgo');a.t=1;return true}}}
  return false}
-/* G3 for bakers: under 2 days of food (loaves x3 + grain) = hard times (no tithe); back on their feet at 5 days */
-function bkHard(c){const E=S.eco,fd=Math.max(1,c.n*FOOD_DAY()),fo=(c.stk||0)*BREAD_FV+(c.gr||0),d=fo/fd,owe=(c.titY!==E.yr?(c.tMade||0)*.2:(c.tOwe||0))*BREAD_FV;if(!c.hard&&d<2){c.hard=1;c.hardN=(c.hardN||0)+1;E.led.bkHardN=(E.led.bkHardN||0)+1;qlog('The bakers have fallen on hard times.')}else if(c.hard&&d>=5&&fo-5*fd>=owe){/* G3: 5 days of food plus able to pay the tithe */c.hard=0;c.recN=(c.recN||0)+1;qlog('The bakers are back on their feet.')}}
+/* G3 for bakers: under 2 days of food (loaves x3 + grain) = hard times (no tithe); back on their feet at 2 days + tithe */
+function bkHard(c){const E=S.eco,fd=Math.max(1,c.n*FOOD_DAY()),fo=(c.stk||0)*BREAD_FV+(c.gr||0),d=fo/fd,owe=(c.titY!==E.yr?(c.tMade||0)*.2:(c.tOwe||0))*BREAD_FV;if(!c.hard&&d<2){c.hard=1;c.hardN=(c.hardN||0)+1;E.led.bkHardN=(E.led.bkHardN||0)+1;qlog('The bakers have fallen on hard times.')}else if(c.hard&&d>=2&&fo-2*fd>=owe){/* G3 (food option A): 2 days of food plus able to pay the tithe */c.hard=0;c.recN=(c.recN||0)+1;qlog('The bakers are back on their feet.')}}
 /* G3 relief for bakers in hard times: one baker walks to the Stockyard once a day and carries 1 day of food home */
 function bkRelief(a,c,hm){const E=S.eco,j=a.rj;
  if(j){if(a.route.length){a.t=1;if(j.g)a.carry='sack';return true}
