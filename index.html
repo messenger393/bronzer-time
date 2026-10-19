@@ -3362,7 +3362,7 @@ function qPitDone(qp){return qp.pre>=qQueue().length}
 function qPre(qp){const Q=qQueue();while(qp.pre<Q.length&&qp.d[qp.pre])qp.pre++;return qp.pre}
 function qBuildDone(qp,ref){let n=0;for(const k in qp.d){const q=qQueue()[+k];if(q&&q.ref===ref)n++}return n}
 /* the pit state for drawing: the done prefix sets the timeline; ramp/ladder/mine progress = their done steps */
-function qPitState(qp){const Q=qQueue(),pre=qPre(qp),U=pre>0?Q[pre-1].k+.001:0,T=Q2.TL;let cc=0;for(const k in qp.d)if(Q[+k]&&Q[+k].cell)cc++;
+function qPitState(qp,draw){const Q=qQueue(),pre=qPre(qp),T=Q2.TL,U=pre>0?Q[pre-1].k+.001:(draw?T.marks[0]:0)/* a freshly placed quarry draws pit stage 0 (the marked-out pit) instead of plain grass */;let cc=0;for(const k in qp.d)if(Q[+k]&&Q[+k].cell)cc++;
  const st=Q2.pitState({units:pre>=Q.length?T.total:U});const dn={};for(const k in qp.d){const q=Q[+k];if(q&&q.ref)dn[q.ref]=(dn[q.ref]||0)+1}
  const un=(ref,n)=>(dn[ref]||0)/n;st.ramps=T.ramps.filter(r=>U>=r.t0||dn['ramp '+r.lvl]).map(r=>Object.assign({},r,{u:un('ramp '+r.lvl,QSTEP.ramp.length)}));
  st.ladders=T.ladders.filter(l=>U>=l.t0||dn['ladder '+l.lvl]).map(l=>Object.assign({},l,{u:un('ladder '+l.lvl,QSTEP.ladder.length)}));
@@ -3393,7 +3393,7 @@ function qBuildThink(a,s,b,j){const Q=qQueue(),q=Q[j.qi],qp=qP(s);if(!q||qp.d[j.
 /* houses: Q2.placeQuarryHouses around the site; house i is stable as more families come */
 function qSite(b){const c={x:b.x*TS+192,y:b.y*TS+192};return{bounds:{x:c.x-640,y:c.y-464,w:1280,h:928},centre:c,ring:[290,470],avoid:[{x:b.x*TS-8,y:b.y*TS-8,w:400,h:400}],paths:[]}}
 const QHC=new Map();
-function qHouseH(h){const k=h.qH;if(!k)return null;const ck=k.seed+'|'+k.i+'|'+k.q;let H=QHC.get(ck);if(!H){const qb={x:k.q[0],y:k.q[1]};H=Q2.placeQuarryHouses(qSite(qb),k.i+1,k.seed)[k.i];QHC.set(ck,H)}return H}
+function qHouseH(h){const k=h.qH;if(!k)return null;const ck=k.seed+'|'+k.i+'|'+k.q;let H=QHC.get(ck);if(!H){const qb={x:k.q[0],y:k.q[1]};H=Q2.placeQuarryHouses(qSite(qb),k.i+1,k.seed)[k.i];if(H){/* Weston: buildings are always axis-aligned. Houses are re-derived from the site on every load, so this snap also covers old saves */const Q=Math.PI/2;H.rot=Math.round((H.rot||0)/Q)*Q;H.box=H.box||null}QHC.set(ck,H)}return H}
 function qHome(h,j){const H=qHouseH(h);if(!H)return null;const bd=H.v.beds[j%H.v.beds.length],p=Q2.houseToWorld(H,bd),d=qDoor(h);return{x:p.x/TS,y:p.y/TS,b:h,door:d,rot:bd.rot||0}}
 function qDoor(h){const H=qHouseH(h);if(!H)return null;const p=Q2.houseToWorld(H,{x:H.v.door.x+H.v.door.w/2,y:H.v.h});return{x:p.x/TS,y:p.y/TS+.55}}
 function qHouseFind(b){const seed=(b.x*131+b.y*7)%9973+1,used=new Set(S.bl.filter(h=>h.t==='qhouse'&&h.qH&&h.qH.q[0]===b.x&&h.qH.q[1]===b.y).map(h=>h.qH.i));
@@ -3408,7 +3408,7 @@ const QSC=new Map();
 function qSiteDraw(b,X,Y,now){const s=campOf(b);const fs=qFams(b),tot=fs.reduce((t,q)=>t+(q.st.stone||0),0),fill=Math.min(1,tot/QBLK/Q2.YARD.cap);
  const qp=s?qP(s):{d:{},c:0,pre:0},key=Object.keys(qp.d).length+'|'+qp.pre+'|'+Math.round(fill*Q2.YARD.cap);let c=QSC.get(b);
  if(!c||c.k!==key){if(!c){c=mk(800,800);QSC.set(b,c)}const[cv,g]=c;g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,800,800);g.setTransform(2,0,0,2,16,16);
-  g.fillStyle='rgba(150,134,100,.16)';g.beginPath();g.ellipse(192,200,196,186,0,0,7);g.fill();Q2.pit(g,QPX,QPY,Q2.PAL.B,0,{state:qPitState(qp)});Q2.yard(g,QYX,QYY,Q2.PAL.B,fill);c.k=key}
+  g.fillStyle='rgba(150,134,100,.16)';g.beginPath();g.ellipse(192,200,196,186,0,0,7);g.fill();Q2.pit(g,QPX,QPY,Q2.PAL.B,0,{state:qPitState(qp,1)});Q2.yard(g,QYX,QYY,Q2.PAL.B,fill);c.k=key}
  vx.drawImage(c[0],X-8,Y-8,400,400);if(cam.z>=.9){vx.fillStyle='rgba(255,240,200,.95)';vx.font='bold 8px sans-serif';vx.textAlign='center';vx.fillText(Math.round(tot)+' stone',X+QYX,Y+QYY+24);vx.textAlign='left'}}
 const QHD=new Map();
 function qHouseDraw(h,int){const H=qHouseH(h);if(!H)return;const B=H.box,k=(int?1:0)+'|'+H.v.seed;let c=QHD.get(h);
