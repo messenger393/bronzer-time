@@ -2260,7 +2260,7 @@ const RES_MINIMAL=true,RES_OFF=new Set(['flax','fish','dairy','wool',/* clay is 
 function steadKind(s){return s.kind='grain'}
 function steadOut(s){const k=steadKind(s)+s.land;if(STO[k])return STO[k];const L=LAND[s.land].out,o={};{let mv=0;for(const g in L){if(g==='wool'||g==='dairy'){mv+=L[g];continue}o[g]=L[g]}o.grain=(o.grain||0)+mv*.6}if(RES_MINIMAL){for(const g in o)if(!resOn(g)){o.grain=(o.grain||0)+o[g]*.6;delete o[g]}}return STO[k]=o}
 // NEXT BATCH 2: one food rule for everyone, working age, laborer wage, yield balance (C12/C15/C16/C17/C18)
-const WORK_AGE=12,ELDER_AGE=60,ELDER_WK=.85,FOOD_T=.4,WAGE_X=1.15,BREAD_FV=3,YIELD_X=1.8,WK_PER=12,FOOD_DAY=()=>FOOD_T*YSC*DAYLEN;
+const WORK_AGE=12,ELDER_AGE=60,ELDER_WK=.85,FOOD_T=.09,WAGE_X=1.15,BREAD_FV=3,YIELD_X=1.8,WK_PER=12,FOOD_DAY=()=>FOOD_T*YSC*DAYLEN;
 const foodV=g=>g==='bread'?BREAD_FV:1;
 function steadWorkers(s){const d=S.t/DAYLEN|0;if(s._wkd===d&&s._wkn===s.n)return s._wk;let w=null;try{const F=S.fam&&S.fam.L.find(F=>F.st==='stead'&&F.l===s.id);if(F&&F.m.length){w=0;for(const m of F.m)if(m.a>=WORK_AGE)w+=m.a>=ELDER_AGE?ELDER_WK:1}}catch(e){}if(w==null)w=s.n-Math.floor(s.n*.35);w=Math.max(.5,w);s._wkd=d;s._wkn=s.n;s._wk=w;return w}
 const ECOFOOD=['berries','bread','fish','dairy','meat','smeat','grain'],CLAY_USE=false/* Weston-pending: households use up clay + clay as a wage good (OFF: clay piles up, traded and tithed like stone) */,ECOWAGE=['bread',...(CLAY_USE?['clay']:[]),'wool',/* E3 storage: Stockyard logs are kept for the realm's wood needs, not paid out as wages */'pottery','tools','cloth','beer','bronzeware','grain','dairy','fish','meat','smeat'];
