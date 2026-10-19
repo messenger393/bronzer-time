@@ -3523,7 +3523,7 @@ function CLL(){const E=S.eco;return E.cly||(E.cly={dug:0,dep:0})}
 function clayThink(a,s,b,cx,cy){const Y=campCarry(s,b),j=a.clj,C=clState();
  if(a.route.length){a.t=.5;return}
  if(j&&(j.ph==='mould'||j.ph==='stack')){const P=j.p;if(Math.hypot(a.x-P.x,a.y-P.y)>1.6){if((j.tr=(j.tr||0)+1)>4){clDrop(a);return}go(a,P,'towork');a.t=1;return}
-  a.state='work';a.hvTool=j.ph==='mould'?'hammer':null;a.hvk='b'+s.id;a.dir=2;j.n++;
+  a.state='work';a.hvTool=null;a.hvk='b'+s.id;a.dir=2;j.n++;
   if(j.ph==='mould'){if((s.st.clay||0)<BR_CLAY*BR_N){clDrop(a);return}if(j.n<BR_MOULD){a.t=CL_DIG_T;return}
    s.st.clay-=BR_CLAY*BR_N;(s.brk=s.brk||[]).push({k:j.k,t:S.t,n:BR_N});CLL().mould=(CLL().mould||0)+1;clDrop(a);a.t=.8;return}
   if(j.n<3){a.t=CL_DIG_T;return}const B=s.brk||[],ix=B.findIndex(q=>q.t+':'+q.k===j.b);if(ix>=0){const q=B[ix];B.splice(ix,1);s.st.mudbrick=(s.st.mudbrick||0)+q.n;s.cpdG=s.cpdG||{};s.cpdG.mudbrick=(s.cpdG.mudbrick||0)+q.n;s.prod=(s.prod||0)+q.n*(EIT.mudbrick.v-BR_CLAY*EIT.clay.v);CLL().bricks=(CLL().bricks||0)+q.n}clDrop(a);a.t=.8;return}
@@ -3731,12 +3731,17 @@ const RAMB=[
  {k:'day',f:AUDB+'amb-daybed.ogg',a:'ezwa (public domain)',u:'https://commons.wikimedia.org/wiki/File:Breeze_birds_and_geese.ogg',l:'PD',r:.02},
  {k:'crickets',f:AUDB+'amb-night-crickets.ogg',a:'2DPIXX / kimdagamer',u:'https://opengameart.org/content/crickets-ambient-noise-loopable',l:'CC0',r:.02},
  {k:'peepers',f:AUDB+'amb-night-peepers.ogg',a:'JohnDziak',u:'https://commons.wikimedia.org/wiki/File:Spring_Peeper_Frogs_(Pseudacris_crucifer)_singing_on_night_of_April_21_of_2019_in_North_Pittston_PA.ogg',l:'CC0',r:.02},
- {k:'fire',f:AUDB+'amb-fire.ogg',a:'pagdev',u:'https://opengameart.org/content/fireplace-sound-loop'},
+ {k:'fire',f:AUDB+'work/oven-fire-loop.ogg',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/grand-feu-de-branches-1-s0987.html',r:.06},/* Enki work sounds (Weston-approved 2026-10-19): oven fire by working bakeries */
  {k:'water',f:AUDB+'amb-water.ogg',a:'earthcalling (public domain)',u:'https://commons.wikimedia.org/wiki/File:Water_over_rocks_as_tide_recedes.ogg',l:'PD',r:.14},
- {k:'village',f:AUDB+'amb-village.ogg',a:'starninjas',u:'https://opengameart.org/content/crowd-shoutingspeaking-ambience'},
- {k:'chop',f:AUDB+'work-chop.ogg',a:'Kurt',u:'https://opengameart.org/content/chopping-tree',l:'CC-BY 3.0'},
+ /* town bustle (Weston-approved 2026-10-19): small crowd fades in with population, crossfades to the big crowd 100-160 people; day only (~10 s fade at night) */
+ {k:'crowdS',f:AUDB+'bustle/crowd-small-loop.ogg',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/foule-50-60-personnes-1-s3515.html',r:.025},
+ {k:'crowdL',f:AUDB+'bustle/crowd-large-loop.ogg',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/discussions-exterieures-1-s2968.html',r:.025},
  {k:'hammer',f:AUDB+'work-hammer.ogg',a:'themightyglider',u:'https://opengameart.org/content/hammer-on-anvil'}];
-const RSFX=[{n:'UI clicks (wooden game pieces)',a:'aidanwalker',u:'https://opengameart.org/content/boardgame-piece-wobbles'}];
+const RSFX=[{n:'UI clicks (wooden game pieces)',a:'aidanwalker',u:'https://opengameart.org/content/boardgame-piece-wobbles'},
+ {n:'Axe chops',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/merlin-sur-buche-s0705.html'},{n:'Stone cutting',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/chute-de-pierre-s1022.html'},{n:'Sickle in grain',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/pas-dans-l-herbe-haute-s1024.html'},{n:'Distant cow',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/a-100-metres-d-une-etable-s0934.html'},{n:'Hooves on a path',a:'Joseph Sardin, BigSoundBank.com',l:'CC0',u:'https://bigsoundbank.com/pas-cheval-chemin-s1854.html'}];
+/* work one-shots: tool -> files, base gain, per-pawn cooldown range (s). Hammer, footsteps and sledge are not approved: not hooked up */
+const WSND={axe:{f:[1,2,3,4,5].map(i=>AUDB+'work/axe-chop-'+i+'.ogg'),g:.45,cd:[1.6,2.4]},pick:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/stone-cut-'+i+'.ogg'),g:.35,cd:[1.2,2]},sickle:{f:[1,2,3,4].map(i=>AUDB+'work/sickle-grain-'+i+'.ogg'),g:.3,cd:[1,1.8]}},WS_MAX=5;
+const BSND={cow:{f:[AUDB+'bustle/cow-distant-1.ogg'],g:.3},hooves:{f:[AUDB+'bustle/hooves-path-1.ogg',AUDB+'bustle/hooves-path-2.ogg'],g:.3}};
 const MTRACKS_SYNTH=[
  {n:'Hymn of the Ziggurat',root:293.66,scale:[-5,-4,0,1,4,5,7,8,10,12],drone:[[0,.05],[7,.03]],lead:'lyre',second:null,bpm:66,drum:'D.......t...k...D.......t.t.k...',rest:.3,seed:1907,dur:170},
  {n:'Reed Song of the Two Rivers',root:220,scale:[-2,0,1,3,5,7,8,10,12,13],drone:[[0,.05],[-5,.035]],lead:'pipe',second:'lyre',bpm:84,drum:'D...t.k.D.t.k.t.',rest:.25,seed:4421,dur:160},
@@ -3921,7 +3926,7 @@ const enemyMen=i=>enemyOf(i).reduce((a,x)=>a+x.men,0);
 // ---- prep / battle UI ----
 let prep=null;
 function creditsOpen(){const M=$('modal'),B=$('mbody');M.style.display='flex';const row=t=>'<li><b>'+(t.n||t.k)+'</b> by '+t.a+(t.u?' · <a style="color:#e8c070" href="'+t.u+'" target="_blank">'+t.u.replace('https://','')+'</a>':'')+' · '+(t.l||'CC0')+'</li>';
- B.innerHTML='<h3>Credits</h3><p><b>Bronze and Blood</b>, made by Weston Gordon.</p><h4>Music</h4><ul>'+[{n:'Sunrise on the Plains (title theme)',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'}].concat(RTRACKS).map(row).join('')+'</ul><h4>Ambience</h4><ul>'+RAMB.map(t=>t.u?row(t):'<li><b>'+t.k+'</b>: '+t.a+'</li>').join('')+'</ul><h4>Sound effects</h4><ul>'+RSFX.map(row).join('')+'</ul><p class="small">Recordings from OpenGameArt.org: CC0 (public domain) unless marked CC-BY 3.0 (attribution). Thanks to the artists. Full list in CREDITS.md.</p>';const b=document.createElement('button');b.className='btn';b.textContent='Close';b.onclick=()=>M.style.display='none';B.appendChild(b)}
+ B.innerHTML='<h3>Credits</h3><p><b>Bronze and Blood</b>, made by Weston Gordon.</p><h4>Music</h4><ul>'+[{n:'Sunrise on the Plains (title theme)',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'}].concat(RTRACKS).map(row).join('')+'</ul><h4>Ambience</h4><ul>'+RAMB.map(t=>t.u?row(t):'<li><b>'+t.k+'</b>: '+t.a+'</li>').join('')+'</ul><h4>Sound effects</h4><ul>'+RSFX.map(row).join('')+'</ul><p class="small">Work and town sounds: Joseph Sardin, BigSoundBank.com (CC0). Other recordings from OpenGameArt.org / Wikimedia: CC0 (public domain) unless marked CC-BY 3.0 (attribution). Thanks to the artists. Full list in CREDITS.md.</p>';const b=document.createElement('button');b.className='btn';b.textContent='Close';b.onclick=()=>M.style.display='none';B.appendChild(b)}
 function regionModal(i){prep={i,form:S.formation||'line'};renderPrep()}
 function renderPrep(){const i=prep.i,R=REG[i],M=$('modal'),B=$('mbody'),sc=S.scouted[i];M.style.display='flex';
  B.innerHTML='<h3>'+R.n+'</h3><b>Terrain:</b> '+TERR[R.terr].n+'<div class="small">'+TERR[R.terr].d+'</div><b>Reward:</b> '+R.d+'<br>';
@@ -6028,7 +6033,7 @@ title=function(){const T=$('title'),c=$('tc');T.classList.add('launch');const fi
 const AU={ctx:null,vol:{master:.8,music:.5,sfx:.8,amb:.5},muted:false,
  init(){if(this.ctx)return;const C=window.AudioContext||window.webkitAudioContext;if(!C)return;try{const sv=JSON.parse(localStorage.getItem('bnbAudio')||'null');if(sv){this.vol=sv.vol;this.muted=sv.muted}}catch(e){}
   const c=this.ctx=new C();this.M=c.createGain();this.Mu=c.createGain();this.Fx=c.createGain();this.Mu.connect(this.M);this.Fx.connect(this.M);this.Am=c.createGain();this.Am.connect(this.M);if(this.vol.amb==null)this.vol.amb=.5;this.M.connect(c.destination);this.apply();
-  const len=c.sampleRate*2,b=c.createBuffer(1,len,c.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;this.nb=b;this.music();setInterval(()=>this.ambTick(),1000);this.torch($('title').style.display!=='none')},
+  const len=c.sampleRate*2,b=c.createBuffer(1,len,c.sampleRate),d=b.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;this.nb=b;this.music();setInterval(()=>this.ambTick(),1000);setInterval(()=>{try{this.workTick()}catch(e){}},150);this.torch($('title').style.display!=='none')},
  apply(){if(!this.ctx)return;const t=this.ctx.currentTime;this.M.gain.setTargetAtTime(this.muted?0:this.vol.master,t,.05);this.Mu.gain.setTargetAtTime(this.vol.music*.5,t,.05);this.Fx.gain.setTargetAtTime(this.vol.sfx,t,.05);if(this.Am)this.Am.gain.setTargetAtTime(this.vol.amb,t,.05);localStorage.setItem('bnbAudio',JSON.stringify({vol:this.vol,muted:this.muted}))},
  noise(dur,f,q,g,type,at,dest){const c=this.ctx;if(!c)return;const t=at||c.currentTime,s=c.createBufferSource();s.buffer=this.nb;s.loop=true;const fl=c.createBiquadFilter();fl.type=type||'bandpass';fl.frequency.value=f;fl.Q.value=q||1;const G=c.createGain();G.gain.setValueAtTime(0,t);G.gain.linearRampToValueAtTime(g,t+.005);G.gain.exponentialRampToValueAtTime(.0005,t+dur);s.connect(fl);fl.connect(G);G.connect(dest||this.Fx);s.start(t,Math.random());s.stop(t+dur+.05)},
  tone(f,dur,g,type,at,dest,f2){const c=this.ctx;if(!c)return;const t=at||c.currentTime,o=c.createOscillator(),G=c.createGain();o.type=type||'sine';o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dur);G.gain.setValueAtTime(0,t);G.gain.linearRampToValueAtTime(g,t+.006);G.gain.exponentialRampToValueAtTime(.0005,t+dur);o.connect(G);G.connect(dest||this.Fx);o.start(t);o.stop(t+dur+.05)},
@@ -6041,11 +6046,25 @@ const AU={ctx:null,vol:{master:.8,music:.5,sfx:.8,amb:.5},muted:false,
   if(this.amb)for(const k in this.amb){const a=this.amb[k];a.v+=(a.t-a.v)*a.r;if(a.t<=0&&a.v<.003)a.v=0;a.el.volume=Math.min(1,a.v*this._vol('amb'));if(a.t>.01&&!a.on){a.on=1;a.el.play().catch(()=>{a.on=0})}else if(a.on&&a.t<=.01&&a.v<.005){a.on=0;a.el.pause()}}},100)},
  ambTick(){if(!this.amb){this.amb={};for(const A of RAMB){const el=new Audio(A.f);el.loop=true;el.preload='none';el.volume=0;this.amb[A.k]={el,v:0,t:0,on:0,r:A.r||.06}}this._fadeLoop()}
   const inGame=$('title').style.display==='none'&&typeof S!=='undefined'&&S&&typeof TER!=='undefined'&&!!TER,z=typeof cam!=='undefined'?cam.z:1,nt=inGame&&night();
-  const zs=Math.min(1,z),T={day:inGame&&!nt?1*zs:0,crickets:inGame&&nt?1*zs:0,peepers:inGame&&nt?.4*zs:0,fire:inGame&&z>1.6?.35*Math.min(1,z-1.6):0};
+  const zs=Math.min(1,z),T={day:inGame&&!nt?1*zs:0,crickets:inGame&&nt?1*zs:0,peepers:inGame&&nt?.4*zs:0};
   // location: river/sea near the view centre, village bustle and work sounds near pawns, with distance falloff (only when zoomed in)
   if(inGame){const cx=(cam.x+VW/cam.z/2)/TS|0,cy=(cam.y+VH/cam.z/2)/TS|0,Rr=Math.max(8,Math.min(30,16/z));let wd=1e9;for(let j=-Rr;j<=Rr;j+=2)for(let i=-Rr;i<=Rr;i+=2){const x=cx+i,y=cy+j;if(x<0||y<0||x>=MW||y>=MH)continue;if(TER[y*MW+x]===T_WATER)wd=Math.min(wd,Math.hypot(i,j))}T.water=wd<1e9?.35*Math.max(0,1-wd/Rr)*Math.min(1,z+.2):0;/* Weston: fully silent with no water near the view */
    let nP=0,ch=1e9,hm=1e9;for(const a of agents){const d=Math.hypot(a.x-cx,a.y-cy);if(d>Rr)continue;nP++;const busy=!(a.route&&a.route.length);if(busy&&(a.role==='woodcutter'||a.hvk))ch=Math.min(ch,d);if(busy&&(a.bsite||a.role==='smith'))hm=Math.min(hm,d)}
-   const close=Math.max(0,Math.min(1,(z-1.1)/.8));T.village=!nt?Math.min(.35,nP/40)*Math.min(1,z):0;T.chop=ch<1e9?.6*close*Math.max(0,1-ch/12):0;T.hammer=hm<1e9?.5*close*Math.max(0,1-hm/12):0}for(const k in this.amb)this.amb[k].t=T[k]||0},
+   const close=Math.max(0,Math.min(1,(z-1.1)/.8));T.hammer=hm<1e9?.5*close*Math.max(0,1-hm/12):0;
+   /* town bustle by population: small crowd 0 below 15 -> full at 60; equal-power crossfade to the big crowd 100 -> 160 */
+   const P=S.pop||0,sm=x=>x*x*(3-2*x),ra=sm(Math.max(0,Math.min(1,(P-15)/45))),xf=Math.max(0,Math.min(1,(P-100)/60)),dg=nt?0:zs;T.crowdS=.35*ra*Math.cos(xf*Math.PI/2)*dg;T.crowdL=.35*ra*Math.sin(xf*Math.PI/2)*dg;
+   /* oven fire: nearest baking oven (bakery buildings, baker households with an oven fired) within 8 tiles, same zoom falloff as work sounds */
+   let ov=1e9;try{for(const b of S.bl)if(b.t==='bakery'&&!b.cp)ov=Math.min(ov,Math.hypot(b.x+1-cx,b.y+1-cy));if(S.eco)for(const c of S.eco.cr)if(c.c==='baker'&&(c.O||[]).some(o=>o&&o.ov))ov=Math.min(ov,Math.hypot(c.x+1-cx,c.y+1-cy))}catch(e){}T.fire=ov<8?.5*close*Math.max(0,1-ov/8):0;
+   /* sparse bustle one-shots: one event every 20-40 s (hooves more often in bigger towns), never two at once; no cow without farms */
+   const now=performance.now();if(!this._bsT)this._bsT=now+2e4+Math.random()*2e4;if(now>=this._bsT&&!nt&&!(this._bsEnd>now)){const farms=S.eco&&S.eco.steads.some(q=>!q.camp),ph=Math.min(.75,.4+P/400),k=!farms||Math.random()<ph?'hooves':'cow';const el=this.oneShot(BSND[k].f,BSND[k].g*zs,'amb',.95,1.05);this._bsEnd=now+(el?4500:0);this._bsT=now+2e4+Math.random()*2e4}}
+  for(const k in this.amb)this.amb[k].t=T[k]||0},
+ /* one recorded one-shot through a plain <audio> element: random file (never the same twice in a row), rate jitter, gain +-2 dB */
+ oneShot(L,g,bus,r0,r1){if(this.muted||g<=0)return null;const P=this._sp||(this._sp={}),lk=this._osl||(this._osl={}),key=L[0];let i=Math.floor(Math.random()*L.length);if(L.length>1&&i===lk[key])i=(i+1+Math.floor(Math.random()*(L.length-1)))%L.length;lk[key]=i;const f=L[i];let el=P[f];if(!el){el=P[f]=new Audio(f);el.preload='auto'}const c=el.cloneNode();c.preservesPitch=false;c.playbackRate=r0+Math.random()*(r1-r0);c.volume=Math.max(0,Math.min(1,g*Math.pow(10,(Math.random()*4-2)/20)*this._vol(bus)));c.play().catch(()=>{});return c},
+ /* work one-shots near working pawns (state 'work', standing still), tool -> sound, timed per pawn with a cooldown; nearest first, at most WS_MAX playing */
+ workTick(){if(!this.ctx||this.muted||typeof S==='undefined'||!S||typeof agents==='undefined'||$('title').style.display!=='none')return;const z=cam.z,close=Math.max(0,Math.min(1,(z-1.1)/.8));if(close<=0)return;
+  const now=performance.now()/1000,cx=(cam.x+VW/cam.z/2)/TS,cy=(cam.y+VH/cam.z/2)/TS;this._wp=(this._wp||[]).filter(t=>t>now);const C=[];
+  for(const a of agents){if(a.state!=='work'||(a.route&&a.route.length))continue;const W=WSND[a.hvTool];if(!W)continue;const d=Math.hypot(a.x-cx,a.y-cy);if(d>=12)continue;if(a._wsT==null){a._wsT=now+Math.random()*W.cd[1];continue}if(now<a._wsT)continue;C.push([d,a,W])}
+  C.sort((p,q)=>p[0]-q[0]);for(const[d,a,W]of C){if(this._wp.length>=WS_MAX)break;const el=this.oneShot(W.f,W.g*close*Math.max(0,1-d/12),'sfx',.92,1.08);a._wsT=now+W.cd[0]+Math.random()*(W.cd[1]-W.cd[0])+Math.random()*.3;if(el)this._wp.push(now+1.4)}},
  /* shuffle-bag: every track once in random order, then reshuffle; never the same track twice in a row (also across a reshuffle) */
  bagNext(){const N=RTRACKS.length;if(!this.bag||!this.bag.length){const b=[...Array(N).keys()];for(let i=N-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}if(N>1&&b[0]===this.lastT){const j=1+Math.floor(Math.random()*(N-1));[b[0],b[j]]=[b[j],b[0]]}this.bag=b}const n=this.bag.shift();this.lastT=n;return n},
  music(){this.playTrack(this.bagNext())},

@@ -38,3 +38,6 @@ Files were re-encoded to Ogg Vorbis (music 64 kbps, ambience 32 to 48 kbps mono;
 - Water: *Water over rocks as tide recedes*, earthcalling, public domain — https://commons.wikimedia.org/wiki/File:Water_over_rocks_as_tide_recedes.ogg
 - Night crickets: *Crickets ambient noise loopable*, 2DPIXX / kimdagamer, CC0 — https://opengameart.org/content/crickets-ambient-noise-loopable
 - Night peepers: *Spring Peeper Frogs*, JohnDziak, CC0 — https://commons.wikimedia.org/wiki/File:Spring_Peeper_Frogs_(Pseudacris_crucifer)_singing_on_night_of_April_21_of_2019_in_North_Pittston_PA.ogg
+
+## Work and town sounds
+Work and town sounds: Joseph Sardin, BigSoundBank.com (CC0). Axe chops (merlin-sur-buche-s0705), stone cutting (chute-de-pierre-s1022), sickle in grain (pas-dans-l-herbe-haute-s1024), oven fire (grand-feu-de-branches-1-s0987), small crowd (foule-50-60-personnes-1-s3515), large crowd (discussions-exterieures-1-s2968), distant cow (a-100-metres-d-une-etable-s0934), hooves (pas-cheval-chemin-s1854). Pages: https://bigsoundbank.com/<slug>.html
