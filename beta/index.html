@@ -194,6 +194,200 @@ function tree2(g,x,y,r,palmK){g.save();g.lineCap='round';if(palmK){g.translate(x
  const L=[{x:x-r*.45,y:y-r*.1,r:r*.62},{x:x+r*.45,y:y-r*.05,r:r*.6},{x:x,y:y-r*.45,r:r*.62},{x:x,y:y+r*.2,r:r*.55}];foliage(g,L,PALS.oak[1],{key:'ft'+r.toFixed(1),leaf:'broad',dens:1,seed:7,fruit:{C:FRUIT.pom,n:[4,3,2],r:Math.max(.7,r*.13)}});g.restore()}
 Object.assign(G,{propSpr2,drawTree2,drawStump2,stump2,tree2,TREE_PALS:PALS,TREE_FRUIT:FRUIT,foliage2:foliage})})(typeof window!=='undefined'?window:globalThis);
 </script>
+<script>/* CROPS v2 art (art-studio/trees-crops/crops.js, embedded) */
+/* Bronze and Blood: CROPS v2, WHEAT (emmer/einkorn bearded wheat), by Ningal. Art only, no mechanics.
+ * DROP-INS (same signatures; extra args optional and backward compatible):
+ *   plSpr2(b[,v[,ph]]) -> {c, W:24, H:30}  replaces plSpr (line 1589). Bottom-centre origin, 5x-res canvas (120x150) so it stays crisp up to 6x zoom.
+ *       b 0 seed in furrows, 1-2 sprout carpet, 3-4 tillering, 5-6 booting, 7 heading green, 8-9 turning gold from the tips,
+ *       10 ripe gold, 11 over-ripe (heads hanging, part lodged), 12 stubble rows + lying straw (+ a stook on variant 3).
+ *       v 0..3 = layout variant (suggest k&3 or (k*7)&3 in plDraw so the 4x4 tiles don't repeat). ph 0..5 = wind lean bucket (see plGust).
+ *       NEEDS ONE plDraw CONSTANT: w=cell*1.08 instead of cell*.95 (the .95 leaves a 3 px soil seam every 64 px that no sprite can cover).
+ *       The patch fills sprite y 6..30 edge to edge (the full plot cell, which spans sprite y ~7.3..32.5) and its heads rise up to y 0,
+ *       so each tile's heads overlap the tile behind: no empty strip, no clumps.
+ *   farmPlants2(g,F,st,dry,sw,now)  replaces farmPlants (line 3646). Same stage thresholds; each F.pl point grows a 3-plant tuft that fills
+ *       between the furrow rows; margins (trodden border, stragglers, poppies, weeds) are drawn from the bounds of F.pl; sw/now drive a
+ *       travelling gust band (lighter, leaning) instead of a uniform sine.
+ *   plGust(wx,wy,now) -> 0..5 wind bucket for a tile at world (wx,wy): a band moving east (for plDraw if wind is wanted).
+ *   plEdge2(g,x0,y0,w,h,seed)  optional field margin for plDraw plots (call after the tiles): trodden border, taller stragglers, poppies, weeds.
+ */
+(function(G){
+function hs(i,s){const x=Math.sin(i*127.1+s*311.7)*43758.5453;return x-Math.floor(x)}
+const X=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+const mix=(a,b,u)=>{u=u<0?0:u>1?1:u;return[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u,a[2]+(b[2]-a[2])*u]};
+const rgb=(a,m,al)=>{m=m==null?1:m;const f=v=>Math.max(0,Math.min(255,v*m|0));return al!=null?`rgba(${f(a[0])},${f(a[1])},${f(a[2])},${al})`:`rgb(${f(a[0])},${f(a[1])},${f(a[2])})`};
+const P={sprout:X('#5cae3c'),young:X('#4a9a32'),deep:X('#2f6e26'),mature:X('#4f8a2c'),pale:X('#8fae4a'),headG:X('#8db650'),gold:X('#d6aa44'),goldL:X('#f4d77e'),straw:X('#c4a458'),
+ over:X('#9a7c3e'),overD:X('#6e5a30'),awnG:X('#9cc062'),awnY:X('#f0dc98'),soil:X('#866646'),soilD:X('#5e442a'),dry:X('#a89a58')};
+/* ---- one wheat plant: base (x,y); o = {h, stage 0..10 continuous, gold 0..1, over 0..1, lean, nod, sh shade .55..1.15, hue -1..1, seed, wind, flash, dry} */
+function plant(g,x,y,o){const H=o.h,s=o.seed,sh=o.sh,st=o.stage,wind=o.wind||0,fl=o.flash||0;g.lineCap='round';g.lineJoin='round';
+ let leaf=mix(st<3?P.sprout:P.young,P.mature,(st-2)/6);leaf=mix(leaf,o.hue>0?P.pale:P.deep,Math.abs(o.hue)*.45);if(o.dry)leaf=mix(leaf,P.dry,.6);
+ const goldU=o.gold,leafC=goldU>.5?mix(mix(leaf,P.straw,.9),X('#a8823c'),(goldU-.5)*1.4):mix(leaf,P.straw,goldU*goldU*.85),stemC=mix(leaf,P.gold,goldU*1.1),headC0=mix(P.headG,P.gold,goldU*1.5),awnC=mix(P.awnG,P.awnY,goldU*1.4);
+ const ov=o.over||0,leafF=mix(leafC,P.over,ov*.8),stemF=mix(stemC,P.over,ov*.7),headF=mix(headC0,P.over,ov*.75);
+ const L=(a,m)=>rgb(a,sh*(m||1)+fl*.25);
+ const blade=(bx,by,side,len,up,lw,c)=>{const tx=bx+side*len*(.95)+wind*len*.3,ty=by-len*up+len*.18;g.strokeStyle=st>=7.5?rgb(c,sh*.72,.6):L(c,.82);g.lineWidth=st>=7.5?lw*.8:lw;g.beginPath();g.moveTo(bx,by);g.bezierCurveTo(bx+side*len*.25,by-len*up*.9,bx+side*len*.7+wind*len*.2,by-len*up*1.05,tx,ty);g.stroke();
+  if(st>=7.5)return;g.strokeStyle=L(c,1.18);g.lineWidth=lw*.45;g.beginPath();g.moveTo(bx+side*len*.08,by-len*up*.25);g.bezierCurveTo(bx+side*len*.28,by-len*up*.85,bx+side*len*.62+wind*len*.2,by-len*up*.98,tx-side*len*.12,ty-len*.06);g.stroke()};
+ if(st<.5)return;
+ if(st<3){/* sprout: 2-4 slim upright blades curling at tips */const n=2+(s*3|0);for(let i=0;i<n;i++){const side=(i%2?1:-1)*(.25+hs(s*9,i)*.4);blade(x+(i-n/2)*H*.06,y,side,H*(.75+hs(s,i)*.4),1.1,H*.05,leafF)}return}
+ if(st<5){/* tillering: low fan of 5-8 blades that arch and droop */const n=5+(s*4|0);for(let i=0;i<n;i++){const side=((i/(n-1))*2-1)*1.1+(hs(s,i+3)-.5)*.3;blade(x,y,side||.2,H*(.6+hs(s,i)*.35),.9-Math.abs(side)*.25,H*.06,leafF)}return}
+ /* culms (tillers) */const nt=2+(hs(s,7)*2.2|0),head=st>=7,boot=st>=5&&!head;
+ const tops=[];for(let t=0;t<nt;t++){const sp=(t-(nt-1)/2)*H*.1,hh=H*(1-t*.07-hs(s,t+20)*.08),lean=(o.lean+sp/H*.5)*hh+wind*hh*.45;let nod=(o.nod||0)+wind*.6;
+  const tx=x+sp*.4+lean,ty=y-hh*(1-ov*.25*(t%2?1:.5));const cx=x+sp*.2,cy=y-hh*.55;
+  /* leaves first (behind culm): 3 blades from nodes, long, curling down */for(let k=0;k<3;k++){const u=.12+k*.2,nx=x+(cx-x)*u*1.6,ny=y-(y-ty)*u,side=((k+t)%2?1:-1);blade(nx,ny,side,H*(.48-k*.06),.55,H*.055,leafF)}
+  g.strokeStyle=L(stemF,.78);g.lineWidth=H*.045;g.beginPath();g.moveTo(x+sp*.15,y);g.quadraticCurveTo(cx,cy,tx,ty);g.stroke();g.strokeStyle=L(stemF,1.15);g.lineWidth=H*.018;g.beginPath();g.moveTo(x+sp*.15-H*.01,y-H*.05);g.quadraticCurveTo(cx-H*.01,cy,tx-H*.01,ty);g.stroke();
+  /* nodes */g.fillStyle=L(stemF,.65);for(let k=1;k<4;k++){const u=k/4.3,qx=(1-u)*(1-u)*(x+sp*.15)+2*u*(1-u)*cx+u*u*tx,qy=(1-u)*(1-u)*y+2*u*(1-u)*cy+u*u*ty;g.beginPath();g.ellipse(qx,qy,H*.034,H*.022,0,0,6.283);g.fill()}
+  /* flag leaf */blade(tx-(tx-cx)*.25,ty+(cy-ty)*.3,t%2?-1:1,H*.42,.75,H*.05,leafF);
+  tops.push({tx,ty,dx:tx-cx,dy:ty-cy,nod,boot})}
+ for(const q of tops){const a0=Math.atan2(q.dy,q.dx),side=q.dx>=0?1:-1;
+  if(q.boot){/* swollen leaf sheath at the top, flag leaf unrolling */const hl=H*.2;g.save();g.translate(q.tx,q.ty);g.rotate(a0+Math.PI/2);g.fillStyle=L(leafF,.95);g.beginPath();g.ellipse(0,-hl*.3,H*.05,hl*.55,0,0,6.283);g.fill();g.fillStyle=L(leafF,1.2);g.fillRect(-H*.015,-hl*.75,H*.02,hl*.8);if(st>=6){g.strokeStyle=L(awnC,1);g.lineWidth=H*.012;g.beginPath();g.moveTo(0,-hl*.8);g.lineTo(-H*.02,-hl*1.25);g.moveTo(H*.01,-hl*.8);g.lineTo(H*.04,-hl*1.2);g.stroke()}g.restore();continue}
+  /* spike: nods toward its lean, more as it ripens */const a=a0+side*q.nod,hl=H*.2,dx=Math.cos(a),dy=Math.sin(a),px=-dy,py=dx;
+  /* awns: low contrast, mostly upright, leaning with the wind (hanging with the head when over-ripe) */g.save();g.globalAlpha=.32+goldU*.08;g.strokeStyle=L(mix(awnC,headF,.45),1);g.lineWidth=H*.011;g.beginPath();const ns=6,up=-Math.PI/2+wind*1.1+o.lean*.6,aBase=ov>.5?a+side*.15:up;for(let i=0;i<ns;i++){const u=(i+.5)/ns,bx=q.tx+dx*hl*u,by=q.ty+dy*hl*u,aa=aBase+(i%2?1:-1)*(.1+u*.06),aw=H*(.2+u*.05);g.moveTo(bx,by);g.lineTo(bx+Math.cos(aa)*aw,by+Math.sin(aa)*aw)}g.stroke();g.restore();
+  /* spike = the readable unit: plump body, shadowed underside, lit top-left cap, faint spikelet notches */const wd=H*.058,mx=q.tx+dx*hl*.5,my=q.ty+dy*hl*.5;g.save();g.translate(mx,my);g.rotate(a);g.fillStyle=L(headF,.55);g.beginPath();g.ellipse(H*.01,wd*.35,hl*.56,wd*1.05,0,0,6.283);g.fill();g.fillStyle=L(headF,.92);g.beginPath();g.ellipse(0,0,hl*.55,wd,0,0,6.283);g.fill();g.fillStyle=L(mix(headF,P.goldL,.55),1.08);g.beginPath();g.ellipse(-hl*.04,-wd*.38,hl*.42,wd*.48,0,0,6.283);g.fill();g.globalAlpha=.28;g.strokeStyle=L(headF,.5);g.lineWidth=H*.012;g.beginPath();for(let i=1;i<5;i++){const xx=-hl*.5+i*hl*.22;g.moveTo(xx,-wd*.9);g.quadraticCurveTo(xx+hl*.06,0,xx,wd*.9)}g.stroke();g.restore()}}
+/* stage table b 0..12 -> plant params */
+function stageP(b){return b<=0?{st:0,h:0}:b===1?{st:1.2,h:2.2}:b===2?{st:2.4,h:3}:b===3?{st:3.3,h:3.2}:b===4?{st:4.4,h:3.8}:b===5?{st:5.3,h:4.6}:b===6?{st:6.3,h:5.2}:b===7?{st:7,h:5.6,nod:.1}:b===8?{st:8,h:5.8,gold:.35,nod:.2}:b===9?{st:9,h:5.8,gold:.7,nod:.35}:b===10?{st:10,h:5.7,gold:1,nod:.55}:b===11?{st:10,h:5.3,gold:1,nod:1.2,over:1}:{st:-1}}
+function soilBase(g,W,y0,y1,furrow){g.fillStyle=rgb(P.soil);g.fillRect(0,y0,W,y1-y0);for(let y=y0+.8;y<y1;y+=1.9){g.fillStyle=rgb(P.soilD,1,.5);g.fillRect(0,y,W,.45);g.fillStyle='rgba(190,160,120,.25)';g.fillRect(0,y-.45,W,.25)}}
+const PLS={};
+/* tile-local layout: staggered rows filling x -0.5..24.5 and y 6..30.4; wraps horizontally so neighbours line up */
+function lay(v){const A=[];let i=0;for(let r=0;r<16;r++){const y=6+r*1.55+hs(r,v+40)*.5;for(let c=0;c<8;c++){const x=.9+c*3.0+(r%2)*1.1+(hs(i,v+1)-.5)*.9;A.push({x,y:y+(hs(i,v+2)-.5)*.6,s:hs(i,v+3),hue:(hs(i,v+4)-.5)*2,hk:.8+hs(i,v+5)*.38,ln:(hs(i,v+6)-.5)*.25,str:hs(i,v+7)>.96});i++}}return A.sort((a,b)=>a.y-b.y)}
+function plSpr2(b,v,ph){v=(v|0)&3;ph=ph|0;const key=b+'|'+v+'|'+ph;if(PLS[key])return PLS[key];const W=24,H=30,R=5,c=document.createElement('canvas');c.width=W*R;c.height=H*R;const g=c.getContext('2d');g.scale(R,R);
+ const S=stageP(b),A=lay(v),wind=[0,.12,.28,.42,.28,.12][ph],fl=[0,.04,.12,.2,.12,.04][ph];
+ if(b===0){soilBase(g,W,7,30,1);/* seed specks in the furrows + a few just breaking */for(const p of A){const y=7.8+Math.round((p.y-7.8)/1.9)*1.9;g.fillStyle=p.s<.5?'#d8c070':'#3e2c18';g.fillRect(p.x-.18,y-.5,.36,.28);if(p.s>.9){g.strokeStyle='#7ac44a';g.lineWidth=.16;g.beginPath();g.moveTo(p.x,y-.4);g.lineTo(p.x+.1,y-1)}g.stroke()}return PLS[key]={c,W,H}}
+ if(b===12){soilBase(g,W,7,30);/* stubble rows: cut culms with lit tops, lying straw, a few dropped ears */for(const p of A){const n=2+(p.s*3|0);for(let k=0;k<n;k++){const x=p.x+(k-n/2)*.28,y=p.y+.2,h=.9+hs(p.s*50,k)*.6;g.strokeStyle=rgb(P.straw,.7);g.lineWidth=.22;g.beginPath();g.moveTo(x,y);g.lineTo(x+(k-1)*.08,y-h);g.stroke();g.fillStyle=rgb(P.goldL);g.fillRect(x+(k-1)*.08-.1,y-h-.08,.2,.14)}}
+  for(let i=0;i<26;i++){const x=hs(i,v+60)*W,y=8+hs(i,v+61)*21,a=(hs(i,v+62)-.5)*1.2,l=1.6+hs(i,v+63)*2;g.strokeStyle=rgb(i%3?P.straw:P.goldL,.95);g.lineWidth=.18;g.beginPath();g.moveTo(x,y);g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l*.35);g.stroke()}
+  if(v===3)stook(g,12,22,4.2);return PLS[key]={c,W,H}}
+ /* young stages: soil shows between drills; mature: dense dark under-canopy hides it */
+ if(S.st<5){soilBase(g,W,7,30)}else{{const gr=g.createLinearGradient(0,0,0,6);gr.addColorStop(0,rgb(mix(P.deep,P.soilD,.35),.7,0));gr.addColorStop(1,rgb(mix(P.deep,P.soilD,.35),.7,1));g.fillStyle=gr;g.fillRect(0,0,W,30.5)}for(const p of A){g.fillStyle=rgb(mix(P.deep,P.mature,.3),.55+p.s*.2);g.beginPath();g.ellipse(p.x,p.y-.7,1.5,1,0,0,6.283);g.fill()}}
+ const gold0=S.gold||0;for(const p of A){const dep=(p.y-6)/24,sh=.9+(p.s-.5)*.14,hh=S.h*p.hk*(.86+dep*.14)*(p.str?1.25:1);
+  /* gold creeps in from the tips: plants differ by up to 20% in timing */const gd=gold0?Math.max(0,Math.min(1,gold0+(p.hue*.12)+(p.s-.5)*.15)):0;
+  const ov=S.over?(p.s>.55?1:.6):0,lean=p.ln+(S.over&&p.s>.75?.9:0);
+  for(const dx of[-.55,0,.55])plant(g,p.x+dx*(p.s>.5?1:-1),p.y+(dx>0?.25:0),{h:hh*(dx?.92:1),stage:S.st,gold:gd,over:ov,lean,nod:(S.nod||0)*(.8+p.s*.4),sh,hue:p.hue,seed:p.s*.999+dx,wind,flash:fl*dep})}
+ /* feather the side edges ~0.9 px so overlapping neighbours blend (no seam) */{g.globalCompositeOperation='destination-in';const m=g.createLinearGradient(0,0,W,0);m.addColorStop(0,'rgba(0,0,0,0)');m.addColorStop(.038,'rgba(0,0,0,1)');m.addColorStop(.962,'rgba(0,0,0,1)');m.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=m;g.fillRect(0,0,W,H);const mv=g.createLinearGradient(0,0,0,7);mv.addColorStop(0,'rgba(0,0,0,0)');mv.addColorStop(1,'rgba(0,0,0,1)');g.fillStyle=mv;g.fillRect(0,0,W,H);g.globalCompositeOperation='source-over'}
+ return PLS[key]={c,W,H}}
+/* bound sheaf stood upright (stook = 3-5 leant together) */
+function sheaf(g,x,y,h,a,sh){sh=sh||1;g.save();g.translate(x,y);g.rotate(a||0);for(let k=0;k<11;k++){const u=k/10-.5,tx=u*h*.55,ty=-h;g.strokeStyle=rgb(k%2?P.straw:P.gold,sh*(k%3?.95:.8));g.lineWidth=h*.07;g.beginPath();g.moveTo(u*h*.3,0);g.quadraticCurveTo(u*h*.05,-h*.5,tx,ty);g.stroke()}
+ for(let k=0;k<9;k++){const u=k/8-.5,bx=u*h*.6,by=-h-h*.05*Math.cos(u*3);g.fillStyle=rgb(P.gold,sh*.85);g.beginPath();g.ellipse(bx,by,h*.06,h*.14,u*1.2,0,6.283);g.fill();g.strokeStyle=rgb(P.awnY,sh,.85);g.lineWidth=h*.015;g.beginPath();g.moveTo(bx,by-h*.1);g.lineTo(bx+u*h*.4,by-h*.4);g.stroke()}
+ g.strokeStyle=rgb(P.over,sh*.7);g.lineWidth=h*.08;g.beginPath();g.moveTo(-h*.12,-h*.52);g.lineTo(h*.12,-h*.52);g.stroke();g.restore()}
+function stook(g,x,y,h){g.fillStyle='rgba(30,20,10,.32)';g.beginPath();g.ellipse(x+h*.3,y+h*.06,h*.7,h*.22,0,0,6.283);g.fill();sheaf(g,x-h*.22,y-h*.02,h,-.22,.82);sheaf(g,x+h*.22,y-h*.02,h,.22,.85);sheaf(g,x,y+h*.04,h*1.02,0,1)}
+function lyingSheaf(g,x,y,h,a){g.fillStyle='rgba(30,20,10,.3)';g.beginPath();g.ellipse(x,y+h*.12,h*.7,h*.2,0,0,6.283);g.fill();g.save();g.translate(x,y);g.rotate(a);g.scale(1,.55);g.rotate(-Math.PI/2);sheaf(g,0,h*.5,h,0,1);g.restore()}
+/* gust band: travelling east, period ~ 7 s, band ~70 px wide */
+function gustAt(wx,wy,now){const sp=.022,per=360,ph=((wx+wy*.35-now*sp)%per+per)%per,d=Math.abs(ph-per*.5)/35;return Math.max(0,1-d*d)}
+function plGust(wx,wy,now){const gv=gustAt(wx,wy,now);return gv<.1?0:gv<.4?1:gv<.75?2:3}
+/* margins: trodden border, taller stragglers, poppies, weeds (x0,y0,w,h in the caller's space) */
+function plEdge2(g,x0,y0,w,h,seed,stage){seed=seed||1;stage=stage==null?10:stage;g.save();
+ const tr=(ax,ay,bx,by)=>{g.strokeStyle='rgba(150,120,80,.55)';g.lineWidth=2.2;g.beginPath();g.moveTo(ax,ay);g.lineTo(bx,by);g.stroke();g.strokeStyle='rgba(190,165,120,.35)';g.lineWidth=.9;g.stroke()};
+ tr(x0-1.5,y0-1,x0+w+1.5,y0-1);tr(x0-1.5,y0+h+1.2,x0+w+1.5,y0+h+1.2);tr(x0-1.4,y0-1,x0-1.4,y0+h+1.2);tr(x0+w+1.4,y0-1,x0+w+1.4,y0+h+1.2);
+ const S=stageP(stage|0),per=(x0+y0)|0;const pts=[];const L=2*(w+h);for(let d=0;d<L;d+=2.4){const r=hs(d*3+per,seed);let x,y;if(d<w){x=x0+d;y=y0+.5}else if(d<w+h){x=x0+w-.4;y=y0+d-w}else if(d<2*w+h){x=x0+(2*w+h-d);y=y0+h-.3}else{x=x0+.4;y=y0+(L-d)}pts.push({x:x+(r-.5)*1.4,y:y+(hs(d,seed+3)-.5)*1.4,r,k:d})}
+ pts.sort((a,b)=>a.y-b.y);for(const p of pts){if(p.r<.2){/* weed: broad-leaf rosette */g.fillStyle=rgb(P.deep,1.05);for(let k=0;k<5;k++){const a=k*1.26;g.beginPath();g.ellipse(p.x+Math.cos(a)*.9,p.y+Math.sin(a)*.4-.3,.8,.35,a,0,6.283);g.fill()}}
+  else if(p.r>.94){/* poppy: thin stem + red cup + dark eye */const hh=4+p.r*2.5;g.strokeStyle=rgb(P.young,.9);g.lineWidth=.25;g.beginPath();g.moveTo(p.x,p.y);g.quadraticCurveTo(p.x+.4,p.y-hh*.6,p.x+.2,p.y-hh);g.stroke();g.fillStyle='#c8281e';g.beginPath();g.ellipse(p.x+.2,p.y-hh,.7,.5,0,0,6.283);g.fill();g.fillStyle='#ee5040';g.beginPath();g.ellipse(p.x,p.y-hh-.15,.35,.25,0,0,6.283);g.fill();g.fillStyle='#201010';g.fillRect(p.x+.1,p.y-hh-.05,.3,.25)}
+  else if(S.st>0&&p.r>.62){/* straggler: taller, leaning out */plant(g,p.x,p.y,{h:S.h*(1.25+p.r*.2)*(S.st<5?1:1.05),stage:S.st,gold:Math.max(0,(S.gold||0)-.1),over:S.over||0,lean:(p.x<x0+w/2?-1:1)*.25,nod:(S.nod||0)+.1,sh:1,hue:(p.r-.75)*3,seed:p.r})}
+  else if(p.r>.4){/* grass tuft */g.strokeStyle=rgb(P.pale,.85);g.lineWidth=.22;g.beginPath();for(let k=0;k<4;k++){g.moveTo(p.x+k*.3-.45,p.y);g.lineTo(p.x+k*.5-.9,p.y-1.4-hs(p.k,k)*.8)}g.stroke()}}
+ g.restore()}
+
+let F_CLIP=0;G.plShadeClip=v=>F_CLIP=v;
+/* soft field-scale shading over a block of crop (call after the tiles): large mottled patches (greener / paler),
+   a top-left light sheen and a gentle darkening at the far (top) edge, so the field reads as one 3D mass */
+function plShade2(g,x0,y0,w,h,seed,green){seed=seed||1;g.save();g.beginPath();g.rect(x0,y0-(F_CLIP?0:6),w,h+(F_CLIP?0:6));g.clip();
+ const n=Math.max(3,(w*h/2600)|0);for(let i=0;i<n;i++){const x=x0+hs(i,seed)*w,y=y0+hs(i,seed+1)*h,r=22+hs(i,seed+2)*38,pale=hs(i,seed+3)>.5,gr=g.createRadialGradient(x,y,0,x,y,r);
+  gr.addColorStop(0,pale?'rgba(255,238,170,.13)':(green?'rgba(70,110,30,.16)':'rgba(160,104,30,.12)'));gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(x-r,y-r,2*r,2*r)}
+ const sh=g.createLinearGradient(x0,y0,x0+w,y0+h);sh.addColorStop(0,'rgba(255,246,205,.16)');sh.addColorStop(.45,'rgba(255,246,205,0)');sh.addColorStop(1,'rgba(50,34,10,.12)');g.fillStyle=sh;g.fillRect(x0,y0-6,w,h+6);
+ const far=g.createLinearGradient(0,y0-6,0,y0+Math.min(40,h*.25));far.addColorStop(0,'rgba(40,28,10,.10)');far.addColorStop(1,'rgba(40,28,10,0)');g.fillStyle=far;g.fillRect(x0,y0-6,w,h+6);g.restore()}
+/* uncut edge: a ragged standing wall of full-height plants with their stems showing, rooted on the cut line.
+   side 'S' = crop to the north, stubble south (we see the stem face); 'W' = stubble to the west (lit side face + shadow strip).
+   (x,y) start, len along the edge, b = stage of the standing crop */
+function plWall2(g,x,y,len,side,b,seed){const S=stageP(b==null?10:b);seed=seed||1;g.save();
+ if(side==='S'){/* contact shadow on the stubble */const gr=g.createLinearGradient(0,y-1,0,y+3);gr.addColorStop(0,'rgba(30,20,8,.35)');gr.addColorStop(1,'rgba(30,20,8,0)');g.fillStyle=gr;g.fillRect(x,y-1,len,4);
+  for(let r=0;r<2;r++)for(let d=0;d<len;d+=1.3){const j=hs(d*5+r,seed),yy=y-2.2+r*1.6-j*1.2,xx=x+d+(hs(d,seed+r)-.5)*.9;
+   plant(g,xx,yy,{h:S.h*2.88*(.85+j*.25)/2.88*2.6,stage:S.st,gold:S.gold||0,over:S.over||0,lean:(j-.5)*.15,nod:(S.nod||0)*(.8+j*.4),sh:.78+r*.16,hue:(j-.5)*1.6,seed:j})}}
+ else{/* west-facing: shadow cast on the crop's own foot, lit stems on the stubble side, ragged */for(let d=0;d<len;d+=1.6){const j=hs(d*3,seed+7),xx=x+.6-j*1.4,yy=y+d;plant(g,xx,yy,{h:S.h*2.6*(.85+j*.25),stage:S.st,gold:S.gold||0,over:S.over||0,lean:-.1-j*.1,nod:(S.nod||0)*(.8+j*.4),sh:1.02,hue:(j-.5)*1.6,seed:j})}}
+ g.restore()}
+/* farm building field */
+function farmPlants2(g,F,st,dry,sw,now){const Pl=F.pl;now=now||0;if(!Pl.length)return;let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;for(const[x,y]of Pl){x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y)}
+ const S=st<.12?{st:0}:st>=.88?{st:-1}:st<.2?{st:1.2+(st-.12)/.08*1.2,h:2.2+(st-.12)*10}:st<.32?{st:3+(st-.2)/.12*1.8,h:3.2+(st-.2)*5}:st<.45?{st:5+(st-.32)/.13*1.9,h:4.4+(st-.32)*7}:st<.62?{st:7+(st-.45)/.17*2,h:5.6,gold:Math.max(0,(st-.52)/.1)*.7,nod:.15+(st-.45)}:{st:10,h:5.6,gold:1,nod:.5+(st-.62)*1.5,over:st>.8?(st-.8)/.08:0};
+ const sorted=[];for(const p of Pl){for(let k=0;k<3;k++){const[x,y,h,kk]=p,dx=(k-1)*1.05+(hs(x*7+k,y)-.5)*.5,dy=(k===1?-1.4:k===2?1.1:0)+(hs(y*5+k,x)-.5)*.6;sorted.push([x+dx,y+dy,h,kk,k])}}sorted.sort((a,b)=>a[1]-b[1]);
+ if(S.st===0){for(const[x,y,h]of sorted){g.fillStyle=h<.5?'#d0b468':'#3a2a16';g.fillRect(x-.25,y-.15,.5,.3);if(st>.08&&h<.25){g.strokeStyle='#7ac44a';g.lineWidth=.2;g.beginPath();g.moveTo(x,y);g.lineTo(x+.1,y-.8);g.stroke()}}return}
+ if(S.st<0){/* stubble + lying straw + stooks */for(const[x,y,h]of sorted){for(let k=0;k<3;k++){const xx=x+(k-1)*.3,hh=.8+hs(x*9,k)*.6;g.strokeStyle=rgb(dry?P.dry:P.straw,.72);g.lineWidth=.25;g.beginPath();g.moveTo(xx,y);g.lineTo(xx+(h-.5)*.2,y-hh);g.stroke();g.fillStyle=rgb(P.goldL);g.fillRect(xx+(h-.5)*.2-.12,y-hh-.08,.24,.16)}}
+  for(let i=0;i<40;i++){const x=x0+hs(i,F.W)*(x1-x0),y=y0+hs(i,F.W+1)*(y1-y0),a=(hs(i,3)-.5)*1.2,l=2+hs(i,4)*2.4;g.strokeStyle=rgb(i%3?P.straw:P.goldL);g.lineWidth=.22;g.beginPath();g.moveTo(x,y);g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l*.35);g.stroke()}
+  const ns=[];for(let i=0;i<4;i++){const p=Pl[(i*37+5)%Pl.length];if(p)ns.push(p)}ns.sort((a,b)=>a[1]-b[1]);ns.forEach((p,i)=>i%2?lyingSheaf(g,p[0],p[1],4.4,(hs(i,9)-.5)*.6):stook(g,p[0],p[1],5));plEdge2(g,x0-1.5,y0-2,x1-x0+3,y1-y0+3.5,F.W,12);return}
+ if(S.st>=5){/* under-canopy so soil only peeks at the margins */for(const[x,y]of sorted){g.fillStyle=rgb(mix(P.deep,P.soilD,.35),.8,.55);g.beginPath();g.ellipse(x,y-.6,1.8,1.3,0,0,6.283);g.fill()}}
+ const sp=sw?1:0;for(const[x,y,h,kk,k]of sorted){const dep=(y-y0)/Math.max(1,y1-y0),gv=sp?gustAt(x,y,now):0,base=sp?Math.sin(now/850+x*.15)*.06:0,s=hs(x*13,y*7);
+  const gd=S.gold?Math.max(0,Math.min(1,S.gold+(h-.5)*.25+(s-.5)*.15)):0;
+  plant(g,x,y,{h:S.h*kk*(.9+dep*.12)*(k===1?.92:1),stage:S.st,gold:gd,over:S.over&&s>.4?S.over:0,lean:(h-.5)*.3+(S.over&&s>.8?.8:0),nod:(S.nod||0)*(.8+s*.4),sh:.64+dep*.46,hue:(s-.5)*2,seed:s,wind:gv*.42+base,flash:gv*.18,dry})}
+ plShade2(g,x0-2,y0-2,x1-x0+4,y1-y0+4,F.W,S.st<8);plEdge2(g,x0-1.5,y0-2,x1-x0+3,y1-y0+3.5,F.W,S.st>=10?(S.over?11:10):Math.round(S.st))}
+Object.assign(G,{wheatStageP:stageP,plShade2,plWall2,plSpr2,farmPlants2,plGust,plEdge2,wheatPlant:plant,wheatSheaf:sheaf,wheatStook:stook,wheatLyingSheaf:lyingSheaf,wheatGust:gustAt})})(typeof window!=='undefined'?window:globalThis);
+</script>
+<script>/* WHEAT FIELD art (art-studio/trees-crops/wheatfield.js, embedded; drawWheatField takes per-plant stages F.bk) */
+/* Bronze and Blood: FIELD-LEVEL WHEAT RENDERER (art only), by Ningal.
+ * The whole plot is drawn as ONE continuous surface. Wind is computed per clump in WORLD space from its world (x,y) and time, so neighbouring
+ * stalks always share a phase (no tile edges). Harvest uses a fine CUT MASK (4 px cells), not whole tiles.
+ *   F = makeWheatField({x,y,w,h,b,seed})   b = plSpr stage 0..12 of the standing crop; F.cut = Float64Array per 4 px cell: 0 uncut, else cut time (ms)
+ *   drawWheatField(g,F,now,o)              draws ground + stubble, standing clumps (sorted back to front) with world-space gusts, falling stalks, field shading.
+ *        o.R = atlas resolution (px per world px, default 3; use 6 for close-ups). o.under(y) optional callback to interleave pawns etc (called with each row y).
+ *   wheatCut(F,x,y,r,a0,a1,now)            cut every cell whose centre lies within reach r of (x,y) between angles a0..a1 (the sickle's sweep).
+ *   windAt(wx,wy,now) -> {lean, flash}     continuous travelling gust bands + a gentle base sway.
+ * PERFORMANCE: clumps are ~3 plants each on a ~3.2 x 2.4 px grid -> ~8.5k clumps per 256x256 plot. Each is one drawImage from a pre-baked atlas
+ *   (stage x 6 variants x 9 lean buckets, ~48x72 px each at R=3, ~0.7 MB per stage), plus one fillRect per 4 px cell for the under-canopy.
+ *   ~12k canvas ops per visible plot per frame. Fine for 1-3 plots on screen; for many plots cache the static (no-wind) field to one canvas
+ *   when zoomed out (z<.75, like farmDraw already does) and only redraw cells in a dirty rect while harvesting.
+ */
+(function(G){
+const hs=(i,s)=>{const x=Math.sin(i*127.1+s*311.7)*43758.5453;return x-Math.floor(x)};
+const CW=4,NB=9,NV=10,LEAN0=-.25,LEAN1=.6;
+function gustBand(wx,wy,now){const per=420,sp=.028,ph=((wx+wy*.4-now*sp)%per+per)%per,d=(ph-per*.5)/42;return Math.exp(-d*d)}
+function windAt(wx,wy,now){const base=Math.sin(now/1100+wx*.045+wy*.02)*.07+Math.sin(now/1700-wx*.021+wy*.033)*.04,gu=gustBand(wx,wy,now)+.5*gustBand(wx+170,wy-60,now*1.13);return{lean:base+gu*.42,flash:Math.max(0,gu)*.22}}
+const ATL={};
+function atlas(b,R){const k=b+'|'+R;if(ATL[k])return ATL[k];const S=wheatStageP(b),A=[];const CWd=18,CH=26,ox=9,oy=22;
+ for(let v=0;v<NV;v++){A.push([]);for(let li=0;li<NB;li++){const lean=LEAN0+(LEAN1-LEAN0)*li/(NB-1),c=document.createElement('canvas');c.width=CWd*R;c.height=CH*R;const g=c.getContext('2d');g.scale(R,R);
+  if(S.st>0){const hk=.86+hs(v,3)*.28,hue=(hs(v,4)-.5)*2;const np=2+(hs(v,11)*2.2|0),offs=[];for(let q=0;q<np;q++)offs.push([(hs(v,20+q)-.5)*3.2,-(hs(v,30+q))*1.2,.86+hs(v,40+q)*.18]);offs.sort((a,b)=>a[1]-b[1]);for(const[dx,dy,f]of offs)plant(g,ox+dx,oy+dy,{h:S.h*2.5*hk*f,stage:S.st,gold:S.gold?Math.max(0,Math.min(1,S.gold+hue*.1)):0,over:S.over?(v>2?1:.6):0,lean:lean*.0+(S.over&&v===5?.8:0),nod:(S.nod||0)*(.85+hs(v,6)*.3),sh:.92+hs(v,7)*.1,hue,seed:hs(v,8)+dx,wind:lean,flash:Math.max(0,lean-.12)*.45})}
+  A[v].push(c)}}
+ return ATL[k]={A,CWd,CH,ox,oy}}
+const plant=(g,x,y,o)=>wheatPlant(g,x,y,o);
+function makeWheatField(o){const F=Object.assign({seed:1,b:10},o);F.nx=Math.ceil(F.w/CW);F.ny=Math.ceil(F.h/CW);F.cut=new Float64Array(F.nx*F.ny);F.cl=[];let i=0;
+ let yy=F.y+1.4;for(let r=0;yy<F.y+F.h-.5;r++,yy+=1.9+hs(r,F.seed+21)*1.0){const y=yy;let x=F.x+.6+hs(r,F.seed+22)*2.4;for(let c=0;;c++,x+=2.4+hs(i,F.seed+23)*1.8){if(x>F.x+F.w-1)break;F.cl.push({x:x+(hs(i,F.seed)-.5)*.8,y:y+(hs(i,F.seed+1)-.5)*.9,v:(hs(i,F.seed+2)*NV)|0,i});i++}}
+ F.cl.sort((a,b)=>a.y-b.y);F.straw=[];for(let k=0;k<F.w*F.h/40;k++)F.straw.push([F.x+hs(k,F.seed+9)*F.w,F.y+hs(k,F.seed+10)*F.h,(hs(k,F.seed+11)-.5)*1.2,1.6+hs(k,F.seed+12)*2.2]);return F}
+const cellOf=(F,x,y)=>{const cx=Math.floor((x-F.x)/CW),cy=Math.floor((y-F.y)/CW);if(cx<-2||cy<-2||cx>=F.nx+2||cy>=F.ny+2)return -1;return Math.max(0,Math.min(F.ny-1,cy))*F.nx+Math.max(0,Math.min(F.nx-1,cx))};
+function wheatCut(F,x,y,r,a0,a1,now,dxMax){let n=0;const c0=Math.floor((x-r-F.x)/CW),c1=Math.ceil((x+r-F.x)/CW),r0=Math.floor((y-r-F.y)/CW),r1=Math.ceil((y+r-F.y)/CW);
+ for(let cy=Math.max(0,r0);cy<=Math.min(F.ny-1,r1);cy++)for(let cx=Math.max(0,c0);cx<=Math.min(F.nx-1,c1);cx++){const k=cy*F.nx+cx;if(F.cut[k])continue;const px=F.x+(cx+.5)*CW,py=F.y+(cy+.5)*CW,d=Math.hypot(px-x,(py-y)*1.4);if(d>r||(dxMax!=null&&px-x>dxMax))continue;let a=Math.atan2(py-y,px-x);if(a<a0||a>a1)continue;F.cut[k]=now||1;n++}return n}
+function drawWheatField(g,F,now,o){o=o||{};const R=o.R||3,At0=atlas(F.b,R),At=At0,S=wheatStageP(F.b),under=o.under;
+ /* game integration: F.bk = per-plant stage (4x4 plants per plot); each clump and under-canopy cell takes its own plant's stage */const AB=F.bk?F.bk.map(b=>atlas(b,R)):null,SB=F.bk?F.bk.map(b=>wheatStageP(b)):null,pk=(x,y)=>Math.max(0,Math.min(3,Math.floor((y-F.y)/(F.h/4))))*4+Math.max(0,Math.min(3,Math.floor((x-F.x)/(F.w/4))));/* o.rect: only clumps that can touch this rect are drawn (dirty-area redraw of the cached still) */const RC=o.rect,inR=RC?(x,y)=>x>=RC.x-12&&x<=RC.x+RC.w+12&&y>=RC.y-4&&y<=RC.y+RC.h+26:null;
+ /* ground: tilled soil, everywhere stubble rows + lying straw (hidden under the standing crop) */g.fillStyle='#866646';g.fillRect(F.x,F.y,F.w,F.h);g.fillStyle='rgba(94,68,42,.5)';for(let y=F.y+1;y<F.y+F.h;y+=2.4)g.fillRect(F.x,y,F.w,.6);
+ let anyCut=false;for(let k=0;k<F.cut.length;k++)if(F.cut[k]){anyCut=true;break}
+ if(anyCut){for(const p of F.cl){if(inR&&!inR(p.x,p.y))continue;const k=cellOf(F,p.x,p.y);if(k<0||!F.cut[k])continue;g.strokeStyle='#a88a48';g.lineWidth=.35;g.beginPath();for(let t=-1;t<=1;t++){g.moveTo(p.x+t*.8,p.y);g.lineTo(p.x+t*.85,p.y-1.1-hs(p.i,t+5)*.6)}g.stroke();g.fillStyle='#ecd48a';for(let t=-1;t<=1;t++)g.fillRect(p.x+t*.85-.2,p.y-1.4-hs(p.i,t+5)*.6,.4,.3)}
+  for(const[x,y,a,l]of F.straw){const k=cellOf(F,x,y);if(k<0||!F.cut[k])continue;g.strokeStyle='#d4b866';g.lineWidth=.3;g.beginPath();g.moveTo(x,y);g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l*.35);g.stroke()}}
+ /* under-canopy fill per uncut cell (soil never peeks inside the crop); contact shadow on the stubble in front of the standing wall */
+ const UCf=S=>S.over?'#7a6230':(S.gold||0)>.6?'#b08a3c':(S.gold||0)>.2?'#7a7a34':'#3e6a24';if(SB||S.st>=5){for(let cy=0;cy<F.ny;cy++)for(let cx=0;cx<F.nx;cx++){const k=cy*F.nx+cx;if(F.cut[k])continue;const Sc=SB?SB[pk(F.x+(cx+.5)*CW,F.y+(cy+.5)*CW)]:S;if(Sc.st<5)continue;g.fillStyle=UCf(Sc);g.fillRect(F.x+cx*CW-.3,F.y+cy*CW-1.2,CW+.6,CW+.6);
+  if(cy<F.ny-1&&F.cut[k+F.nx]){const gr=g.createLinearGradient(0,F.y+(cy+1)*CW,0,F.y+(cy+1)*CW+3);gr.addColorStop(0,'rgba(30,20,8,.35)');gr.addColorStop(1,'rgba(30,20,8,0)');g.fillStyle=gr;g.fillRect(F.x+cx*CW,F.y+(cy+1)*CW,CW,3)}}}
+ /* standing clumps back to front; stalks cut <450 ms ago tip over toward the reaper's off-hand and are gathered (never pop) */
+ let ly=-1e9;const fall=[];for(const p of F.cl){if(inR&&!inR(p.x,p.y))continue;if(under&&p.y>ly+2){under(p.y);ly=p.y}const k=cellOf(F,p.x,p.y);const tc=k<0?0:F.cut[k];const At=AB?AB[pk(p.x,p.y)]:At0;if(tc){const e=(now-tc)/450;if(e>=0&&e<1){g.save();g.translate(p.x,p.y);g.rotate(-e*1.3);g.globalAlpha=1-e*e;g.drawImage(At.A[p.v][3],-At.ox,-At.oy,At.CWd,At.CH);g.restore()}continue}
+  const w=windAt(p.x,p.y,o.windNow!=null?o.windNow:now);let li=Math.round((w.lean-LEAN0)/(LEAN1-LEAN0)*(NB-1));li=li<0?0:li>=NB?NB-1:li;g.drawImage(At.A[p.v][li],p.x-At.ox,p.y-At.oy,At.CWd,At.CH)}
+ for(const[p,e]of fall){const At=AB?AB[pk(p.x,p.y)]:At0;g.save();g.translate(p.x,p.y);g.rotate(-e*1.2);g.globalAlpha=1-e*e;g.drawImage(At.A[p.v][3],-At.ox,-At.oy,At.CWd,At.CH);g.restore()}
+ if(under)under(1e9);
+ if(S.st>0){plShadeClip(1);plShade2(g,F.x,F.y,F.w,F.h,F.seed,S.st<8);plShadeClip(0)}}
+Object.assign(G,{makeWheatField,drawWheatField,wheatCut,windAt,wheatCellOf:cellOf,WHEAT_CW:CW})})(window);
+/* collection PILE of sheaves stacked for transport: butts out, heads in, layered into a low rounded rick.
+   wheatPile(g,x,y,fill 0..1[,n]) - n sheaves (default round(fill*16)). Layers: 7 base, 5, 3, 1. */
+(function(G){const hs=(i,s)=>{const x=Math.sin(i*127.1+s*311.7)*43758.5453;return x-Math.floor(x)};
+function lay(g,x,y,a,h,sh){sh=sh||1;const C=(r,gg,b,al)=>`rgba(${Math.min(255,r*sh)|0},${Math.min(255,gg*sh)|0},${Math.min(255,b*sh)|0},${al==null?1:al})`;g.save();g.translate(x,y);g.rotate(a);
+ /* a bound sheaf lying down: butt end at -x, ears fanning at +x; flattened bundle with tie, lit top edge, shadowed underside */
+ g.fillStyle='rgba(30,20,8,.28)';g.beginPath();g.ellipse(h*.05,h*.12,h*.55,h*.14,0,0,6.283);g.fill();
+ g.fillStyle=C(150,112,46);g.beginPath();g.moveTo(-h*.48,-h*.1);g.lineTo(h*.12,-h*.07);g.lineTo(h*.12,h*.1);g.lineTo(-h*.48,h*.12);g.closePath();g.fill();
+ g.fillStyle=C(214,178,92);g.beginPath();g.moveTo(-h*.48,-h*.1);g.lineTo(h*.12,-h*.07);g.lineTo(h*.12,0);g.lineTo(-h*.48,0);g.closePath();g.fill();
+ g.fillStyle=C(196,160,84);g.beginPath();g.ellipse(-h*.48,h*.01,h*.04,h*.11,0,0,6.283);g.fill();
+ for(let k=0;k<7;k++){const u=k/6-.5;g.fillStyle=C(184,136,54);g.beginPath();g.ellipse(h*.28,u*h*.26+h*.02,h*.15,h*.05,u*.6,0,6.283);g.fill();g.fillStyle=C(244,214,124);g.beginPath();g.ellipse(h*.27,u*h*.26-h*.005,h*.1,h*.028,u*.6,0,6.283);g.fill()}
+ g.strokeStyle=C(232,210,150,.3);g.lineWidth=h*.015;g.beginPath();for(let k=0;k<5;k++){const u=k/4-.5;g.moveTo(h*.4,u*h*.24);g.lineTo(h*.62,u*h*.34)}g.stroke();
+ g.strokeStyle=C(108,78,30);g.lineWidth=h*.05;g.beginPath();g.moveTo(-h*.16,-h*.09);g.lineTo(-h*.16,h*.11);g.stroke();g.restore()}
+/* pile = a domed rick of sheaves: butts round the rim, ears inward on top; size and height grow with the count */
+function wheatPile(g,x,y,fill,n){n=n==null?Math.round(Math.max(0,Math.min(1,fill))*16):n;if(n<=0)return;const f=Math.min(1,n/16),rx=4.5+f*5,hh=1.5+f*6.5,h=6.5;
+ g.fillStyle='rgba(30,20,8,.32)';g.beginPath();g.ellipse(x+1.5,y+.8,rx+1.5,rx*.42,0,0,6.283);g.fill();
+ /* rim of sheaves, back half first */const rim=Math.min(n,9),items=[];for(let k=0;k<rim;k++)items.push((k/rim)*6.283+.3);items.sort((p,q)=>Math.sin(p)-Math.sin(q));
+ const body=()=>{const gr=g.createRadialGradient(x-rx*.35,y-hh*.9,1,x,y-hh*.4,rx*1.2);gr.addColorStop(0,'#f2d688');gr.addColorStop(.6,'#cfa452');gr.addColorStop(1,'#8e6a2c');g.fillStyle=gr;g.beginPath();g.ellipse(x,y-hh*.35,rx*.82,hh*.7+rx*.25,0,0,6.283);g.fill();
+  /* ear texture on the dome */for(let k=0;k<n*3;k++){const a=hs(k,5)*6.283,r=Math.sqrt(hs(k,6))*.8,px=x+Math.cos(a)*rx*.75*r,py=y-hh*.35+Math.sin(a)*(hh*.62+rx*.22)*r;g.fillStyle=hs(k,7)>.5?'rgba(250,224,140,.75)':'rgba(150,108,40,.45)';g.beginPath();g.ellipse(px,py,.9,.35,a,0,6.283);g.fill()}};
+ let drawn=false;for(const a of items){if(!drawn&&Math.sin(a)>0){body();drawn=true}lay(g,x+Math.cos(a)*rx*.7,y+Math.sin(a)*rx*.3,a+Math.PI,h,.9+Math.sin(a)*.08-(Math.cos(a)>0?.06:0))}if(!drawn)body()}
+function _oldPile(g,x,y,fill,n){const LAY=[];n=n==null?Math.round(Math.max(0,Math.min(1,fill))*16):n;if(n<=0)return;const h=7;
+ g.fillStyle='rgba(30,20,8,.32)';g.beginPath();g.ellipse(x+1.2,y+1.2,7.5+Math.min(n,7)*.2,3.4,0,0,6.283);g.fill();
+ let m=0;for(const[cnt,r,dy,sh]of LAY){const items=[];for(let k=0;k<cnt&&m<n;k++,m++){const a=(k/cnt)*6.283+(dy*.3);items.push([a])}
+  /* back half first, then front half so butts overlap correctly */items.sort((p,q)=>Math.sin(p[0])-Math.sin(q[0]));for(const[a]of items){const px=x+Math.cos(a)*r*1.25,py=y+dy+Math.sin(a)*r*.55;lay(g,px,py,a+Math.PI,h,sh*(.86+Math.sin(a)*.08+(Math.cos(a)<0?.06:0)))}}}
+/* a sheaf carried in the arms at the hand point (game convention: hx = X +-4, hy = Y-10) */
+function wheatCarried(g,hx,hy,dir){g.save();g.translate(hx,hy);g.scale(dir<0?-1:1,1);lay(g,-1,0,-.15,6.5,1.05);g.restore()}
+G.wheatPile=wheatPile;G.wheatCarried=wheatCarried;G.wheatLaid=lay})(window);
+</script>
 <script>/* BERRY BUSH v5 art (art-studio/berry-bush/bush.js, embedded) */
 /* Bronze and Blood: BERRY BUSH v5 (dense foliage, berries embedded in depth), by Ningal. Art only, self-contained.
  * DROP-IN for the game's drawBerryBush (index.html ~756):
@@ -2106,10 +2300,40 @@ function plSpr(b){if(PLSPR[b])return PLSPR[b];const W=24,H=30,[c,g]=mk(W,H);
  else{const gr=b>=10?1:(b+1)/10,h=3+gr*(H-8),col=b===11?'#a08040':b===10?'#d8b444':gr<.55?'#4f9a34':'#93ac3c';g.strokeStyle=col;g.lineWidth=1.5;const tip=[];g.beginPath();for(let k=0;k<7;k++){const x=3+k*3+(k%2)*.8,lean=(k-3)*.55,hh=h*(.82+.18*((k*5)%3)/2);g.moveTo(x,H-2);g.lineTo(x+lean,H-2-hh);tip.push([x+lean,H-2-hh])}g.stroke();
   if(gr>.55){g.fillStyle=b===11?'#7e6230':b===10?'#f2d468':'#bcc458';for(const[x,y]of tip){g.beginPath();g.ellipse(x,y,1.3,2.8,0,0,Math.PI*2);g.fill()}if(b===11){g.strokeStyle='#6a5228';g.lineWidth=1;g.beginPath();g.moveTo(2,H-3);g.lineTo(W-2,H-9);g.stroke()}}}
  return PLSPR[b]={c,W,H}}
-function plDraw(s,z){if(!s.f||!s.f.length)return;const cell=FB/4*TS;for(const i of s.f){const x0=(i%MW)*TS,y0=(i/MW|0)*TS,r=s.pl&&s.pl[i];vx.fillStyle=r?'#866646':'#7a5434';vx.fillRect(x0+1,y0+1,FB*TS-2,FB*TS-2);
+/* ---- Ningal wheat fields (art only). Each sown plot block (FB x FB tiles, 16 plants) is drawn as ONE continuous surface with drawWheatField.
+   Each plant's real growth picks the stage of the clumps in its cell (F.bk); a plant whose harvest bit is set has its cell cut in the mask.
+   Live cutting follows the real reaper (a.fj.k==='cut', phase 'cut'): the sickle sweep cuts mask cells inside THAT plant's cell only, reach growing with
+   the real swing count j.n, and the whole cell is cut when the game flips the plant's harvest bit. Zoomed out / no activity: cached still image,
+   redrawn only in the cells whose stage or cut state changed. ---- */
+const WF=new Map(),WF_SW=1500;let WF_RP=null,WF_RPT=-1;
+function wfOn(z){return z>=.3&&!(typeof GFX!=='undefined'&&GFX.q==='low')&&typeof makeWheatField==='function'}
+function wfStage(st){return st.g>=1?(st.od>PL_OVER?11:10):Math.max(0,Math.min(9,Math.floor(st.g*10)))}
+function wfCellRect(F,k){const C=F.w/4;return{x:F.x+(k%4)*C,y:F.y+(k>>2)*C,C}}
+function wfCutCell(F,k,t){const R=wfCellRect(F,k),cw=WHEAT_CW;let n=0;for(let cy=Math.floor((R.y-F.y)/cw);cy<Math.ceil((R.y+R.C-F.y)/cw);cy++)for(let cx=Math.floor((R.x-F.x)/cw);cx<Math.ceil((R.x+R.C-F.x)/cw);cx++){const q=cy*F.nx+cx;if(!F.cut[q]){F.cut[q]=t;n++}}return n}
+/* the sickle sweep, limited to the plant being cut: same arc as Ningal's reaper (-1.4..a from 5 px behind the feet) */
+function wfSweep(F,k,ox,oy,r,a1,t){const R=wfCellRect(F,k),cw=WHEAT_CW;let n=0;for(let cy=Math.floor((R.y-F.y)/cw);cy<Math.ceil((R.y+R.C-F.y)/cw);cy++)for(let cx=Math.floor((R.x-F.x)/cw);cx<Math.ceil((R.x+R.C-F.x)/cw);cx++){const q=cy*F.nx+cx;if(F.cut[q])continue;const px=F.x+(cx+.5)*cw,py=F.y+(cy+.5)*cw,d=Math.hypot(px-ox,(py-oy)*1.4);if(d>r)continue;const a=Math.atan2(py-oy,px-ox);if(a<-1.4||a>a1)continue;F.cut[q]=t;n++}return n}
+function wfReapers(now){if(WF_RPT===now)return WF_RP;WF_RPT=now;WF_RP=new Map();for(const a of agents){const j=a.fj;if(!j||j.k!=='cut'||j.ph!=='cut'||a.state!=='work'||a.dead)continue;const key=j.q+':'+j.i;let L=WF_RP.get(key);if(!L)WF_RP.set(key,L=[]);L.push(a)}return WF_RP}
+/* reaper pose from Ningal's harness (1.5 s swing: wind-up, cut .25-.6, gather) */
+function reapPose(a,now){const j=a.fj;if(!j||j.k!=='cut'||j.ph!=='cut'||a.state!=='work')return null;const p=(now/WF_SW+(a.idx||0)*.37)%1;
+ if(p<.25)return{p,ang:-1.15+p/.25*.25,lean:.14*p/.25,bob:0};if(p<.6){const u=(p-.25)/.35;return{p,u,ang:-.9+u*2,lean:.14+.06*Math.sin(u*3.14),bob:-.3}}const u=(p-.6)/.4;return{p,ang:1.1-u*2.2,lean:.2*(1-u),bob:Math.sin(u*3.14)*.8}}
+function reapPZ(a,P){if(a._rpA!=null){P.ang=a._rpA;P.sw=0;P.push=0;P.chip=[2,2]}return P}
+function wfRender(W,now,rect){const F=W.F,R=W.R,g=W.g;g.save();g.setTransform(R,0,0,R,-F.x*R,-F.y*R);if(rect){g.beginPath();g.rect(rect.x,rect.y,rect.w,rect.h);g.clip()}g.clearRect(F.x,F.y,F.w,F.h);drawWheatField(g,F,now,{R:Math.max(2,R),windNow:0,rect});g.restore()}
+function wfDraw(s,i,r,x0,y0,z,now){const key=s.id+':'+i,FW=FB*TS;let W=WF.get(key);
+ if(!W||W.c!==r.c||W.t!==r.t){W={c:r.c,t:r.t,h:0,F:makeWheatField({x:x0,y:y0,w:FW,h:FW,b:10,seed:(i%9973)+(r.c|0)}),fresh:1,dirty:new Set(),live:0};W.F.bk=new Array(16).fill(0);WF.set(key,W)}
+ const F=W.F,cnt=new Array(13).fill(0);
+ for(let k=0;k<PL_N;k++){const st=plState(s,i,k),b=wfStage(st);if(!st.h)cnt[b]++;if(F.bk[k]!==b){F.bk[k]=b;W.dirty.add(k)}if(st.h&&!((W.h>>k)&1)){W.h|=1<<k;/* already harvested when first seen: plain stubble; a fresh real cut: the rest of the cell tips over */if(wfCutCell(F,k,W.fresh?1:now)&&!W.fresh)W.live=now+600;W.dirty.add(k)}}
+ let mb=F.b,mc=-1;for(let b=0;b<13;b++)if(cnt[b]>mc){mc=cnt[b];mb=b}if(mb!==F.b){F.b=mb;W.full=1}W.fresh=0;
+ const RP=wfReapers(now).get(key);if(RP)for(const a of RP){const j=a.fj,rp=reapPose(a,now);if(!rp||rp.u==null)continue;const k=j.n2;if(k==null||k<0||k>=16)continue;const cs=FB/4;/* Ningal's reach is for a 32 px plant cell; scale to this plot's cell */const n=wfSweep(F,k,a.x*TS-5*cs,a.y*TS,(24+Math.max(0,(j.n||1)-1)*12)*cs,-1.35+rp.u*2.7,now);if(n){W.live=now+600;W.dirty.add(k)}}
+ /* always a cached still (a live 256 px plot is ~80 ms per draw); resolution follows zoom, one full (re)bake per frame, the old still is shown scaled meanwhile */
+ const R=Math.min(3,Math.max(1,Math.ceil(z*PXR-.15)));if(wfDraw.f!==now){wfDraw.f=now;wfDraw.bud=1}
+ if(!W.g||W.R!==R||W.full){if(wfDraw.bud>0){wfDraw.bud--;W.R=R;const c=document.createElement('canvas');c.width=c.height=Math.ceil(FW*R);W.g=c.getContext('2d');W.c2=c;W.full=0;W.dirty.clear();wfRender(W,now)}}
+ if(W.g&&W.dirty.size&&W.R===R&&(now-(W.rt||0)>90||!(RP||now<W.live))){W.rt=now;for(const k of W.dirty){const c=wfCellRect(F,k);wfRender(W,now,{x:c.x-2,y:c.y-2,w:c.C+4,h:c.C+4})}if(!(RP||now<W.live))W.dirty.clear();else W.dirty=new Set(RP?RP.map(a=>a.fj.n2):[...W.dirty])}
+ if(!W.c2){vx.fillStyle='#866646';vx.fillRect(x0,y0,FW,FW);return}
+ vx.drawImage(W.c2,x0,y0-0,FW,FW)}
+function plDraw(s,z){if(!s.f||!s.f.length)return;const cell=FB/4*TS,wfo=wfOn(z),now=performance.now();for(const i of s.f){const x0=(i%MW)*TS,y0=(i/MW|0)*TS,r=s.pl&&s.pl[i];if(r&&wfo){wfDraw(s,i,r,x0,y0,z,now);if(S.devPl&&z>=.6)for(let k=0;k<PL_N;k++){const st=plState(s,i,k);if(st.h)continue;const p=plPos(i,k);vx.font='bold '+Math.max(8,cell*.16|0)+'px sans-serif';vx.textAlign='center';vx.fillStyle='rgba(0,0,0,.6)';vx.fillRect(p.x*TS-cell*.36,p.y*TS+cell*.12,cell*.72,cell*.26);vx.fillStyle=st.g>=1?'#ffe080':'#e0ffd0';vx.fillText(Math.round(st.y*st.f)+' ('+Math.round(Math.min(1,st.g)*100)+'%)',p.x*TS,p.y*TS+cell*.32);vx.textAlign='left'}}else{vx.fillStyle=r?'#866646':'#7a5434';vx.fillRect(x0+1,y0+1,FB*TS-2,FB*TS-2);
   if(!r||z<.3){vx.strokeStyle=r?'#6e5234':'#5a3a20';vx.lineWidth=1.5;vx.beginPath();for(let k=5;k<FB*TS;k+=7){vx.moveTo(x0+3,y0+k);vx.lineTo(x0+FB*TS-3,y0+k)}vx.stroke();if(!r)continue}
-  if(z>=.3)for(let k=0;k<PL_N;k++){const st=plState(s,i,k);const b=st.h?12:st.g>=1?(st.od>PL_OVER?11:10):Math.max(0,Math.min(9,Math.floor(st.g*10)));const sp=plSpr(b),p=plPos(i,k),w=cell*.95,h=w*sp.H/sp.W;vx.drawImage(sp.c,p.x*TS-w/2,p.y*TS+cell*.4-h,w,h);
-   if(S.devPl&&!st.h&&z>=.6){vx.font='bold '+Math.max(8,cell*.16|0)+'px sans-serif';vx.textAlign='center';vx.fillStyle='rgba(0,0,0,.6)';vx.fillRect(p.x*TS-cell*.36,p.y*TS+cell*.12,cell*.72,cell*.26);vx.fillStyle=st.g>=1?'#ffe080':'#e0ffd0';vx.fillText(Math.round(st.y*st.f)+' ('+Math.round(Math.min(1,st.g)*100)+'%)',p.x*TS,p.y*TS+cell*.32);vx.textAlign='left'}}
+  if(z>=.3)for(let k=0;k<PL_N;k++){const st=plState(s,i,k);const b=st.h?12:st.g>=1?(st.od>PL_OVER?11:10):Math.max(0,Math.min(9,Math.floor(st.g*10)));const sp=plSpr2(b,k),p=plPos(i,k),w=cell*1.08,h=w*sp.H/sp.W;vx.drawImage(sp.c,p.x*TS-w/2,p.y*TS+cell*.4-h,w,h);
+   if(S.devPl&&!st.h&&z>=.6){vx.font='bold '+Math.max(8,cell*.16|0)+'px sans-serif';vx.textAlign='center';vx.fillStyle='rgba(0,0,0,.6)';vx.fillRect(p.x*TS-cell*.36,p.y*TS+cell*.12,cell*.72,cell*.26);vx.fillStyle=st.g>=1?'#ffe080':'#e0ffd0';vx.fillText(Math.round(st.y*st.f)+' ('+Math.round(Math.min(1,st.g)*100)+'%)',p.x*TS,p.y*TS+cell*.32);vx.textAlign='left'}}}
   const sh=s.shf&&s.shf[i];if(sh>.5&&z>=.3){const n=Math.min(6,Math.ceil(sh/150));for(let k=0;k<n;k++){const x=x0+FB*TS*.12+k*cell*.32,y=y0+FB*TS*.92;vx.fillStyle='#d8b450';vx.strokeStyle='#7a5a20';vx.lineWidth=1;vx.beginPath();vx.moveTo(x-cell*.12,y);vx.lineTo(x,y-cell*.4);vx.lineTo(x+cell*.12,y);vx.closePath();vx.fill();vx.stroke()}}}{const p=s.hsp;if(p&&p.g>.5&&z>=.3){const n=Math.min(12,Math.ceil(p.g/300)),cell=FB/4*TS;for(let k=0;k<n;k++){const x=p.x*TS+((k%4)-1.5)*cell*.28,y=p.y*TS+((k/4|0)-1)*cell*.22;vx.fillStyle='#d8b450';vx.strokeStyle='#7a5a20';vx.lineWidth=1;vx.beginPath();vx.moveTo(x-cell*.13,y);vx.lineTo(x,y-cell*.42);vx.lineTo(x+cell*.13,y);vx.closePath();vx.fill();vx.stroke()}if(z>=.6){vx.font='bold 10px sans-serif';vx.textAlign='center';vx.fillStyle='rgba(0,0,0,.55)';const t='Stockpile: '+Math.round(p.g)+' grain';const w=vx.measureText(t).width+6;vx.fillRect(p.x*TS-w/2,p.y*TS+4,w,13);vx.fillStyle='#ffe8b0';vx.fillText(t,p.x*TS,p.y*TS+14);vx.textAlign='left'}}}}
 
 function plYard(){const E=S.eco,fd=FOOD_DAY();for(const s of E.steads)try{plHard(s)}catch(e){console.warn(e)}let dem=0;for(const F of yardFams())dem+=F.m.length*fd*WAGE_X;for(const s of E.steads)if(s.hard)dem+=s.n*fd;const sf=Math.max(0,E.hold.grain||0)+Math.max(0,E.hold.bread||0)*BREAD_FV;E.sfd=dem>0?Math.min(999,sf/dem):999;const was=E.bank;E.bank=sf<1?1:0;const hb=holdB(),P=hb?{x:hb.x-2,y:hb.y-2}:S.center;
@@ -4655,9 +4879,10 @@ function poseFrame(pn,now,idx,d,fl,face,toolK){const P=POSE[pn]||POSE.idle,cyc=(
  return{pn,cyc,ang,sw:P.curve?fl*PWN.swing(cyc,P.curve)*(d===0||d===2?-1:1):0,push:P.push?PWN.swing(cyc,P.push):0,chip:P.chip||[2,2]}}
 // #16 pawn-scale realism: people are drawn smaller against tiles and buildings (an adult ~1.7 m on a ~2.4 m tile), so houses, farms and the map read larger
 let PSC=.72;
-function _drawAgent0(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({},a.o,{sick:1}):a.o,d=a.dir==null?1:a.dir;const gl=moving?Math.abs(Math.sin((a.ft||0)*Math.PI))*1.6:Math.sin(now/700+(a.idx||0))*.25,jump=a.state==='dance'&&Math.floor(now/200+a.idx)%2?3:0,bob=gl;
+function _drawAgent0(a,p,moving,now){/* Ningal reaper swing on the real harvesting pawn: face the crop, lean + bob with the sickle arc (visual only) */const RPz=!moving&&reapPose(a,now);if(!RPz)return _drawAgentB(a,p,moving,now);const od=a.dir;a._rpA=RPz.ang;a.dir=0;vx.save();vx.translate(p.x,p.y);vx.rotate(RPz.lean);vx.translate(-p.x,-p.y-RPz.bob);try{_drawAgentB(a,p,moving,now)}finally{vx.restore();a.dir=od;a._rpA=null}}
+function _drawAgentB(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({},a.o,{sick:1}):a.o,d=a.dir==null?1:a.dir;const gl=moving?Math.abs(Math.sin((a.ft||0)*Math.PI))*1.6:Math.sin(now/700+(a.idx||0))*.25,jump=a.state==='dance'&&Math.floor(now/200+a.idx)%2?3:0,bob=gl;
  const fl=d===2?-1:1,face=d===0?0:d===2?Math.PI:d===3?-Math.PI/2:Math.PI/2,hx=X+(d===1?5:d===3?-5:fl*4),hy=Y-10-bob;
- /* F1: tool, swing curve and timing come from the shared pose table */const toolK=poseTool(a,moving),PZ=poseFrame(poseName(a,toolK,moving),now,a.idx||0,d,fl,face,toolK),cyc=PZ.cyc,tAng=PZ.ang,tSw=PZ.sw,tPush=PZ.push;
+ /* F1: tool, swing curve and timing come from the shared pose table */const toolK=a._rpA!=null?'sickle':poseTool(a,moving),PZ=reapPZ(a,poseFrame(poseName(a,toolK,moving),now,a.idx||0,d,fl,face,toolK)),cyc=PZ.cyc,tAng=PZ.ang,tSw=PZ.sw,tPush=PZ.push;
  const GA=PZ.pn==='gather';const drawTool=()=>{if(toolK&&!GA)pawnTool(toolK,hx,hy,tAng,tSw,tPush,20)};
  const ck=a.cartK!=null&&(moving||a.cartAll)?CART_LOOKS[a.cartK%CART_LOOKS.length]:null,cdist=(a.ft||0)*.3;if(ck){if(moving&&a.x!=null)hcDustEmit(ck,a.x,a.y,d,1/60);if(!cartFront(ck,d))cartDraw(vx,ck,X,Y+2,d,36,cdist,a.cartLd)}
  vx.drawImage(shadowSpr(),X-7,Y-2,14,6);if(toolK&&d===3)drawTool();if(GA)vx.drawImage(pawnSprA(o,d,cam.z*PXR<=1.05?1:0),X-12,Y-23,24,25);/* H5: crouched */else vx.drawImage(pawnSprA(o,d,cam.z*PXR<=1.05?1:0),X-12,Y-29-jump-bob,24,32);if(GA||(a.bk>=1&&a.carry!=='basket'))ghHip(a,X,Y-(GA?-3:bob),d,fl,GA?cyc:-1);if(ck&&cartFront(ck,d))cartDraw(vx,ck,X,Y+2,d,36,cdist,a.cartLd);
