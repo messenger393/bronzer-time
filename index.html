@@ -2256,18 +2256,53 @@ const plPLen=(a,t)=>{const r=pathTo(a,t);if(!r.length)return 1e9;let L=0,x=a.x,y
 function plCarry(a,s){a.fj={k:'car'};a.carry='sack';const p=plSpot(s),dr=plDoor(s,a);/* Weston item 5: when home is about as close as the stockpile, the sack goes straight home (no second haul) */if(p&&dr){const hp=plPLen(a,dr),sp=plPLen(a,{x:p.x,y:p.y+.3});if(hp<1e9&&hp<=sp*1.25)a.fj.hm=1}go(a,a.fj.hm||!p?dr:{x:p.x,y:p.y+.3},'carry');a.t=1}
 /* the sheaves reach the farmhouse store: THIS is the harvest */
 function plDeposit(a,s){const g=a.fc||0;a.fc=0;a.carry=null;if(g<=0)return;const E=S.eco;s.st.grain=(s.st.grain||0)+g;if(s.hard)s.hprod=(s.hprod||0)+g*EIT.grain.v;else s.prod=(s.prod||0)+g*EIT.grain.v;s.hvY=(s.hvY||0)+g;s.hvT=(s.hvT||0)+g;E.led.harvest=(E.led.harvest||0)+g}
-function plThink(a,s){const j=a.fj;
+/* ---- MIXED HARVEST (Weston-approved, Ningal's reaper line). Every family member of working age reaps in a LINE across a plot: the plot's 4 plant rows
+   are shared out (each member owns a stretch of rows), the line works column by column west to east, nobody steps into the next column until the
+   column is cut. Grain is credited per patch (each swing adds its share of the plant's yield to the reaper's hand), every PL_SHS swings the reaper
+   lays a sheaf behind them; with PL_ARMS sheaves down they gather their own sheaves and carry them to the pile at the field edge (s.hsp).
+   No carrier or hauler roles: once no ripe crop and no sheaves are left in the field, the family hauls the pile home (existing haul job). ---- */
+const PL_SHS=3,PL_ARMS=4,PL_LNMAX=4,PL_LNTO=.05;
+function plRipeK(q,i,k,hungry){const r=q.pl&&q.pl[i];if(!r||((r.h>>k)&1))return false;const g=(S.t-r.t)/plT(i,r,k);return g>=1||(hungry&&g>=PL_EARLY)}
+function plColHas(q,i,c,hungry){for(let rw=0;rw<4;rw++)if(plRipeK(q,i,rw*4+c,hungry))return true;return false}
+function plLnRows(L){const ks=Object.keys(L.m).sort();for(const k of ks)L.m[k]=[];for(let rw=0;rw<4;rw++)L.m[ks[Math.floor(rw*ks.length/4)]].push(rw)}
+function plLnGet(q,i){q.ln=q.ln||{};return q.ln[i]}
+/* drop members not seen lately (gone home, carrying sheaves, asleep): their rows go to the others */
+function plLnPrune(L){let ch=0;for(const k in L.seen)if(S.t-L.seen[k]>DAYLEN*PL_LNTO){delete L.seen[k];delete L.m[k];ch=1}if(ch&&Object.keys(L.m).length)plLnRows(L);return Object.keys(L.m).length}
+function plLnAdvance(q,i,L,hungry){while(L.c<4&&!plColHas(q,i,L.c,hungry))L.c++;if(L.c>=4){delete q.ln[i];return false}return true}
+function plLnPick(a,s,hungry){/* the line this reaper belongs to, or the nearest plot with a line that has room, or a new line on the nearest ripe plot */
+ if(a.ln){const q=plQ(a.ln.q),L=q&&plLnGet(q,a.ln.i);if(L&&L.m[a.key]&&plLnAdvance(q,a.ln.i,L,hungry))return{q,i:a.ln.i,L};a.ln=null}
+ let best=null,bd=1e9;for(const q of plGrp(s))for(const ii in q.pl){const i=+ii;let has=false;for(let k=0;k<PL_N&&!has;k++)has=plRipeK(q,i,k,hungry);if(!has)continue;const L=plLnGet(q,i);if(L&&plLnPrune(L)>=PL_LNMAX)continue;
+  const d=Math.hypot(i%MW+FB/2-a.x,(i/MW|0)+FB/2-a.y)-(L?FB*2:0)/* join a working line before opening a new plot */;if(d<bd){bd=d;best={q,i}}}
+ if(!best)return null;const q=best.q,i=best.i;let L=plLnGet(q,i);if(!L){L=q.ln[i]={c:0,m:{},seen:{}};if(!plLnAdvance(q,i,L,hungry))return null}
+ L.m[a.key]=[];L.seen[a.key]=S.t;plLnRows(L);a.ln={q:q.id,i};return{q,i,L}}
+function plLnJob(a,s){const hungry=plFood(s)<s.n*FOOD_DAY(),P=plLnPick(a,s,hungry);if(!P)return false;const{q,i,L}=P;L.seen[a.key]=S.t;plLnPrune(L);if(!L.m[a.key]){L.m[a.key]=[];L.seen[a.key]=S.t;plLnRows(L)}
+ for(const rw of L.m[a.key]){const k=rw*4+L.c;if(!plRipeK(q,i,k,hungry)||plTaken('p'+i+':'+k,a))continue;const p=plPos(i,k);plHold('p'+i+':'+k,a);a.fj={k:'cut',q:q.id,i,n2:k,p,ph:'go',ln:1};go(a,{x:p.x-.4,y:p.y+.25},'fgo');a.t=1;return true}
+ /* my stretch of this column is cut: wait in line, a step into the stubble (the column advances when everyone's stretch is cut) */
+ let open=false;for(let rw=0;rw<4;rw++){const k=rw*4+L.c;if(plRipeK(q,i,k,hungry)){open=true;break}}if(!open){plLnAdvance(q,i,L,hungry);a.t=.2;return true}
+ const rw=L.m[a.key][0]!=null?L.m[a.key][0]:0,p=plPos(i,rw*4+L.c);if(Math.hypot(a.x-(p.x-.6),a.y-(p.y+.25))>1.2){go(a,{x:p.x-.6,y:p.y+.25},'fgo');a.t=1;return true}a.state='idle';a.t=.6;return true}
+/* sheaves laid on the stubble: q.shv=[{id,x,y,g,a}] */
+function plLay(a,s){const g=a.hb||0;a.hb=0;if(!(g>0))return;const q=a.fj&&a.fj.q!=null?plQ(a.fj.q):s;q.shv=q.shv||[];q.svN=(q.svN||0)+1;q.shv.push({id:q.svN,x:a.x-.55,y:a.y+.15+(Math.random()-.5)*.2,g,a:a.key,r:(Math.random()-.5)*.6})}
+function plMySv(a,s){let n=0;for(const q of plGrp(s))for(const v of (q.shv||[]))if(v.a===a.key)n++;return n}
+function plAnySv(s){for(const q of plGrp(s))if(q.shv&&q.shv.length)return true;return false}
+function plColJob(a,s,force){const own=plMySv(a,s);if(!(own>=PL_ARMS||force))return false;let best=null,bd=1e9;for(const q of plGrp(s))for(const v of (q.shv||[])){if(plTaken('sv'+q.id+':'+v.id,a))continue;const d=Math.hypot(v.x-a.x,v.y-a.y)+(v.a===a.key?0:6);if(d<bd){bd=d;best={q:q.id,v}}}
+ if(!best)return false;plHold('sv'+best.q+':'+best.v.id,a);a.fj={k:'col',q:best.q,id:best.v.id,n:0};go(a,{x:best.v.x+.3,y:best.v.y},'fgo');a.t=1;return true}
+function plColStep(a,s,j){if(a.route.length){a.t=1;if(a.fc>0)a.carry='sheaf';return true}const q=plQ(j.q);FARMP.delete('sv'+j.q+':'+j.id);const L=q&&q.shv||[],ix=L.findIndex(v=>v.id===j.id);if(ix>=0){const v=L[ix];a.fc=(a.fc||0)+v.g;L.splice(ix,1);a.fcn=(a.fcn||0)+1;a.carry='sheaf'}
+ a.state='work';a.hvTool=null;/* next of my sheaves, nearest first, until my arms are full */if((a.fcn||0)<PL_ARMS){let best=null,bd=1e9;for(const qq of plGrp(s))for(const v of (qq.shv||[])){if(plTaken('sv'+qq.id+':'+v.id,a))continue;const d=Math.hypot(v.x-a.x,v.y-a.y);if(d<bd&&(v.a===a.key||d<3)){bd=d;best={q:qq.id,v}}}
+  if(best&&bd<FB*2){plHold('sv'+best.q+':'+best.v.id,a);j.q=best.q;j.id=best.v.id;go(a,{x:best.v.x+.3,y:best.v.y},'fgo');a.t=.6;return true}}
+ a.fj=null;if(a.fc>0){a.fcn=0;plCarry(a,s);a.fj.sv=1;a.carry='sheaf';return true}a.t=.3;return true}
+function plThink(a,s){const j=a.fj;if(!j&&a.hb>0)plLay(a,s);
  if(j){const q=j.q!=null?plQ(j.q):null;
-  if(j.k==='car'){if(a.route.length){a.carry='sack';a.t=1;return true}if(j.hm){const d=plDoor(s,a);if(Math.hypot(a.x-d.x,a.y-d.y)>2.5&&!j.tr){j.tr=1;go(a,d,'carry');a.t=1;return true}plDeposit(a,s);a.fj=null;a.state='idle';a.t=.8;return true}{const d=plSpot(s)||plDoor(s,a);if(Math.hypot(a.x-d.x,a.y-d.y)>2.5&&!j.tr){j.tr=1;go(a,{x:d.x,y:d.y+.3},'carry');a.t=1;return true}}plDrop(a,s);a.fj=null;a.state='idle';a.t=.8;return true}
+  if(j.k==='col')return plColStep(a,s,j);
+  if(j.k==='car'){if(a.route.length){a.carry=j.sv?'sheaf':'sack';a.t=1;return true}if(j.hm){const d=plDoor(s,a);if(Math.hypot(a.x-d.x,a.y-d.y)>2.5&&!j.tr){j.tr=1;go(a,d,'carry');a.t=1;return true}plDeposit(a,s);a.fj=null;a.state='idle';a.t=.8;return true}{const d=plSpot(s)||plDoor(s,a);if(Math.hypot(a.x-d.x,a.y-d.y)>2.5&&!j.tr){j.tr=1;go(a,{x:d.x,y:d.y+.3},'carry');a.t=1;return true}}plDrop(a,s);a.fj=null;a.state='idle';a.t=.8;return true}
   if(j.k==='haul'){if(a.route.length){a.t=1;if(j.ph==='home'){a.carry='sack'}return true}if(j.ph==='go'){const p=plSpot(s);const u=p?Math.min(p.g,plHaulCap(s)):0;if(p)p.g-=u;FARMP.delete('hp'+s.id);a.hl=u;if(u<=0){a.fj=null;a.t=.3;return true}j.ph='home';a.carry='sack';if(s.hc)a.cartK=s.hcL||0;go(a,plDoor(s,a),'carry');a.t=1;return true}s.st.grain=(s.st.grain||0)+(a.hl||0);s.hauled=(s.hauled||0)+(a.hl||0);a.hl=0;a.carry=null;a.cartK=null;a.fj=null;a.state='idle';a.t=.8;return true}
   if(j.k==='cut'){const r=q&&q.pl&&q.pl[j.i],key='p'+j.i+':'+j.n2;if(!r||((r.h>>j.n2)&1)){FARMP.delete(key);a.fj=null;a.t=.2;return true}
    if(j.ph==='go'){if(a.route.length){a.t=1;return true}if(Math.hypot(a.x-j.p.x+.4,a.y-j.p.y-.25)>1.5){go(a,{x:j.p.x-.4,y:j.p.y+.25},'fgo');a.t=1;j.tr=(j.tr||0)+1;if(j.tr>3){FARMP.delete(key);a.fj=null}return true}j.ph='cut';j.n=0}
    if(Math.hypot(a.x-j.p.x+.4,a.y-j.p.y-.25)>1.5){j.ph='go';go(a,{x:j.p.x-.4,y:j.p.y+.25},'fgo');a.t=1;return true}
-   plHold(key,a);a.state='work';a.hvTool='sickle';a.hvk=null;a.dir=1;j.n++;if(j.n<=PL_SW){a.t=1.8+Math.random()*.6;return true}
-   const st=plState(q,j.i,j.n2),y=st.y*st.f;r.h|=1<<j.n2;FARMP.delete(key);a.fc=(a.fc||0)+y;q.plCut=(q.plCut||0)+1;q.plLoss=(q.plLoss||0)+(st.y-y);if(st.g<1)q.plEarly=(q.plEarly||0)+1;else if(st.od>PL_OVER)q.plOver=(q.plOver||0)+1;
+   plHold(key,a);a.state='work';a.hvTool='sickle';a.hvk=null;a.dir=1;/* per-plant cut progress lives on the plot (saved), so an interrupted cut resumes and no patch is credited twice */r.cs=r.cs||{};let e=r.cs[j.n2];if(!e){const st0=plState(q,j.i,j.n2);e=r.cs[j.n2]={n:0,y:st0.y*st0.f,y0:st0.y,g0:st0.g,od:st0.od}}e.n++;j.n=e.n;j.y=e.y;j.y0=e.y0;j.g0=e.g0;j.od=e.od;
+   /* mixed harvest: each swing cuts a patch and puts its share of the plant's grain in hand; every PL_SHS swings a sheaf is laid behind */a.hb=(a.hb||0)+j.y/(PL_SW+1);a.sw=(a.sw||0)+1;if(a.sw%PL_SHS===0)plLay(a,s);if(a.ln&&q.ln&&q.ln[j.i]&&q.ln[j.i].seen)q.ln[j.i].seen[a.key]=S.t;if(j.n<=PL_SW){a.t=1.8+Math.random()*.6;return true}
+   const st={y:j.y0,g:j.g0,od:j.od},y=j.y;delete r.cs[j.n2];r.h|=1<<j.n2;FARMP.delete(key);q.plCut=(q.plCut||0)+1;q.plLoss=(q.plLoss||0)+(st.y-y);if(st.g<1)q.plEarly=(q.plEarly||0)+1;else if(st.od>PL_OVER)q.plOver=(q.plOver||0)+1;
    if(r.h===(1<<PL_N)-1){delete q.pl[j.i];q.plDone=(q.plDone||0)+1}
-   if(a.fc>PL_CAR){q.shf=q.shf||{};q.shf[j.i]=(q.shf[j.i]||0)+a.fc-PL_CAR;a.fc=PL_CAR}/* what does not fit in the sack stays on the field as sheaves */
-   a.fj=null;a.state='idle';if(a.fc>=PL_CAR-1e-6){plCarry(a,s);return true}a.t=.3;return true}
+   a.fj=null;a.state='idle';a.t=.3;return true}
   if(j.k==='shf'){if(a.route.length){a.t=1;return true}if(q&&q.shf){const h=q.shf[j.i]||0,u=Math.min(h,PL_CAR-(a.fc||0));a.fc=(a.fc||0)+u;q.shf[j.i]=h-u;if(q.shf[j.i]<.5)delete q.shf[j.i]}FARMP.delete('h'+j.i);a.fj=null;a.state='work';a.hvTool=null;if(a.fc>=PL_CAR-1e-6){plCarry(a,s);return true}a.t=1;return true}
   if(j.k==='sow'){const key='s'+j.i;if(!q||q.pl[j.i]||q.f.indexOf(j.i)<0){FARMP.delete(key);a.fj=null;a.t=.2;return true}
    if(j.ph==='go'){if(a.route.length){a.t=1;return true}const px=j.i%MW+.3,py=(j.i/MW|0)+.3;if(Math.hypot(a.x-px,a.y-py)>2){j.tr=(j.tr||0)+1;if(j.tr>3){FARMP.delete(key);a.fj=null;a.t=.5;return true}go(a,{x:px,y:py},'fgo');a.t=1;return true}j.ph='sow';j.n=0}/* the sower must reach the plot (no sowing from the doorstep) */
@@ -2276,10 +2311,13 @@ function plThink(a,s){const j=a.fj;
   a.fj=null}
  if(sowSeason()&&a.idx%2===0&&!(a.fc>0)){const w=plFindSow(a,s);if(w){plHold('s'+w.i,a);a.fj={k:'sow',q:w.q,i:w.i,ph:'go'};go(a,{x:w.i%MW+.3,y:(w.i/MW|0)+.3},'fgo');a.t=1;return true}}/* in sowing season half the workers sow first, so the next crop goes in while the last one is cut */
  if(plFood(s)<2*s.n*FOOD_DAY()&&!(a.fc>0)&&plHaulGo(a,s))return true;/* little food at home: haul from the stockpile first */
- const c=plFindCut(a,s);
- if(!c&&a.fc>0){plCarry(a,s);return true}
+ if(a.fc>0){a.fcn=0;plCarry(a,s);if(a.fj)a.fj.sv=1;return true}/* anything in arms goes to the pile first */
+ if(plColJob(a,s,false))return true;/* arms-full of my own sheaves: gather and carry them to the pile */
+ if(plLnJob(a,s))return true;/* reap in the line */
+ if(a.hb>0)plLay(a,s);if(plColJob(a,s,true))return true;/* field cut: gather any sheaves left lying */
+ const c=null;
  const h=plFindShf(a,s);if(h&&(!c||Math.hypot(h.i%MW+FB/2-a.x,(h.i/MW|0)+FB/2-a.y)<Math.hypot(c.p.x-a.x,c.p.y-a.y)+3)){plHold('h'+h.i,a);a.fj={k:'shf',q:h.q,i:h.i};go(a,{x:h.i%MW+FB/2,y:(h.i/MW|0)+FB/2+.4},'fgo');a.t=1;return true}
- if(!c&&!(a.fc>0)&&plHaulGo(a,s))return true;
+ if(!plAnySv(s)&&!(a.fc>0)&&plHaulGo(a,s))return true;/* the field is cut and gathered: the family hauls the pile home */
  if(c){plHold('p'+c.i+':'+c.k,a);a.fj={k:'cut',q:c.q,i:c.i,n2:c.k,p:c.p,ph:'go'};go(a,{x:c.p.x-.4,y:c.p.y+.25},'fgo');a.t=1;return true}
  const w=plFindSow(a,s);if(w){plHold('s'+w.i,a);a.fj={k:'sow',q:w.q,i:w.i,ph:'go'};go(a,{x:w.i%MW+.3,y:(w.i/MW|0)+.3},'fgo');a.t=1;return true}
  return false}
@@ -2345,7 +2383,7 @@ function plDraw(s,z){if(!s.f||!s.f.length)return;const cell=FB/4*TS,wfo=wfOn(z),
   if(!r||z<.3){vx.strokeStyle=r?'#6e5234':'#5a3a20';vx.lineWidth=1.5;vx.beginPath();for(let k=5;k<FB*TS;k+=7){vx.moveTo(x0+3,y0+k);vx.lineTo(x0+FB*TS-3,y0+k)}vx.stroke();if(!r)continue}
   if(z>=.3)for(let k=0;k<PL_N;k++){const st=plState(s,i,k);const b=st.h?12:st.g>=1?(st.od>PL_OVER?11:10):Math.max(0,Math.min(9,Math.floor(st.g*10)));const sp=plSpr2(b,k),p=plPos(i,k),w=cell*1.08,h=w*sp.H/sp.W;vx.drawImage(sp.c,p.x*TS-w/2,p.y*TS+cell*.4-h,w,h);
    if(S.devPl&&!st.h&&z>=.6){vx.font='bold '+Math.max(8,cell*.16|0)+'px sans-serif';vx.textAlign='center';vx.fillStyle='rgba(0,0,0,.6)';vx.fillRect(p.x*TS-cell*.36,p.y*TS+cell*.12,cell*.72,cell*.26);vx.fillStyle=st.g>=1?'#ffe080':'#e0ffd0';vx.fillText(Math.round(st.y*st.f)+' ('+Math.round(Math.min(1,st.g)*100)+'%)',p.x*TS,p.y*TS+cell*.32);vx.textAlign='left'}}}
-  const sh=s.shf&&s.shf[i];if(sh>.5&&z>=.3)WF_Q2.push(()=>{const n=Math.min(6,Math.ceil(sh/150));for(let k=0;k<n;k++){const x=x0+FB*TS*.12+k*cell*.32,y=y0+FB*TS*.92;vx.fillStyle='#d8b450';vx.strokeStyle='#7a5a20';vx.lineWidth=1;vx.beginPath();vx.moveTo(x-cell*.12,y);vx.lineTo(x,y-cell*.4);vx.lineTo(x+cell*.12,y);vx.closePath();vx.fill();vx.stroke()}})}WF_Q2.push(()=>{const p=s.hsp;if(p&&p.g>.5&&z>=.3){const n=Math.min(12,Math.ceil(p.g/300)),cell=FB/4*TS;for(let k=0;k<n;k++){const x=p.x*TS+((k%4)-1.5)*cell*.28,y=p.y*TS+((k/4|0)-1)*cell*.22;vx.fillStyle='#d8b450';vx.strokeStyle='#7a5a20';vx.lineWidth=1;vx.beginPath();vx.moveTo(x-cell*.13,y);vx.lineTo(x,y-cell*.42);vx.lineTo(x+cell*.13,y);vx.closePath();vx.fill();vx.stroke()}if(z>=.6){vx.font='bold 10px sans-serif';vx.textAlign='center';vx.fillStyle='rgba(0,0,0,.55)';const t='Stockpile: '+Math.round(p.g)+' grain';const w=vx.measureText(t).width+6;vx.fillRect(p.x*TS-w/2,p.y*TS+4,w,13);vx.fillStyle='#ffe8b0';vx.fillText(t,p.x*TS,p.y*TS+14);vx.textAlign='left'}}})}
+  const sh=s.shf&&s.shf[i];if(sh>.5&&z>=.3)WF_Q2.push(()=>{const n=Math.min(6,Math.ceil(sh/150));for(let k=0;k<n;k++){const x=x0+FB*TS*.12+k*cell*.32,y=y0+FB*TS*.92;vx.fillStyle='#d8b450';vx.strokeStyle='#7a5a20';vx.lineWidth=1;vx.beginPath();vx.moveTo(x-cell*.12,y);vx.lineTo(x,y-cell*.4);vx.lineTo(x+cell*.12,y);vx.closePath();vx.fill();vx.stroke()}})}WF_Q2.push(()=>{/* sheaves lying on the stubble (Ningal wheatLaid) */if(s.shv&&z>=.3&&typeof wheatLaid==='function')for(const v of s.shv)wheatLaid(vx,v.x*TS,v.y*TS,(v.r||0)+Math.PI,8,.97);const p=s.hsp;if(p&&p.g>.5&&z>=.3){/* the pile at the field edge: Ningal wheatPile, 16 sheaves a rick, one sheaf ~ one plant's yield; further ricks stand in a row */const shg=PL_G*plLand(s),ns=Math.max(1,Math.ceil(p.g/shg)),np=Math.min(8,Math.ceil(ns/16));if(typeof wheatPile==='function')for(let k=0;k<np;k++){const nn=k<np-1?16:ns-16*(np-1);vx.save();vx.translate(p.x*TS+(k-(np-1)/2)*22,p.y*TS);vx.scale(1.4,1.4);wheatPile(vx,0,0,0,Math.min(16,nn));vx.restore()}if(z>=.6){vx.font='bold 10px sans-serif';vx.textAlign='center';vx.fillStyle='rgba(0,0,0,.55)';const t='Stockpile: '+Math.round(p.g)+' grain';const w=vx.measureText(t).width+6;vx.fillRect(p.x*TS-w/2,p.y*TS+4,w,13);vx.fillStyle='#ffe8b0';vx.fillText(t,p.x*TS,p.y*TS+14);vx.textAlign='left'}}})}
 
 function plYard(){const E=S.eco,fd=FOOD_DAY();for(const s of E.steads)try{plHard(s)}catch(e){console.warn(e)}let dem=0;for(const F of yardFams())dem+=F.m.length*fd*WAGE_X;for(const s of E.steads)if(s.hard)dem+=s.n*fd;const sf=Math.max(0,E.hold.grain||0)+Math.max(0,E.hold.bread||0)*BREAD_FV;E.sfd=dem>0?Math.min(999,sf/dem):999;const was=E.bank;E.bank=sf<1?1:0;const hb=holdB(),P=hb?{x:hb.x-2,y:hb.y-2}:S.center;
  if(E.bank&&!was){qlog('⚠ The Imperial Stockyard has run out of food: relief and wages have stopped.');farmNote(P,'The Stockyard has run out of food: relief and wages have stopped.')}
@@ -4907,7 +4945,7 @@ function _drawAgentB(a,p,moving,now){const X=p.x,Y=p.y,o=a.sick?Object.assign({}
  // eating: idle at home in daytime, periodically with bowl & spoon to mouth
  if(a.state==='home'&&!moving&&!night()&&Math.floor(now/7000+(a.idx||0))%3===0){const e=(now/1100+(a.idx||0))%1,up=e<.4?Math.sin(e/.4*Math.PI):0;ell(vx,X,Y-9,3.6,1.8,'#9a5a30');ell(vx,X,Y-9.4,2.6,1,'#e0c070');ln(vx,X+2,Y-9-up*7,X+3.5,Y-8-up*6,'#c8a868',1.2)}
  if(a.carry==='basket'){ghFull(X,Y-bob,d)}else if(a.carry&&S.tier>=2&&moving){const bx=X-(d===0?14:d===2?-14:0),by=Y-(d===1?12:d===3?-8:0)+2;rr(vx,bx-7,by-5,14,9,1.5,'#8a6038',OUTL,.7);circ(vx,bx-6,by+4,2.4,'#3a2a1a');circ(vx,bx+6,by+4,2.4,'#3a2a1a')}
- if(a.carry&&a.carry!=='basket'){const hk={log:'logs',stone:'stone',cu:'stone',sn:'stone',sack:'grain',fish:'jar',meat:'jar',ingot:'stone'}[a.carry]||'grain';vx.save();vx.translate(X,Y-(d===3?16:9)-bob);if(a.carry==='cu'||a.carry==='sn'){vx.filter='hue-rotate('+(a.carry==='cu'?'90deg':'180deg')+')'}PWN.haulItem(vx,hk,18);vx.restore()}
+ if(a.carry==='sheaf'&&typeof wheatCarried==='function'){wheatCarried(vx,X+(d===2?-4:4),Y-11-bob,d===2?-1:1)}else if(a.carry&&a.carry!=='basket'){const hk={log:'logs',stone:'stone',cu:'stone',sn:'stone',sack:'grain',fish:'jar',meat:'jar',ingot:'stone'}[a.carry]||'grain';vx.save();vx.translate(X,Y-(d===3?16:9)-bob);if(a.carry==='cu'||a.carry==='sn'){vx.filter='hue-rotate('+(a.carry==='cu'?'90deg':'180deg')+')'}PWN.haulItem(vx,hk,18);vx.restore()}
  if(a.role!=='soldier'){const md=pawnMood(a);if(md<30){circ(vx,X+8,Y-34,4,'#ff7a5a',OUTL,.8);ln(vx,X+8,Y-36.5,X+8,Y-34,'#fff',1.3);circ(vx,X+8,Y-32.2,.7,'#fff')}else if(md>=80&&Math.floor(now/1500+(a.idx||0))%6===0){circ(vx,X+8,Y-34,3.6,'#9fe07a',OUTL,.7)}}
  if(a.sick&&Math.floor(now/900+(a.idx||0))%5===0)circ(vx,X+7,Y-30,2.4,'#a8c870')}
 
