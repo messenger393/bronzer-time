@@ -3652,12 +3652,12 @@ function needsClear(t,x,y){const k=t+x+','+y;if(needsClear.k===k)return needsCle
 const BSAL={stead:['house',1],craft:['house',2],holding:['granary',3]};
 // Three original procedurally-synthesized Bronze Age tracks (composed in code, WebAudio; no samples, no third-party audio — free to use).
 // Recorded music (all CC0, see CREDITS.md / Settings > Credits). Streamed lazily from audio/, one track at a time.
-const RTRACKS=[
- {n:'Desert Settlement',f:AUDB+'music-settlement.ogg',a:'vitalezzz',u:'https://opengameart.org/content/desert-settlement'},
- {n:'Blow the Day with a Darbuka',f:AUDB+'music-darbuka.ogg',a:'Adiutorium',u:'https://opengameart.org/content/darbuka-delight'},
- {n:'Shalibah',f:AUDB+'music-shalibah.ogg',a:'Tozan',u:'https://opengameart.org/content/shalibah'},
- {n:'Shakkar',f:AUDB+'music-shakkar.ogg',a:'Zesona',u:'https://opengameart.org/content/shakkar'},
- {n:'Desert Mystic',f:AUDB+'music-mystic.ogg',a:'polygondan',u:'https://opengameart.org/content/desertmystic-dynastic-egyptian-theme-cc0'}];
+const RTRACKS=[/* Weston's Suno EP (Enki handoff 2026-10-18): complete songs, not looped; shuffle-bag with a 5-10 s gap */
+ {n:'Dawn on the River',f:AUDB+'dawn-on-the-river.ogg',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'},
+ {n:'Village Fields',f:AUDB+'village-fields.ogg',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'},
+ {n:'Caravan Road',f:AUDB+'caravan-road.ogg',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'},
+ {n:"Builder's Rhythm",f:AUDB+'builder-s-rythem.ogg',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'},
+ {n:"Ram's Horn Call",f:AUDB+'ram-s-horn-call.ogg',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'}];
 const RAMB=[
  /* Enki ambience (Weston-approved 2026-10-18, CC0/PD): day bed v1, night crickets + peepers, water. r = fade rate per 100 ms */
  {k:'day',f:AUDB+'amb-daybed.ogg',a:'ezwa (public domain)',u:'https://commons.wikimedia.org/wiki/File:Breeze_birds_and_geese.ogg',l:'PD',r:.02},
@@ -3853,7 +3853,7 @@ const enemyMen=i=>enemyOf(i).reduce((a,x)=>a+x.men,0);
 // ---- prep / battle UI ----
 let prep=null;
 function creditsOpen(){const M=$('modal'),B=$('mbody');M.style.display='flex';const row=t=>'<li><b>'+(t.n||t.k)+'</b> by '+t.a+(t.u?' · <a style="color:#e8c070" href="'+t.u+'" target="_blank">'+t.u.replace('https://','')+'</a>':'')+' · '+(t.l||'CC0')+'</li>';
- B.innerHTML='<h3>Credits</h3><p><b>Bronze and Blood</b>, made by Weston Gordon.</p><h4>Music</h4><ul>'+[{n:'Title theme',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'}].concat(RTRACKS).map(row).join('')+'</ul><h4>Ambience</h4><ul>'+RAMB.map(t=>t.u?row(t):'<li><b>'+t.k+'</b>: '+t.a+'</li>').join('')+'</ul><h4>Sound effects</h4><ul>'+RSFX.map(row).join('')+'</ul><p class="small">Recordings from OpenGameArt.org: CC0 (public domain) unless marked CC-BY 3.0 (attribution). Thanks to the artists. Full list in CREDITS.md.</p>';const b=document.createElement('button');b.className='btn';b.textContent='Close';b.onclick=()=>M.style.display='none';B.appendChild(b)}
+ B.innerHTML='<h3>Credits</h3><p><b>Bronze and Blood</b>, made by Weston Gordon.</p><h4>Music</h4><ul>'+[{n:'Sunrise on the Plains (title theme)',a:'Weston Gordon (Suno)',u:'',l:'original for Bronze and Blood'}].concat(RTRACKS).map(row).join('')+'</ul><h4>Ambience</h4><ul>'+RAMB.map(t=>t.u?row(t):'<li><b>'+t.k+'</b>: '+t.a+'</li>').join('')+'</ul><h4>Sound effects</h4><ul>'+RSFX.map(row).join('')+'</ul><p class="small">Recordings from OpenGameArt.org: CC0 (public domain) unless marked CC-BY 3.0 (attribution). Thanks to the artists. Full list in CREDITS.md.</p>';const b=document.createElement('button');b.className='btn';b.textContent='Close';b.onclick=()=>M.style.display='none';B.appendChild(b)}
 function regionModal(i){prep={i,form:S.formation||'line'};renderPrep()}
 function renderPrep(){const i=prep.i,R=REG[i],M=$('modal'),B=$('mbody'),sc=S.scouted[i];M.style.display='flex';
  B.innerHTML='<h3>'+R.n+'</h3><b>Terrain:</b> '+TERR[R.terr].n+'<div class="small">'+TERR[R.terr].d+'</div><b>Reward:</b> '+R.d+'<br>';
@@ -5967,7 +5967,7 @@ const AU={ctx:null,vol:{master:.8,music:.5,sfx:.8,amb:.5},muted:false,
  // recorded audio plays through plain <audio> elements (works from file:// in the exe, where WebAudio media sources would be muted); volume = master x bus x fade
  _vol(bus){return this.muted?0:(this.vol.master||0)*(this.vol[bus]??.5)},
  playRec(n){n=n%RTRACKS.length;this.trk=n;localStorage.setItem('bnbTrack',n);const T=RTRACKS[n],old=this.rec;if(old)old.fade=-1;
-  const el=new Audio(T.f);el.preload='auto';el.volume=0;const r={el,f:0,fade:1};el.onended=()=>{if(this.rec===r)setTimeout(()=>{if(this.rec===r)this.playRec(n+1)},4000)};el.play().catch(()=>{});this.rec=r;(this.olds=this.olds||[]).push(...(old?[old]:[]));this._fadeLoop()},
+  const el=new Audio(T.f);el.preload='auto';el.volume=0;const r={el,f:0,fade:1};el.onended=()=>{if(this.rec===r)setTimeout(()=>{if(this.rec===r)this.playRec(this.bagNext())},5000+Math.random()*5000)};el.play().catch(()=>{});this.rec=r;(this.olds=this.olds||[]).push(...(old?[old]:[]));this._fadeLoop()},
  _fadeLoop(){if(this._fl)return;this._fl=setInterval(()=>{const mv=this._vol('music')*.7;const st=x=>{x.f=Math.max(0,Math.min(1,x.f+x.fade*.05));x.el.volume=Math.min(1,mv*x.f)};if(this.rec)st(this.rec);this.olds=(this.olds||[]).filter(o=>{st(o);if(o.f<=0){o.el.pause();o.el.src='';return false}return true});
   if(this.amb)for(const k in this.amb){const a=this.amb[k];a.v+=(a.t-a.v)*a.r;if(a.t<=0&&a.v<.003)a.v=0;a.el.volume=Math.min(1,a.v*this._vol('amb'));if(a.t>.01&&!a.on){a.on=1;a.el.play().catch(()=>{a.on=0})}else if(a.on&&a.t<=.01&&a.v<.005){a.on=0;a.el.pause()}}},100)},
  ambTick(){if(!this.amb){this.amb={};for(const A of RAMB){const el=new Audio(A.f);el.loop=true;el.preload='none';el.volume=0;this.amb[A.k]={el,v:0,t:0,on:0,r:A.r||.06}}this._fadeLoop()}
@@ -5977,8 +5977,10 @@ const AU={ctx:null,vol:{master:.8,music:.5,sfx:.8,amb:.5},muted:false,
   if(inGame){const cx=(cam.x+VW/cam.z/2)/TS|0,cy=(cam.y+VH/cam.z/2)/TS|0,Rr=Math.max(8,Math.min(30,16/z));let wd=1e9;for(let j=-Rr;j<=Rr;j+=2)for(let i=-Rr;i<=Rr;i+=2){const x=cx+i,y=cy+j;if(x<0||y<0||x>=MW||y>=MH)continue;if(TER[y*MW+x]===T_WATER)wd=Math.min(wd,Math.hypot(i,j))}T.water=wd<1e9?.35*Math.max(0,1-wd/Rr)*Math.min(1,z+.2):0;/* Weston: fully silent with no water near the view */
    let nP=0,ch=1e9,hm=1e9;for(const a of agents){const d=Math.hypot(a.x-cx,a.y-cy);if(d>Rr)continue;nP++;const busy=!(a.route&&a.route.length);if(busy&&(a.role==='woodcutter'||a.hvk))ch=Math.min(ch,d);if(busy&&(a.bsite||a.role==='smith'))hm=Math.min(hm,d)}
    const close=Math.max(0,Math.min(1,(z-1.1)/.8));T.village=!nt?Math.min(.35,nP/40)*Math.min(1,z):0;T.chop=ch<1e9?.6*close*Math.max(0,1-ch/12):0;T.hammer=hm<1e9?.5*close*Math.max(0,1-hm/12):0}for(const k in this.amb)this.amb[k].t=T[k]||0},
- music(){this.trk=(+(localStorage.getItem('bnbTrack')||0))%MTRACKS.length;this.playTrack(this.trk)},
- nextTrack(){if(!this.ctx){this.trk=((this.trk||0)+1)%MTRACKS.length;localStorage.setItem('bnbTrack',this.trk);return}this.playTrack((this.trk+1)%MTRACKS.length)},
+ /* shuffle-bag: every track once in random order, then reshuffle; never the same track twice in a row (also across a reshuffle) */
+ bagNext(){const N=RTRACKS.length;if(!this.bag||!this.bag.length){const b=[...Array(N).keys()];for(let i=N-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]]}if(N>1&&b[0]===this.lastT){const j=1+Math.floor(Math.random()*(N-1));[b[0],b[j]]=[b[j],b[0]]}this.bag=b}const n=this.bag.shift();this.lastT=n;return n},
+ music(){this.playTrack(this.bagNext())},
+ nextTrack(){if(!this.ctx){this.trk=this.bagNext();localStorage.setItem('bnbTrack',this.trk);return}this.playTrack(this.bagNext())},
  trackName(){return MTRACKS[(this.trk||0)%MTRACKS.length].n},
  playTrack(n){return this.playRec(n)},
  playSynth(n){const c=this.ctx;this.trk=n;localStorage.setItem('bnbTrack',n);const T=MTRACKS[n];const old=this.tg;if(old){old.gain.setTargetAtTime(0,c.currentTime,1.2);setTimeout(()=>{try{old.disconnect();(old._o||[]).forEach(o=>o.stop())}catch(e){}},6000)}
@@ -6901,7 +6903,7 @@ function rvStart(){const T=$('title');T.classList.add('launch');const old=$('tc'
  new MutationObserver(()=>{const on=T.style.display!=='none';if(on&&!RV.run){RV.run=true;requestAnimationFrame(rvFrame)}if(!on)RV.run=false;AU.torch(on)}).observe(T,{attributes:true,attributeFilter:['style']})}
 title=function(){rvStart()};
 // ===== Opening scene + main menu (0.18). Horn-blower at dawn, field workers, palace, unfinished lion. Click/Esc skips. =====
-const TITLE_MUSIC=AUDB+'title-theme.ogg';// Weston's Suno title theme (loops on the menu); set to null to fall back to the CC0 track below
+const TITLE_MUSIC=AUDB+'sunrise-on-the-plains-title.ogg';// Weston's Suno title theme (loops on the menu); set to null to fall back to the CC0 track below
 const IN_HORN=2.5,IN_SUN0=6,IN_SUN1=22,IN_MENU=24;// synced to the theme: horn hit ~2.5 s, build 20-25 s, menu on the drop
 const TITLE_MUSIC_FB=4;// RTRACKS index: Desert Mystic (polygondan, CC0)
 RSFX.push({n:'Ram\u2019s horn (Small Shofar)',a:'Sauron974',u:'https://freesound.org/people/Sauron974/sounds/223368/'});
