@@ -41,3 +41,7 @@ Files were re-encoded to Ogg Vorbis (music 64 kbps, ambience 32 to 48 kbps mono;
 
 ## Work and town sounds
 Work and town sounds: Joseph Sardin, BigSoundBank.com (CC0). Axe chops (merlin-sur-buche-s0705), stone cutting (chute-de-pierre-s1022), sickle in grain (pas-dans-l-herbe-haute-s1024), oven fire (grand-feu-de-branches-1-s0987), small crowd (foule-50-60-personnes-1-s3515), large crowd (discussions-exterieures-1-s2968), distant cow (a-100-metres-d-une-etable-s0934), hooves (pas-cheval-chemin-s1854). Pages: https://bigsoundbank.com/<slug>.html
+
+## Work sounds, round 2
+- Hammers (construction and smith): bart (Bart Kelsey), "68 workshop sounds", https://opengameart.org/content/68-workshop-sounds (CC0)
+- Stone hauling: bonebrah, "Stone Door", https://opengameart.org/content/stone-door (CC0)
