@@ -3741,7 +3741,7 @@ const RSFX=[{n:'UI clicks (wooden game pieces)',a:'aidanwalker',u:'https://openg
 /* work one-shots: tool -> files, base gain, per-pawn cooldown range (s). Hammer, footsteps and sledge are not approved: not hooked up */
 const WSND={axe:{f:[1,2,3,4,5].map(i=>AUDB+'work/axe-chop-'+i+'.ogg'),g:.45,cd:[1.6,2.4]},pick:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/stone-cut-'+i+'.ogg'),g:.6,cd:[1.2,2]},sickle:{f:[1,2,3,4].map(i=>AUDB+'work/sickle-grain-'+i+'.ogg'),g:.6,cd:[1,1.8]},
  /* round 2 (Weston-approved 2026-10-19): build hammer on construction sites, stone grind on moving stone haulers, smith hammer (dormant: no working smith while bronzeware is off) */
- build:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/hammer-build-'+i+'.ogg'),g:.6,cd:[.6,1.4]},smith:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/hammer-smith-'+i+'.ogg'),g:.6,cd:[.35,.9],pause:[.12,2,4]},haul:{f:[AUDB+'work/stone-haul-1.ogg'],g:.6,cd:[1.6,2.6],r:[.85,1.1],cap:2}},WS_MAX=5;
+ build:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/hammer-build-'+i+'.ogg'),g:.6,cd:[.6,1.4]},hammer:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/hammer-build-'+i+'.ogg'),g:.6,cd:[.6,1.4]},/* quarry wedge / stone-splitter pawns (tool 'hammer', Weston-approved): build-hammer files, gain, falloff and cooldowns */smith:{f:[1,2,3,4,5,6].map(i=>AUDB+'work/hammer-smith-'+i+'.ogg'),g:.6,cd:[.35,.9],pause:[.12,2,4]},haul:{f:[AUDB+'work/stone-haul-1.ogg'],g:.6,cd:[1.6,2.6],r:[.85,1.1],cap:2}},WS_MAX=5;
 const SMITH_SND=()=>resOn('bronzeware');
 const BSND={cow:{f:[AUDB+'bustle/cow-distant-1.ogg'],g:.3},hooves:{f:[AUDB+'bustle/hooves-path-1.ogg',AUDB+'bustle/hooves-path-2.ogg'],g:.3}};
 const MTRACKS_SYNTH=[
