@@ -32,8 +32,10 @@ class_name BugReportIO
 #   clip.elapsed_s() -> float
 # preload() would stop this file parsing on a branch that does not have ClipRec yet,
 # so the same path is load()ed the first time recording starts. This module does not
-# encode frames. write_report does not create clip.json or clip_####.jpg; those appear
-# only when stop_screen_record has already called ClipRec.stop_and_write.
+# encode frames. clip.json and clip_####.jpg are written only by ClipRec.stop_and_write.
+# start_screen_record hides the bug-report panel and unpauses, then calls start().
+# stop_screen_record and write_report (submit) call stop_and_write into the report
+# folder even when is_recording() is already false after the 30s cap, then show the panel.
 
 const CLIP_REC_PATH := "res://core/clip_rec.gd"
 const WORK_REPORTS := "C:/BnB/Work/bug-reports"
@@ -42,6 +44,11 @@ const LOG_TAIL := 512 * 1024
 const SAVE_AUTO_MAX := 256 * 1024 * 1024
 
 static var _clip: Node = null
+static var _hidden_panel: CanvasItem = null
+static var _paused_before := false
+static var _pause_touched := false
+static var _spd_owner: Object = null
+static var _spd_restore = null
 
 static func destination_root() -> String:
 	return _destination_root(_work_exists())
@@ -69,6 +76,11 @@ static func write_report(dest_dir: String, payload: Dictionary) -> Dictionary:
 		return _result(false, "", "Refusing to write a bug report outside the bug-report folder (Play, Downloads, and the playable directory are never used).")
 	if _mkdir(dest_dir) != OK:
 		return _result(false, "", "Could not create the bug-report folder.")
+	# Submit flushes a capped clip too: frames stay in memory after is_recording() goes false.
+	var flushed := false
+	if _clip != null and is_instance_valid(_clip):
+		_flush_clip_into(dest_dir)
+		flushed = true
 	var fatal: PackedStringArray = PackedStringArray()
 	var seen := str(payload.get("seen", ""))
 	var doing := str(payload.get("doing", ""))
@@ -96,7 +108,7 @@ static func write_report(dest_dir: String, payload: Dictionary) -> Dictionary:
 	var cam := camera_spot()
 	var used := _abs(dest_dir)
 	var recording := "not requested"
-	if bool(payload.get("include_recording", false)):
+	if flushed or bool(payload.get("include_recording", false)):
 		recording = _recording_already_in(dest_dir)
 
 	var meta := {
@@ -124,6 +136,7 @@ static func write_report(dest_dir: String, payload: Dictionary) -> Dictionary:
 		fatal.append("Could not write meta.txt.")
 
 	var err := " ".join(fatal)
+	_show_panel_again()
 	return _result(fatal.is_empty(), used, err)
 
 static func build_tip() -> String:
@@ -245,17 +258,18 @@ static func camera_spot() -> Dictionary:
 	return spot
 
 static func start_screen_record() -> Dictionary:
+	if _clip != null and is_instance_valid(_clip) and bool(_clip.is_recording()):
+		return _map_start(_clip.start())
+	# Her panel stays as it is: this call hides it and unpauses, then ClipRec.start().
+	_hide_panel_and_unpause()
 	var clip := _ensure_clip()
 	if clip == null:
+		_show_panel_again()
 		return {"ok": false, "error": _clip_error()}
-	var started = clip.start()
-	if not (started is Dictionary):
-		return {"ok": false, "error": "ClipRec.start returned an unexpected result."}
-	var ok := bool(started.get("ok", false))
-	var err := str(started.get("err", started.get("error", "")))
-	if not ok and err == "":
-		err = "ClipRec.start failed without a message."
-	return {"ok": ok, "error": err}
+	var mapped := _map_start(clip.start())
+	if not bool(mapped.get("ok", false)):
+		_show_panel_again()
+	return mapped
 
 static func stop_screen_record(dest_dir: String) -> Dictionary:
 	if dest_dir.is_empty() or _is_forbidden(dest_dir) or not _under_reports(dest_dir):
@@ -268,7 +282,23 @@ static func stop_screen_record(dest_dir: String) -> Dictionary:
 	if not _dir_exists(dest_dir):
 		return {"ok": false, "path": "", "error": "Report folder does not exist. Clip buffers were left in memory for a retry."}
 	# After the 30s cap, is_recording() is false while frames are still buffered.
-	# Always hand the folder to stop_and_write so the JPEGs and clip.json land here.
+	var mapped := _flush_clip_into(dest_dir)
+	if bool(mapped.get("ok", false)):
+		_show_panel_again()
+	return mapped
+
+static func _map_start(started) -> Dictionary:
+	if not (started is Dictionary):
+		return {"ok": false, "error": "ClipRec.start returned an unexpected result."}
+	var ok := bool(started.get("ok", false))
+	var err := str(started.get("err", started.get("error", "")))
+	if not ok and err == "":
+		err = "ClipRec.start failed without a message."
+	return {"ok": ok, "error": err}
+
+static func _flush_clip_into(dest_dir: String) -> Dictionary:
+	if _clip == null or not is_instance_valid(_clip):
+		return {"ok": false, "path": "", "error": ""}
 	var wrote = _clip.stop_and_write(dest_dir)
 	if not (wrote is Dictionary):
 		return {"ok": false, "path": "", "error": "ClipRec.stop_and_write returned an unexpected result."}
@@ -278,6 +308,62 @@ static func stop_screen_record(dest_dir: String) -> Dictionary:
 	if not ok and err == "":
 		err = "ClipRec.stop_and_write failed without a message."
 	return {"ok": ok, "path": path, "error": err}
+
+static func _hide_panel_and_unpause() -> void:
+	var panel := _find_panel()
+	if panel != null:
+		_hidden_panel = panel
+		panel.visible = false
+	var loop := Engine.get_main_loop()
+	if loop is SceneTree:
+		_paused_before = (loop as SceneTree).paused
+		_pause_touched = true
+		(loop as SceneTree).paused = false
+	var game := _autoload("Game")
+	if game != null:
+		var spd = game.get("spd")
+		if (typeof(spd) == TYPE_INT or typeof(spd) == TYPE_FLOAT) and float(spd) == 0.0:
+			_spd_owner = game
+			_spd_restore = spd
+			game.set("spd", 1)
+
+static func _show_panel_again() -> void:
+	if _hidden_panel != null and is_instance_valid(_hidden_panel):
+		_hidden_panel.visible = true
+	_hidden_panel = null
+	if _spd_owner != null and is_instance_valid(_spd_owner) and _spd_restore != null:
+		_spd_owner.set("spd", _spd_restore)
+	_spd_owner = null
+	_spd_restore = null
+	if _pause_touched:
+		var loop := Engine.get_main_loop()
+		if loop is SceneTree:
+			(loop as SceneTree).paused = _paused_before
+		_pause_touched = false
+
+static func _find_panel() -> CanvasItem:
+	var root := _root()
+	if root == null:
+		return null
+	for node_name in ["BugReportPanel", "BugReport", "ReportPanel"]:
+		var found := root.find_child(node_name, true, false)
+		if found is CanvasItem:
+			return found
+	var pending: Array = []
+	for child in root.get_children():
+		pending.append(child)
+	var seen := 0
+	while pending.size() > 0 and seen < 2000:
+		var node: Node = pending.pop_back()
+		seen += 1
+		var scr = node.get_script()
+		if scr != null and node is CanvasItem:
+			var path := str(scr.resource_path)
+			if path.begins_with("res://ui/bug_report/") and path.find("bug_report_io") < 0:
+				return node
+		for child in node.get_children():
+			pending.append(child)
+	return null
 
 static func is_recording() -> bool:
 	# Do not create ClipRec here. Nothing records until start_screen_record().

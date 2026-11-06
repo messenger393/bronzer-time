@@ -127,32 +127,49 @@ func _run() -> void:
 	_recording()
 
 func _recording() -> void:
+	var panel := Control.new()
+	panel.name = "BugReportPanel"
+	panel.visible = true
+	root.add_child(panel)
+	paused = true
 	var started: Dictionary = IO.start_screen_record()
 	_check(started.has("ok") and started.has("error") and not started.has("err"), "start_screen_record keys")
 	if not ResourceLoader.exists("res://core/clip_rec.gd"):
 		_check(started.get("ok", true) == false, "start fails closed without ClipRec")
 		_check(str(started.get("error", "")).find("not wired") >= 0, "missing ClipRec says not wired")
 		_check(IO.is_recording() == false, "nothing records in the background")
+		_check(panel.visible, "panel is shown again when record cannot start")
+		_check(paused, "pause is restored when record cannot start")
 		var stopped: Dictionary = IO.stop_screen_record("user://bug-reports/not-a-real-folder")
 		_check(stopped.get("ok", true) == false, "stop fails closed without ClipRec")
 		_check(not FileAccess.file_exists(ProjectSettings.globalize_path("user://bug-reports/not-a-real-folder").path_join("clip.json")), "stop did not invent a clip")
+		panel.queue_free()
 		return
 
 	_check(started.get("ok", false) == true, "ClipRec start")
+	_check(not panel.visible, "panel hides before ClipRec.start")
+	_check(not paused, "game unpauses before ClipRec.start")
 	_check(root.get_node_or_null("BugReportClipRec") != null, "ClipRec stays on the scene tree")
 	_check(IO.is_recording(), "is_recording while the clip is open")
 	var again: Dictionary = IO.start_screen_record()
 	_check(again.get("ok", true) == false, "second start leaves the unsaved clip alone")
+	_check(not panel.visible, "a refused second start leaves the panel hidden")
 	var missing := IO.destination_root().path_join("missing-clip-dir")
 	var held: Dictionary = IO.stop_screen_record(missing)
 	_check(held.get("ok", true) == false, "stop into a missing folder does not consume buffers")
 	_check(IO.is_recording(), "clip still held after a refused stop")
+	var cap := root.get_node_or_null("BugReportClipRec")
+	if cap != null and cap.has_method("debug_autocap"):
+		cap.debug_autocap()
+		_check(not IO.is_recording(), "30s cap clears is_recording while frames stay buffered")
 	var folder := IO.make_report_dir()
 	_made.append(folder)
 	var wrote: Dictionary = IO.stop_screen_record(folder)
 	_check(wrote.get("ok", false) == true, "stop_screen_record ok")
 	_check(str(wrote.get("path", "")).ends_with("clip.json"), "stop path is clip.json")
 	_check(not IO.is_recording(), "recording stopped")
+	_check(panel.visible, "panel is shown after stop_and_write")
+	_check(paused, "pause is restored after the clip is written")
 	var abs_folder := ProjectSettings.globalize_path(folder) if folder.begins_with("user://") else folder
 	_check(FileAccess.file_exists(abs_folder.path_join("clip.json")), "clip.json was written by ClipRec")
 	_check(FileAccess.file_exists(abs_folder.path_join("clip_0001.jpg")), "frame was written by ClipRec")
